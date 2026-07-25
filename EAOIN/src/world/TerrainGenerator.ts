@@ -11,16 +11,18 @@ import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
 export interface SpawnPoint { x: number; y: number; z: number; }
 export type BiomeID = 'Plains' | 'Forest' | 'Desert' | 'Highlands' | 'Lake' | 'Mountains' | 'Cliff';
 
-const WATER_LEVEL = 7;
-const SPAWN_GROUND_Y = 9;
-const BASE_GROUND = 14;
+const WATER_LEVEL = 8;
+const SPAWN_GROUND_Y = 12;
+const BASE_GROUND = 18;
 
 export class TerrainGenerator {
   private readonly chunks = new Map<string, Chunk>();
   private readonly editOverrides = new Map<string, WorldBlockEdit>();
   private cachedLayout: ReturnType<typeof getWorldLayout> | null = null;
+  private readonly floatingIslandsPreset: boolean;
 
   constructor(private readonly seed: string, initialEdits: WorldBlockEdit[] = []) {
+    this.floatingIslandsPreset = /floating[-_ ]?islands|skylands|amplified/i.test(seed);
     for (const edit of initialEdits) this.editOverrides.set(editKey(edit.x, edit.y, edit.z), { ...edit });
   }
 
@@ -34,8 +36,8 @@ export class TerrainGenerator {
     const cached = this.chunks.get(key);
     if (cached) return cached;
     const chunk = new Chunk(cx, cz, this.seed);
-    this.applyHeightmapPass(chunk); // NEW: smooth noise terrain
-    this.applyCavePass(chunk); // NEW: volumetric caves
+    this.applyHeightmapPass(chunk); // Minecraft-like solid overworld columns by default
+    if (!this.floatingIslandsPreset) this.applyCavePass(chunk); // Regular main worlds keep caves underground, never sky islands
     this.applyBiomeSurfacePass(chunk);
     this.addProceduralWorldContent(chunk);
     this.applyPlayableSpawnPatch(chunk);
@@ -78,19 +80,20 @@ export class TerrainGenerator {
   }
 
   getBiomeAt(worldX: number, worldZ: number): BiomeID {
-    if (this.getLakeDepth(worldX, worldZ) > 0.12) return 'Lake';
+    const lakeDepth = this.getLakeDepth(worldX, worldZ);
+    if (this.shouldApplyLake(worldX, worldZ, lakeDepth)) return 'Lake';
     const height = this.getTerrainHeight(worldX, worldZ);
     const ridge = this.ridgeNoise(worldX * 0.006, worldZ * 0.006);
     const flat = this.flatMask(worldX, worldZ);
-    if (height > 48 && ridge > 0.72) return 'Mountains';
-    if (height > 38 && ridge > 0.62) return 'Cliff';
+    if (height > 43 && ridge > 0.66) return 'Mountains';
+    if (height > 36 && ridge > 0.70 && this.floatingIslandsPreset) return 'Cliff';
     const heat = this.smoothValue(worldX, worldZ, 'heat');
     const moist = this.smoothValue(worldX, worldZ, 'moisture');
     const rocky = this.smoothValue(worldX, worldZ, 'rockiness');
-    if (flat > 0.7 && height < 24) return 'Plains';
-    if (rocky > 0.68) return 'Highlands';
-    if (heat > 0.58 && moist < 0.45) return 'Desert';
-    if (moist > 0.54) return 'Forest';
+    if (flat > 0.62 && height < 27) return 'Plains';
+    if (rocky > 0.72 || height > 34) return 'Highlands';
+    if (heat > 0.58 && moist < 0.43) return 'Desert';
+    if (moist > 0.50) return 'Forest';
     return 'Plains';
   }
 
@@ -193,49 +196,60 @@ export class TerrainGenerator {
     return Math.hypot(gradX, gradZ) * 8.5;
   }
 
-  // Core height function — smooth, mountains, cliffs, flats
+  // Core height function — regular Minecraft-like overworld by default.
+  // The old high/floating/amplified feel is still available by creating/using a
+  // seed containing "floating_islands" or "skylands".
   private getTerrainHeight(worldX: number, worldZ: number): number {
     // Protected spawn will be overridden later, but for height consistency return flat near 0,0
     if (Math.hypot(worldX, worldZ) < SPAWN_PROTECTED_RADIUS + 2) return SPAWN_GROUND_Y;
 
-    // Objective clearings keep flat
+    // Objective clearings keep flat and reachable on the main ground plane
     const layout = this.getLayout();
     for (const p of [layout.rocket, layout.settlement, layout.portalCore, layout.palette, layout.marketplace, layout.woodenDoor, layout.dimensionalDoor]) {
       if (Math.hypot(worldX - p.x, worldZ - p.z) < p.radius + 2) return SPAWN_GROUND_Y + 1;
     }
 
-    const baseLow = this.fbm2D(worldX * 0.0035, worldZ * 0.0035, 5); // 0-1 large continents
-    const baseMed = this.fbm2D(worldX * 0.012, worldZ * 0.012, 4) * 0.35;
-    const baseHigh = this.fbm2D(worldX * 0.045, worldZ * 0.045, 2) * 0.12;
+    if (this.floatingIslandsPreset) return this.getFloatingIslandTerrainHeight(worldX, worldZ);
 
-    let height = BASE_GROUND + baseLow * 28 + baseMed * 12 + baseHigh * 5;
+    // Large, gentle continent noise plus mid-sized hills. This intentionally
+    // avoids amplified cliffs so the player can walk across the default world.
+    const continent = this.fbm2D(worldX * 0.0028, worldZ * 0.0028, 5);
+    const rollingHills = this.fbm2D(worldX * 0.010, worldZ * 0.010, 4);
+    const detail = this.fbm2D(worldX * 0.032, worldZ * 0.032, 2);
+    let height = BASE_GROUND + (continent - 0.5) * 8 + (rollingHills - 0.5) * 10 + (detail - 0.5) * 2;
 
-    // Flat areas: lerp towards 20 if flatMask high and baseLow mid
+    // Smooth mountain regions like Minecraft: broad foothills that rise into
+    // climbable peaks, not detached sky shelves.
+    const mountainField = this.fbm2D((worldX + 913) * 0.0042, (worldZ - 571) * 0.0042, 4);
+    if (mountainField > 0.61) {
+      const t = Math.min(1, (mountainField - 0.61) / 0.39);
+      const ridge = this.ridgeNoise(worldX * 0.0065, worldZ * 0.0065);
+      height += t * t * (10 + ridge * 16);
+    }
+
+    // River/valley smoothing carves shallow travel corridors without making
+    // unsupported floating layers.
+    const valley = this.ridgeNoise((worldX - 243) * 0.0048, (worldZ + 827) * 0.0048);
+    if (valley > 0.78) height -= (valley - 0.78) / 0.22 * 5;
+
+    // Flat plains are blended in rather than cut, preserving natural slopes.
     const flat = this.flatMask(worldX, worldZ);
-    if (flat > 0.62) {
-      const t = (flat - 0.62) / 0.38; // 0-1
-      height = this.lerp(height, 19 + this.fbm2D(worldX * 0.008, worldZ * 0.008, 2) * 3, t * 0.85);
+    if (flat > 0.66) {
+      const t = (flat - 0.66) / 0.34;
+      height = this.lerp(height, 18 + this.fbm2D(worldX * 0.006, worldZ * 0.006, 2) * 3, t * 0.72);
     }
 
-    // Mountains: ridge boost
+    height += (this.hash(worldX, worldZ) - 0.5) * 0.45;
+    return Math.max(7, Math.min(54, Math.round(height)));
+  }
+
+  private getFloatingIslandTerrainHeight(worldX: number, worldZ: number): number {
+    const baseLow = this.fbm2D(worldX * 0.0035, worldZ * 0.0035, 5);
     const ridge = this.ridgeNoise(worldX * 0.0055, worldZ * 0.0055);
-    if (ridge > 0.58 && baseLow > 0.45) {
-      const mountainBoost = (ridge - 0.58) / 0.42; // 0-1
-      height += mountainBoost * mountainBoost * 34; // up to +34 blocks -> big mountains
-    }
-
-    // Cliffs: steep edge adds wall
+    const islandMask = this.fbm2D((worldX + 431) * 0.010, (worldZ - 197) * 0.010, 3);
+    const lift = islandMask > 0.54 ? (islandMask - 0.54) / 0.46 * 18 : 0;
     const cliff = this.cliffFactor(worldX, worldZ);
-    if (cliff > 0.62 && height > 24) {
-      height += cliff * 6.5; // cliff wall
-    }
-
-    // Additional small variation for non-flat
-    height += (this.hash(worldX, worldZ) - 0.5) * 1.2;
-
-    // Clamp
-    height = Math.max(6, Math.min(CHUNK_HEIGHT - 28, Math.round(height)));
-    return height;
+    return Math.max(18, Math.min(CHUNK_HEIGHT - 28, Math.round(BASE_GROUND + baseLow * 22 + ridge * 18 + lift + cliff * 2.5)));
   }
 
   // === PASSES ===
@@ -243,8 +257,15 @@ export class TerrainGenerator {
   private applyHeightmapPass(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (localX, localZ, worldX, worldZ) => {
       const height = this.getTerrainHeight(worldX, worldZ);
+      const floatingBottom = this.floatingIslandsPreset
+        ? Math.max(4, height - (10 + Math.floor(this.fbm2D(worldX * 0.018, worldZ * 0.018, 3) * 10)))
+        : 0;
       for (let y = 0; y < CHUNK_HEIGHT; y++) {
-        if (y <= height - 4) chunk.setBlock(localX, y, localZ, 3); // stone foundation
+        if (this.floatingIslandsPreset && y < floatingBottom) {
+          chunk.setBlock(localX, y, localZ, 0);
+        } else if (!this.floatingIslandsPreset && y === 0) {
+          chunk.setBlock(localX, y, localZ, 12); // bedrock-like unbreakable floor (obsidian material)
+        } else if (y <= height - 4) chunk.setBlock(localX, y, localZ, 3); // stone foundation
         else if (y <= height - 1) chunk.setBlock(localX, y, localZ, 2); // dirt
         else if (y === height) {
           // surface will be painted by biome pass, but set grass default
@@ -257,33 +278,23 @@ export class TerrainGenerator {
   }
 
   private applyCavePass(chunk: Chunk): void {
-    // Volumetric caves: 3D fbm threshold
+    // Restrained underground caves. Keep a solid roof, a solid lower foundation,
+    // and do not carve under lakes so water never floats in midair.
     this.forEachLocalBlock(chunk, (localX, localZ, worldX, worldZ) => {
       const surfaceY = this.findSurfaceY(chunk, localX, localZ);
       if (surfaceY <= 0) return;
-      // Don't carve near spawn clearings or objective clearings
       if (this.isProtectedSpawnColumn(worldX, worldZ, SPAWN_PROTECTED_RADIUS + 2)) return;
       if (this.isInObjectiveClearing(worldX, worldZ)) return;
-      // carve only below surface -2
-      for (let y = surfaceY - 3; y >= 4; y--) {
-        // Bigger caves deeper
-        const depthFactor = (surfaceY - y) / surfaceY; // 0 near surface, 1 deep
-        const threshold = 0.62 - depthFactor * 0.08; // deeper caves easier to carve
-        const n = this.fbm3D(worldX * 0.022, y * 0.022, worldZ * 0.022, 3);
-        const n2 = this.fbm3D(worldX * 0.065, y * 0.065, worldZ * 0.065, 2) * 0.35;
-        const caveNoise = n + n2;
-        if (caveNoise > threshold) {
-          // carve air, but keep roof 2 thick near surface to avoid holes? For big caves allow surface entry occasionally
-          const roofSafe = y > surfaceY - 5 && caveNoise > 0.72 ? false : true;
-          if (roofSafe || caveNoise > 0.74) {
-            chunk.setBlock(localX, y, localZ, 0);
-            // occasionally make cave a bit wider (3x3-ish) for bigger caves
-            if (caveNoise > 0.76 && y > 8 && y < surfaceY - 6) {
-              if (localX > 0) chunk.setBlock(localX - 1, y, localZ, 0);
-              if (localZ > 0) chunk.setBlock(localX, y, localZ - 1, 0);
-            }
-          }
-        }
+      if (this.getLakeDepth(worldX, worldZ) > 0.08) return;
+
+      const top = Math.min(surfaceY - 8, 42);
+      if (top <= WATER_LEVEL + 3) return;
+      for (let y = top; y >= WATER_LEVEL + 3; y--) {
+        const depthFactor = (surfaceY - y) / Math.max(1, surfaceY);
+        const threshold = 0.78 - depthFactor * 0.035;
+        const caveNoise = this.fbm3D(worldX * 0.030, y * 0.042, worldZ * 0.030, 3);
+        const tunnelNoise = this.fbm3D((worldX + 211) * 0.060, y * 0.052, (worldZ - 503) * 0.060, 2);
+        if (caveNoise > threshold && tunnelNoise > 0.58) chunk.setBlock(localX, y, localZ, 0);
       }
     });
   }
@@ -293,7 +304,7 @@ export class TerrainGenerator {
       if (this.isProtectedSpawnColumn(worldX, worldZ, SPAWN_PROTECTED_RADIUS)) return;
       if (this.isInObjectiveClearing(worldX, worldZ)) return;
       const lakeDepth = this.getLakeDepth(worldX, worldZ);
-      if (lakeDepth > 0.12) { this.carveLakeColumn(chunk, localX, localZ, lakeDepth); return; }
+      if (this.shouldApplyLake(worldX, worldZ, lakeDepth)) { this.carveLakeColumn(chunk, localX, localZ, lakeDepth); return; }
       const surfaceY = this.findSurfaceY(chunk, localX, localZ);
       if (surfaceY <= 0) return;
       const biome = this.getBiomeAt(worldX, worldZ);
@@ -337,7 +348,8 @@ export class TerrainGenerator {
       if (dist > SPAWN_PROTECTED_RADIUS) return;
       const groundY = SPAWN_GROUND_Y;
       for (let y = 0; y < CHUNK_HEIGHT; y++) {
-        if (y < groundY - 4) chunk.setBlock(localX, y, localZ, 3);
+        if (y === 0) chunk.setBlock(localX, y, localZ, 12);
+        else if (y < groundY - 4) chunk.setBlock(localX, y, localZ, 3);
         else if (y < groundY) chunk.setBlock(localX, y, localZ, 2);
         else if (y === groundY) chunk.setBlock(localX, y, localZ, 1);
         else if (y <= groundY + 4) chunk.setBlock(localX, y, localZ, 0);
@@ -354,7 +366,8 @@ export class TerrainGenerator {
         if (d <= c.radius) {
           const groundY = SPAWN_GROUND_Y + 1;
           for (let y = 0; y < CHUNK_HEIGHT; y++) {
-            if (y < groundY - 3) chunk.setBlock(localX, y, localZ, 3);
+            if (y === 0) chunk.setBlock(localX, y, localZ, 12);
+            else if (y < groundY - 3) chunk.setBlock(localX, y, localZ, 3);
             else if (y < groundY) chunk.setBlock(localX, y, localZ, 2);
             else if (y === groundY) chunk.setBlock(localX, y, localZ, c.label === 'rocket' ? 3 : 1);
             else if (y <= groundY + 6) chunk.setBlock(localX, y, localZ, 0);
@@ -387,7 +400,10 @@ export class TerrainGenerator {
 
   // helpers
   private carveLakeColumn(chunk: Chunk, localX: number, localZ: number, depth: number): void {
-    const bottomY = Math.max(2, WATER_LEVEL - 1 - Math.floor(depth * 3));
+    const bottomY = Math.max(3, WATER_LEVEL - 1 - Math.floor(depth * 3));
+    // Fill a supported basin below the water. This fixes free-floating water
+    // and keeps the world as one connected Minecraft-like ground mass.
+    for (let y = 0; y < bottomY - 1; y++) chunk.setBlock(localX, y, localZ, y === 0 ? 12 : 3);
     chunk.setBlock(localX, bottomY - 1, localZ, 4);
     for (let y = bottomY; y <= WATER_LEVEL; y++) chunk.setBlock(localX, y, localZ, 5);
     for (let y = WATER_LEVEL + 1; y < CHUNK_HEIGHT; y++) chunk.setBlock(localX, y, localZ, 0);
@@ -456,18 +472,25 @@ export class TerrainGenerator {
   }
 
   private getLakeDepth(worldX: number, worldZ: number): number {
+    if (this.floatingIslandsPreset) return 0;
     if (this.isProtectedSpawnColumn(worldX, worldZ, SPAWN_PROTECTED_RADIUS + 8)) return 0;
-    const spacing = 48, cellX = Math.floor(worldX / spacing), cellZ = Math.floor(worldZ / spacing);
+    const spacing = 64, cellX = Math.floor(worldX / spacing), cellZ = Math.floor(worldZ / spacing);
     let depth = 0;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
       const lx = cellX + dx, lz = cellZ + dz;
       const centerX = lx * spacing + Math.floor(this.hashToUnit(`lake-x:${lx}:${lz}`) * spacing);
       const centerZ = lz * spacing + Math.floor(this.hashToUnit(`lake-z:${lx}:${lz}`) * spacing);
-      const radius = 8 + this.hashToUnit(`lake-radius:${lx}:${lz}`) * 9;
+      const radius = 6 + this.hashToUnit(`lake-radius:${lx}:${lz}`) * 8;
       const dist = Math.hypot(worldX - centerX, worldZ - centerZ);
       depth = Math.max(depth, 1 - dist / radius);
     }
     return Math.max(0, depth);
+  }
+
+  private shouldApplyLake(worldX: number, worldZ: number, lakeDepth: number = this.getLakeDepth(worldX, worldZ)): boolean {
+    if (lakeDepth <= 0.18) return false;
+    const height = this.getTerrainHeight(worldX, worldZ);
+    return height <= WATER_LEVEL + 4;
   }
 
   private smoothValue(worldX: number, worldZ: number, salt: string): number {

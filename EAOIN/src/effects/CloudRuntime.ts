@@ -25,9 +25,10 @@ export class CloudRuntime {
     this.root.position.y = spawnY + 68; // high above terrain
 
     this.material = new StandardMaterial('cloud_mat', scene);
-    this.material.diffuseColor = new Color3(0.96, 0.98, 1.0);
-    this.material.emissiveColor = new Color3(0.22, 0.24, 0.26);
-    this.material.alpha = 0.86;
+    this.material.diffuseColor = new Color3(0.92, 0.94, 0.98);
+    this.material.emissiveColor = new Color3(0.08, 0.09, 0.11);
+    this.material.specularColor = new Color3(0.02, 0.02, 0.025);
+    this.material.alpha = 0.93;
     this.material.backFaceCulling = false;
 
     this.template = MeshBuilder.CreateBox('cloud_template', { width: this.cell, height: 4.2, depth: this.cell }, scene);

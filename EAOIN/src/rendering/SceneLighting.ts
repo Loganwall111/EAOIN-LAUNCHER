@@ -30,12 +30,12 @@ export interface SceneLightingHandles {
 }
 
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
-  scene.ambientColor = new Color3(0.46, 0.54, 0.66);
+  scene.ambientColor = new Color3(0.32, 0.40, 0.52);
   scene.fogMode = Scene.FOGMODE_EXP2;
   // Reduced fog: only 100-1000 blocks per request, toggleable
-  scene.fogDensity = 0.0012;
-  scene.fogColor = new Color3(0.62, 0.78, 0.98);
-  scene.environmentIntensity = 0.9;
+  scene.fogDensity = 0.0010;
+  scene.fogColor = new Color3(0.44, 0.62, 0.84);
+  scene.environmentIntensity = 0.72;
 
   // Real Minecraft-like skybox: large inverted sphere with gradient emissive, not flat clearColor
   const skyDome = MeshBuilder.CreateSphere('overworld_sky_dome', { diameter: 1200, segments: 24, sideOrientation: Mesh.BACKSIDE }, scene);
@@ -45,7 +45,7 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   const skyMaterial = new StandardMaterial('overworld_sky_material', scene);
   skyMaterial.backFaceCulling = false;
   skyMaterial.disableLighting = true;
-  skyMaterial.emissiveColor = new Color3(0.28, 0.56, 0.92);
+  skyMaterial.emissiveColor = new Color3(0.18, 0.40, 0.72);
   skyMaterial.diffuseColor = new Color3(0, 0, 0);
   skyMaterial.specularColor = new Color3(0, 0, 0);
   skyMaterial.alpha = 1;
@@ -57,20 +57,20 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   horizonDome.infiniteDistance = true;
   const horizonMat = new StandardMaterial('horizon_mat', scene);
   horizonMat.disableLighting = true;
-  horizonMat.emissiveColor = new Color3(0.95, 0.66, 0.35);
-  horizonMat.alpha = 0.12;
+  horizonMat.emissiveColor = new Color3(0.76, 0.48, 0.28);
+  horizonMat.alpha = 0.08;
   horizonMat.backFaceCulling = false;
   horizonDome.material = horizonMat;
 
   const sky = new HemisphericLight('global_sky_light', new Vector3(0.25, 1, 0.18), scene);
-  sky.intensity = 1.05;
-  sky.diffuse = new Color3(0.82, 0.90, 1.0);
+  sky.intensity = 0.78;
+  sky.diffuse = new Color3(0.68, 0.78, 0.92);
   sky.groundColor = new Color3(0.35, 0.30, 0.22);
   sky.specular = new Color3(0.08, 0.08, 0.08);
 
   const sun = new DirectionalLight('global_sun_light', new Vector3(-0.45, -0.9, -0.25), scene);
   sun.position = new Vector3(42, 78, 32);
-  sun.intensity = 1.55;
+  sun.intensity = 1.18;
   sun.diffuse = new Color3(1.0, 0.96, 0.84);
   sun.specular = new Color3(0.22, 0.20, 0.14);
   sun.shadowMinZ = 1;
@@ -88,7 +88,7 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   const spawnLight = new PointLight('spawn_point_light', new Vector3(spawn.x, spawn.y + 1.25, spawn.z), scene);
   spawnLight.diffuse = new Color3(0.35, 0.78, 1.0);
   spawnLight.specular = new Color3(0.4, 0.9, 1.0);
-  spawnLight.intensity = 0.85;
+  spawnLight.intensity = 0.62;
   spawnLight.range = 18;
 
   const spawnMarker = createSpawnMarker(scene, spawn);

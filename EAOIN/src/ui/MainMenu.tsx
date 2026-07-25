@@ -111,6 +111,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const selectedWorld = worlds.find(w => w.id === selectedWorldId) ?? worlds[0];
 
   useEffect(() => saveWorlds(worlds), [worlds]);
+  useEffect(() => { if (mode === 'survival' && creatorOpen) setCreatorOpen(false); }, [mode, creatorOpen]);
 
   // Boot loading
   useEffect(() => {
@@ -281,7 +282,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
         <div className="create-world-container">
           <h2>Create New World</h2>
           <label>World Name <input value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })} /></label>
-          <label>Seed <input value={createForm.seed} onChange={e => setCreateForm({ ...createForm, seed: e.target.value })} placeholder="Leave blank for random" /><button className="small" onClick={() => setCreateForm({ ...createForm, seed: Math.random().toString(36).slice(2, 10) })}>Randomize</button></label>
+          <label>Seed <input value={createForm.seed} onChange={e => setCreateForm({ ...createForm, seed: e.target.value })} placeholder="Leave blank for random" /><button className="small" onClick={() => setCreateForm({ ...createForm, seed: Math.random().toString(36).slice(2, 10) })}>Randomize</button><button className="small" onClick={() => setCreateForm({ ...createForm, name: 'Floating Islands Preset', seed: 'floating_islands_' + Math.random().toString(36).slice(2, 8), icon: '☁️' })}>Floating Islands Preset</button></label>
           <div className="mode-select inline">
             {GAME_MODES.map(entry => (
               <button key={entry.id} className={`mode-card mini ${createForm.mode === entry.id ? 'selected' : ''}`} onClick={() => setCreateForm({ ...createForm, mode: entry.id })}>
@@ -351,7 +352,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
               <div className="quick-row">
                 <button className="menu-settings-link mc-link" onClick={() => setSettingsOpen(v => !v)}>⚙️ Settings (front-page)</button>
                 <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace (fixed)</button>
-                <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>🧍 Character Creator</button>
+                {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Family / Character Creator</button>}
               </div>
             </div>
             <div className="right-col">
@@ -372,11 +373,11 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
               {marketOpen && (
                 <div className="menu-settings-card pro marketplace-front"><strong>🛒 Marketplace — Fixed</strong><div className="marketplace-list">{marketplace.getPacks().map(pack => <div key={pack.id} className="market-pack"><strong>{pack.name}</strong><span>{pack.creator} • {pack.category} • {pack.priceCoins} coins • {pack.downloads} dl</span><em>{pack.published ? 'Published ✅' : 'Draft'}</em></div>)}</div><div className="market-stats"><span>Packs: {marketplace.getStatus().packs}</span><span>Published: {marketplace.getStatus().publishedPacks}</span><span>Coins: {marketplace.getStatus().grossCoins}</span></div><div className="market-actions"><button onClick={() => { marketplace.publishDraft('New Adventure Map'); }} className="btn-secondary mini">Create Draft</button><button onClick={() => { marketplace.approveAll(); }} className="btn-primary mini">Approve All</button></div><button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button></div>
               )}
-              {creatorOpen && <div className="menu-settings-card character-creator pro"><strong>🧍 Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
-              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Render distance 6-16 chunks, mountains bigger, caves bigger, cliffs, flats via volumetric noise square</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
+              {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
+              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
             </div>
           </div>
-          <div className="menu-footer pro"><p>3.2 • Clouds moving • 16 chunks • Volumetric mountains/caves/cliffs + flats • 20min day • Inventory logos • Hand punch + cracking • Fog 100-1000 • T chat /day /time • World list centered</p></div>
+          <div className="menu-footer pro"><p>3.2 • Clouds visible • 16 chunks • Regular Minecraft-like worlds by default • Floating Islands preset seed • F fly button • 20min day • Inventory logos • Hand punch + cracking • Fog 100-1000 • T chat /day /time • World list centered</p></div>
         </div>
       </div>
     </div>
