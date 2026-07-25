@@ -988,12 +988,18 @@ function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeO
   lighting.spawnLight.intensity = 0.35 + moonlight * 0.9;
   scene.fogDensity = realistic ? 0.0035 + moonlight * 0.003 : 0.0045;
   scene.ambientColor = new Color3(0.12 + daylight * 0.38, 0.14 + daylight * 0.42, 0.2 + daylight * 0.45);
+  const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22);
+  const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4));
+  lighting.stars.forEach((star, index) => {
+    star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index));
+  });
   scene.clearColor = new Color4(
-    0.035 + daylight * 0.55,
-    0.045 + daylight * 0.68,
-    0.09 + daylight * 0.86,
+    0.035 + daylight * 0.55 + sunset * 0.34,
+    0.045 + daylight * 0.68 + sunset * 0.12,
+    0.09 + daylight * 0.86 - sunset * 0.08,
     1
   );
+  scene.fogColor = new Color3(0.22 + daylight * 0.42 + sunset * 0.42, 0.28 + daylight * 0.52 + sunset * 0.12, 0.48 + daylight * 0.42 - sunset * 0.18);
 }
 
 function toBlockCoordinate(point: Vector3): BlockCoordinate {

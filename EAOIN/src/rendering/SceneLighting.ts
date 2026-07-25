@@ -19,6 +19,7 @@ export interface SceneLightingHandles {
   sky: HemisphericLight;
   spawnLight: PointLight;
   spawnMarker: Mesh;
+  stars: Mesh[];
 }
 
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
@@ -56,7 +57,24 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   spawnLight.range = 14;
 
   const spawnMarker = createSpawnMarker(scene, spawn);
-  return { sun, sky, spawnLight, spawnMarker };
+  const stars = createStars(scene, spawn);
+  return { sun, sky, spawnLight, spawnMarker, stars };
+}
+
+function createStars(scene: Scene, spawn: SpawnPoint): Mesh[] {
+  const material = new StandardMaterial('night_star_material', scene);
+  material.disableLighting = true;
+  material.emissiveColor = new Color3(0.75, 0.88, 1);
+  const stars: Mesh[] = [];
+  for (let i = 0; i < 72; i += 1) {
+    const star = MeshBuilder.CreateSphere(`night_star_${i}`, { diameter: 0.16 + (i % 3) * 0.05, segments: 4 }, scene);
+    const angle = (i / 72) * Math.PI * 2;
+    star.position = new Vector3(spawn.x + Math.cos(angle) * (180 + (i % 5) * 12), spawn.y + 55 + (i % 9) * 8, spawn.z + Math.sin(angle) * (180 + (i % 7) * 10));
+    star.material = material;
+    star.isPickable = false;
+    stars.push(star);
+  }
+  return stars;
 }
 
 function createSpawnMarker(scene: Scene, spawn: SpawnPoint): Mesh {
