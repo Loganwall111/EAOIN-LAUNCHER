@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, SSAO2RenderingPipeline, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
 import { CloudRuntime } from '../effects/CloudRuntime';
@@ -151,13 +151,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
       glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.42 : 0.15;
-      const pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
-      pipeline.fxaaEnabled = true; pipeline.samples = 4; pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.contrast = 1.12; pipeline.imageProcessing.exposure = 1.08; pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 1.6;
-      pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.78; pipeline.bloomWeight = settingsRef.current.postProcessEnabled ? 0.36 : 0.22; pipeline.bloomKernel = 96; pipeline.bloomScale = 0.6;
-      pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic'; pipeline.depthOfField.focalLength = 10; pipeline.depthOfField.fStop = 2.8;
-      const ssao = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.8, combineRatio: 1 }, [camera]);
-      ssao.radius = 2.2; ssao.totalStrength = 1.0; ssao.base = 0.3; (ssao as any).fallOff = 0.000002; ssao.maxZ = 180;
-      scene.postProcessRenderPipelineManager.attachCamerasToRenderPipeline('ssao', camera);
+      let pipeline: DefaultRenderingPipeline | null = null;
+      const optionalPostEffectsEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.qualityPreset === 'cinematic' || settingsRef.current.experimentalShaders;
+      if (optionalPostEffectsEnabled) {
+        try {
+          pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
+          pipeline.fxaaEnabled = true; pipeline.samples = 2; pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.contrast = 1.05; pipeline.imageProcessing.exposure = 1.08; pipeline.imageProcessing.vignetteEnabled = false;
+          pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.82; pipeline.bloomWeight = 0.28; pipeline.bloomKernel = 64; pipeline.bloomScale = 0.6;
+          pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic'; pipeline.depthOfField.focalLength = 10; pipeline.depthOfField.fStop = 2.8;
+        } catch (error) {
+          pipeline?.dispose(); pipeline = null;
+          scene.postProcessesEnabled = false;
+          console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
+        }
+      }
       scene.environmentIntensity = 0.85;
       dimensionRuntime.applyCurrent();
       const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
@@ -412,7 +419,21 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('resize', handleResize);
-      engine.runRenderLoop(() => { scene.render(); }); engine.resize();
+      let recoveredFromRenderError = false;
+      engine.runRenderLoop(() => {
+        try {
+          scene.render();
+        } catch (error) {
+          if (!recoveredFromRenderError) {
+            recoveredFromRenderError = true;
+            console.error('[Render] Scene render failed; disabling optional effects and retrying.', error);
+            pipeline?.dispose(); pipeline = null;
+            scene.postProcessesEnabled = false;
+            setActionMessage('Renderer recovered — optional effects disabled so the world stays visible');
+          }
+          try { scene.render(); } catch {}
+        }
+      }); engine.resize();
       const initialStats = renderer.getStats(); console.log(`[Render] 3.2 ready: ${initialStats.loadedChunks} chunks, clouds moving, mountains & caves volumetric, 16 render, 20min day`);
       cleanupScene = () => {
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
