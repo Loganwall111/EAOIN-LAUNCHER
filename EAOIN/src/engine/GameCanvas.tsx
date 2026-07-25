@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Scene, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
 import { runCommand, WorldTimeState } from '../commands/CommandRuntime';
@@ -217,6 +217,20 @@ export default function GameCanvas({
     camera.keysDown = [83, 40]; // S / ArrowDown
     camera.keysLeft = [65, 37]; // A / ArrowLeft
     camera.keysRight = [68, 39]; // D / ArrowRight
+
+    // Minecraft-inspired first-person arm and a complete low-poly avatar.
+    const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
+    const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
+    const arm = MeshBuilder.CreateBox('first_person_blocky_arm', { width: 0.22, height: 0.72, depth: 0.22 }, scene);
+    arm.parent = camera; arm.position = new Vector3(0.42, -0.48, 0.72); arm.rotation.z = -0.12; arm.material = skin; arm.isPickable = false;
+    const avatar = new Mesh('third_person_avatar', scene); avatar.position.copyFrom(camera.position); avatar.isVisible = false;
+    const torso = MeshBuilder.CreateBox('avatar_torso', { width: 0.7, height: 0.95, depth: 0.38 }, scene); torso.parent = avatar; torso.position.y = 0.15; torso.material = shirt;
+    const head = MeshBuilder.CreateBox('avatar_head', { width: 0.55, height: 0.55, depth: 0.55 }, scene); head.parent = avatar; head.position.y = 0.9; head.material = skin;
+    const legA = MeshBuilder.CreateBox('avatar_leg_a', { width: 0.25, height: 0.85, depth: 0.28 }, scene); legA.parent = avatar; legA.position.set(-0.18, -0.72, 0); legA.material = shirt;
+    const legB = legA.clone('avatar_leg_b'); if (legB) { legB.parent = avatar; legB.position.x = 0.18; }
+    const armA = MeshBuilder.CreateBox('avatar_arm_a', { width: 0.22, height: 0.82, depth: 0.25 }, scene); armA.parent = avatar; armA.position.set(-0.48, 0.12, 0); armA.material = skin;
+    const armB = armA.clone('avatar_arm_b'); if (armB) { armB.parent = avatar; armB.position.x = 0.48; }
+    let thirdPerson = false;
 
     const materials = createBlockMaterials(scene, settingsRef.current.texturePack);
     const audio = new GameAudio();
@@ -442,6 +456,11 @@ export default function GameCanvas({
       camera.speed = Math.max(0.65, settingsRef.current.cameraSpeed);
       scene.fogEnabled = settingsRef.current.fogEnabled;
       applyRenderScale(engine, settingsRef.current.renderScale);
+      if (thirdPerson) {
+        avatar.position.copyFrom(camera.position);
+        avatar.position.y -= 1.05;
+        avatar.rotation.y = camera.rotation.y;
+      }
       const horizontalDelta = Math.hypot(
         camera.position.x - lastCameraPosition.x,
         camera.position.z - lastCameraPosition.z
@@ -645,6 +664,14 @@ export default function GameCanvas({
     };
 
     const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'F5') {
+        event.preventDefault(); thirdPerson = !thirdPerson;
+        arm.isVisible = !thirdPerson; avatar.isVisible = thirdPerson;
+        camera.position.y += thirdPerson ? 0.45 : -0.45;
+        camera.position.z -= thirdPerson ? 3.8 : -3.8;
+        showActionMessage(thirdPerson ? 'Third-person view' : 'First-person view');
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         if (commandOpen) {

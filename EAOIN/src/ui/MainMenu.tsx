@@ -12,6 +12,9 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [mode, setMode] = useState<GameMode>('survival');
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [creatorOpen, setCreatorOpen] = useState(false);
+  const [skinTone, setSkinTone] = useState('#b86f48');
+  const [shirtColor, setShirtColor] = useState('#2467c7');
 
   const begin = (nextSeed?: string, nextMode?: GameMode) => {
     if (loading) return;
@@ -57,6 +60,8 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
           </button></>}
           {/* Settings intentionally lives on the front page, like a console title screen. */}
           <button className="menu-settings-link" onClick={() => setSettingsOpen(true)}>Settings</button>
+          <button className="menu-settings-link" onClick={() => setCreatorOpen(true)}>Character Creator</button>
+          {creatorOpen && <div className="menu-settings-card character-creator"><strong>Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview" style={{background: shirtColor, borderColor: skinTone}} /><button onClick={() => setCreatorOpen(false)}>Save Character</button></div>}
           {settingsOpen && <div className="menu-settings-card"><strong>Settings</strong><span>Configure audio, graphics and controls in-game.</span><button onClick={() => setSettingsOpen(false)}>Done</button></div>}
           <button onClick={() => onStart(undefined, 'experimental')} className="btn-secondary" style={{display:'none'}}>
             Quick Experimental

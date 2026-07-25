@@ -1513,3 +1513,5 @@ html, body, #root {
 .objectives-panel { width:260px; top:18px; left:18px; }
 .systems-panel { width:220px; top:18px; right:18px; }
 .objectives-panel h3,.systems-panel h3 { font-size:11px; }
+.character-creator label { display:flex; justify-content:space-between; align-items:center; color:#eee; font-size:12px; }
+.avatar-preview { width:64px; height:82px; margin:8px auto; border:8px solid; box-shadow:inset 0 22px #b86f48, inset 0 -28px #2467c7; image-rendering:pixelated; }
