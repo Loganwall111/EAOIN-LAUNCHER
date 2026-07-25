@@ -32,8 +32,9 @@ export interface SceneLightingHandles {
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
   scene.ambientColor = new Color3(0.46, 0.54, 0.66);
   scene.fogMode = Scene.FOGMODE_EXP2;
-  scene.fogDensity = 0.0042;
-  scene.fogColor = new Color3(0.60, 0.75, 0.96);
+  // Reduced fog: only 100-1000 blocks per request, toggleable
+  scene.fogDensity = 0.0012;
+  scene.fogColor = new Color3(0.62, 0.78, 0.98);
   scene.environmentIntensity = 0.9;
 
   // Real Minecraft-like skybox: large inverted sphere with gradient emissive, not flat clearColor

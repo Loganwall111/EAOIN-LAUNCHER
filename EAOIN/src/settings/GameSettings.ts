@@ -75,10 +75,11 @@ export function clampSettings(settings: GameSettings): GameSettings {
 }
 
 export function qualityRenderDistance(preset: QualityPreset): number {
-  if (preset === 'performance') return 2;
-  if (preset === 'quality') return 4;
-  if (preset === 'cinematic') return 5;
-  return 3;
+  // Increased render distance as requested — smooth terrain + bigger mountains visible far away
+  if (preset === 'performance') return 6; // was 2
+  if (preset === 'quality') return 12; // was 4
+  if (preset === 'cinematic') return 16; // was 5, now a lot more
+  return 8; // balanced was 3 -> 8
 }
 
 export function qualityCreatureMultiplier(preset: QualityPreset): number {

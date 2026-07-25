@@ -1948,3 +1948,98 @@ html, body, #root {
   -webkit-backdrop-filter: blur(10px) saturate(1.18);
 }
 
+
+/* =========================================================================
+   3.2 — Clouds moving, bigger render distance, terrain smooth, world list
+   centered like Minecraft, inventory block logos, hand punch, cracking,
+   fog 100-1000 toggle, T chat /day /time, 20min day night
+   ========================================================================= */
+
+/* World list — centered middle like Minecraft */
+.world-list-phase, .create-world-phase {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg,#6a6a6a 0,#5a5a5a 14%,#3a3a3a 14% 100%);
+  overflow: hidden;
+}
+.world-list-container, .create-world-container {
+  position: relative; z-index: 2;
+  width: min(680px, 94vw);
+  max-height: min(78vh, 720px);
+  padding: 18px;
+  background: rgba(0,0,0,0.62);
+  border: 5px solid #c5c5c8;
+  border-bottom-color: #1a1a1d;
+  box-shadow: inset 0 0 0 3px #000, 0 16px 80px #000;
+  display: flex; flex-direction: column; gap: 12px;
+  font-family: var(--eaoin-pixel-font);
+}
+.world-list-title { font: 800 18px var(--eaoin-pixel-font); color: #fff; text-shadow: 2px 2px #000; text-align: center; }
+.world-list { display: grid; gap: 8px; overflow: auto; max-height: 48vh; padding-right: 4px; }
+.world-card {
+  display: grid; grid-template-columns: 56px 1fr auto;
+  gap: 10px; align-items: center;
+  padding: 8px 10px;
+  background: #2a2a2a;
+  border: 3px solid #4a4a4a;
+  cursor: pointer;
+  transition: filter 80ms ease, transform 80ms ease;
+}
+.world-card:hover { filter: brightness(1.12); }
+.world-card.selected { border-color: #92aec8; background: linear-gradient(180deg,#3a567a,#2a3a58); box-shadow: 0 0 0 3px rgba(146,174,200,0.35); }
+.world-icon { width: 48px; height: 48px; display: grid; place-items: center; font-size: 26px; border: 3px solid #000; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.22); }
+.world-info { display: grid; gap: 2px; }
+.world-info strong { color: #fff; font-size: 13px; text-shadow: 1px 1px #000; }
+.world-info span { color: #bbb; font-size: 10px; }
+.world-info small { color: #8a8; font-size: 9px; }
+.world-actions { display: flex; gap: 6px; }
+.icon-btn { width: 32px; height: 32px; background: #3a3a3a; border: 2px solid #6a6a6a; color: #fff; cursor: pointer; font-size: 14px; }
+.icon-btn:hover { background: #4a4a4a; }
+.icon-btn.edit { color: #ffd166; } .icon-btn.delete { color: #ff6b6b; }
+.world-list-footer, .create-footer { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+
+.create-world-container h2 { text-align: center; color: #fff; text-shadow: 2px 2px #000; font-size: 16px; }
+.create-world-container label { display: grid; gap: 4px; font: 11px var(--eaoin-pixel-font); color: #ddd; }
+.create-world-container input[type=text] { padding: 8px 10px; background: #1a1a1a; border: 2px solid #555; color: #fff; font: 11px var(--eaoin-pixel-font); }
+.create-world-container .check { grid-template-columns: auto 1fr; align-items: center; }
+.mode-select.inline { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; width: 100%; }
+.mode-card.mini { min-height: 64px; padding: 8px; }
+.muted { color: #888; font-size: 10px; }
+button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background: #333; color: #fff; border: 2px solid #555; cursor: pointer; }
+
+/* Inventory overhaul — block logos like Minecraft + survival crafting above */
+.inventory-panel.pro-inv { inset: 48px 16px 96px 16px; padding: 14px; max-width: min(980px,96vw); margin: 0 auto; left: 0; right: 0; width: auto; }
+.inv-top { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 12px; }
+.inv-player-area { display: grid; gap: 8px; }
+.inv-avatar-box { width: 96px; height: 128px; background: #2a2a2a; border: 3px solid #6a6a6a; display: grid; place-items: center; }
+.inv-crafting { background: #3a3a3a; border: 3px solid #555; padding: 8px; display: grid; gap: 8px; }
+.craft-grid { display: grid; gap: 4px; }
+.craft-grid.c2 { grid-template-columns: repeat(2,48px); }
+.craft-grid.c3 { grid-template-columns: repeat(3,48px); }
+.craft-slot { width: 48px; height: 48px; background: #585858; border-top: 3px solid #b5b5b5; border-left: 3px solid #b5b5b5; border-right: 3px solid #1c1c1c; border-bottom: 3px solid #1c1c1c; display: grid; place-items: center; cursor: pointer; position: relative; }
+.craft-slot .slot-icon { width: 28px; height: 28px; border: 2px solid #000; }
+.craft-result { width: 64px; height: 64px; background: #3a3a3a; border: 3px solid #ffd166; display: grid; place-items: center; cursor: pointer; }
+.craft-arrow { font-size: 18px; color: #fff; display: grid; place-items: center; }
+
+.inventory-grid-pro { display: grid; grid-template-columns: repeat(9,1fr); gap: 4px; }
+.inv-slot { width: 100%; aspect-ratio: 1; background: #585858; border-top: 3px solid #b5b5b5; border-left: 3px solid #b5b5b5; border-right: 3px solid #1c1c1c; border-bottom: 3px solid #1c1c1c; display: grid; place-items: center; position: relative; cursor: pointer; }
+.inv-slot .block-logo { width: 70%; height: 70%; border: 2px solid #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22); }
+.inv-slot .stack-count { position: absolute; right: 2px; bottom: 1px; font: 800 10px var(--eaoin-pixel-font); color: #ffd166; text-shadow: 1px 1px #000; }
+
+/* Hand punching animation */
+@keyframes punchForward { 0% { transform: translate3d(0.42px,-0.48px,0.72px) scale(1); } 30% { transform: translate3d(0.12px,-0.34px,0.18px) scale(1.08); } 100% { transform: translate3d(0.42px,-0.48px,0.72px) scale(1); } }
+.punching { animation: punchForward 0.18s ease-out; }
+
+/* Block cracking overlay — official cracking lines on ground */
+.crack-overlay { position: absolute; pointer-events: none; border: 2px dashed rgba(0,0,0,0.45); background: repeating-linear-gradient(45deg, rgba(0,0,0,0.22) 0 4px, transparent 4px 8px); animation: crackGrow 0.2s linear; }
+@keyframes crackGrow { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+
+/* Chat with T — command bar like Minecraft */
+.chat-panel { position: absolute; left: 12px; bottom: 102px; width: min(520px, 56vw); max-height: 36vh; display: flex; flex-direction: column; gap: 4px; pointer-events: auto; z-index: 6; }
+.chat-log { display: grid; gap: 2px; max-height: 22vh; overflow: auto; }
+.chat-line { padding: 3px 8px; background: rgba(0,0,0,0.52); border-left: 3px solid #5dd6ff; font: 10px var(--eaoin-pixel-font); color: #d0e8ff; text-shadow: 1px 1px #000; }
+.chat-line.system { border-left-color: #ffd166; color: #fff3a0; }
+.chat-input-row { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.chat-input { padding: 8px 10px; background: rgba(0,0,0,0.78); border: 2px solid #5a5a5a; color: #fff; font: 11px var(--eaoin-pixel-font); width: 100%; }
+.chat-send { padding: 8px 12px; background: linear-gradient(180deg,#6ddc6d,#3aa83a); border: 3px solid #8cef8c; color: #fff; font: 800 11px var(--eaoin-pixel-font); cursor: pointer; }
+
