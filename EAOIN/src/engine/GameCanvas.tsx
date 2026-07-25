@@ -990,6 +990,11 @@ function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeO
   scene.ambientColor = new Color3(0.12 + daylight * 0.38, 0.14 + daylight * 0.42, 0.2 + daylight * 0.45);
   const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22);
   const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4));
+  const rayAlpha = sunset * (realistic ? 1.15 : 0.75);
+  lighting.godRays.visibility = rayAlpha;
+  lighting.godRays.rotation.y += 0.00012;
+  const rayMaterial = lighting.godRays.material as any;
+  if (rayMaterial) rayMaterial.alpha = 0.055 * rayAlpha;
   lighting.stars.forEach((star, index) => {
     star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index));
   });

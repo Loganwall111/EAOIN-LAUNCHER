@@ -20,6 +20,7 @@ export interface SceneLightingHandles {
   spawnLight: PointLight;
   spawnMarker: Mesh;
   stars: Mesh[];
+  godRays: Mesh;
 }
 
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
@@ -58,7 +59,23 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
 
   const spawnMarker = createSpawnMarker(scene, spawn);
   const stars = createStars(scene, spawn);
-  return { sun, sky, spawnLight, spawnMarker, stars };
+  const godRays = createGodRays(scene, spawn);
+  return { sun, sky, spawnLight, spawnMarker, stars, godRays };
+}
+
+function createGodRays(scene: Scene, spawn: SpawnPoint): Mesh {
+  const rays = MeshBuilder.CreateCylinder('sunset_god_rays', { height: 36, diameterTop: 0.8, diameterBottom: 18, tessellation: 8 }, scene);
+  rays.position = new Vector3(spawn.x + 32, spawn.y + 30, spawn.z + 24);
+  rays.rotation.z = -0.55;
+  rays.isPickable = false;
+  const material = new StandardMaterial('sunset_god_ray_material', scene);
+  material.disableLighting = true;
+  material.emissiveColor = new Color3(1, 0.52, 0.16);
+  material.alpha = 0.055;
+  material.backFaceCulling = false;
+  material.alphaMode = 2;
+  rays.material = material;
+  return rays;
 }
 
 function createStars(scene: Scene, spawn: SpawnPoint): Mesh[] {

@@ -35,7 +35,7 @@ const BLOCK_PALETTE: Record<BlockID, BlockPaletteEntry> = {
   2: { base: '#8a5b38', flecks: ['#6e4327', '#a87347', '#5a3420'], roughness: 0.92 },
   3: { base: '#7b7f86', flecks: ['#5f6267', '#999da3', '#4e5156'], roughness: 0.88, metallic: 0.05 },
   4: { base: '#d8c27a', flecks: ['#c7ab5d', '#ead68c', '#b9984d'], roughness: 0.9 },
-  5: { base: '#3175d8', flecks: ['#55a7ff', '#204e9a', '#8ed1ff'], alpha: 0.58, roughness: 0.18, metallic: 0.08 },
+  5: { base: '#3175d8', flecks: ['#55a7ff', '#204e9a', '#8ed1ff'], alpha: 0.58, roughness: 0.06, metallic: 0.32 },
   6: { base: '#8b5a2b', flecks: ['#5a3518', '#b47a3c', '#2e1a0b'], roughness: 0.85 },
   7: { base: '#2f8f38', flecks: ['#51b34e', '#1d5f24', '#78d36a'], alpha: 0.88, roughness: 0.8 },
   8: { base: '#303035', flecks: ['#111114', '#4a4a52', '#222227'], roughness: 0.55, metallic: 0.35 },
