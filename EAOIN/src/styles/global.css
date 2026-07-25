@@ -1515,3 +1515,436 @@ html, body, #root {
 .objectives-panel h3,.systems-panel h3 { font-size:11px; }
 .character-creator label { display:flex; justify-content:space-between; align-items:center; color:#eee; font-size:12px; }
 .avatar-preview { width:64px; height:82px; margin:8px auto; border:8px solid; box-shadow:inset 0 22px #b86f48, inset 0 -28px #2467c7; image-rendering:pixelated; }
+
+/* =========================================================================
+   3.1 DE-CLUTTERED EDITION — Overhaul
+   - Minecraft-matching skybox with movable panorama picture
+   - 3D warped professional UI
+   - Splash yellow text like Minecraft
+   - Colourful multi-colour loading bars
+   - Settings front-page & marketplace fixes
+   - HUD de-clutter: O/U toggles, smaller font, glass backdrop
+   ========================================================================= */
+
+/* --- Skybox matching Minecraft more: richer gradient, voxel clouds --- */
+.mc-skybox {
+  position: absolute; inset: -12%;
+  z-index: 0;
+  pointer-events: none;
+  transition: transform 0.6s ease-out, background 0.8s ease;
+  will-change: transform;
+  overflow: hidden;
+}
+.mc-clouds { position: absolute; inset: 0; }
+.mc-cloud {
+  position: absolute;
+  width: 96px; height: 32px;
+  background: rgba(255,255,255,0.82);
+  box-shadow: 16px 0 rgba(255,255,255,0.7), 32px -8px rgba(255,255,255,0.6), -12px 8px rgba(255,255,255,0.5);
+  image-rendering: pixelated;
+  animation: cloudDrift 38s linear infinite;
+}
+.mc-cloud::after { content:''; position:absolute; inset:-4px; background:rgba(255,255,255,0.12); filter: blur(6px); }
+@keyframes cloudDrift { from { transform: translateX(-120px); } to { transform: translateX(calc(100vw + 120px)); } }
+.mc-sun {
+  position: absolute; top: 9%; right: 18%;
+  width: 78px; height: 78px;
+  background: radial-gradient(circle,#fff9c0 0 32%,#ffd166 36% 58%,#ff8c42 70% 100%);
+  border: 3px solid #fff5a0;
+  box-shadow: 0 0 22px #ffd166, 0 0 46px rgba(255,209,102,0.45);
+  image-rendering: pixelated;
+}
+
+/* --- Movable panorama picture: cube that represents Minecraft UI for every area --- */
+.mc-movable-panorama {
+  position: absolute; inset: -18%;
+  z-index: 0;
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(.2,.8,.2,1);
+  will-change: transform;
+  filter: blur(10px) brightness(0.92) saturate(1.15);
+}
+.mc-movable-panorama.blurred { filter: blur(14px) brightness(0.78); }
+.panorama-scene {
+  position: absolute; inset: 0;
+  perspective: 900px;
+  perspective-origin: 50% 40%;
+}
+.panorama-cube {
+  position: absolute; top: 50%; left: 50%;
+  width: 120vw; height: 120vw;
+  transform-style: preserve-3d;
+  transform: translate(-50%,-50%) rotateX(12deg) rotateY(-18deg);
+  animation: panoramaRotate 42s linear infinite;
+}
+@keyframes panoramaRotate { from { transform: translate(-50%,-50%) rotateX(12deg) rotateY(-18deg); } to { transform: translate(-50%,-50%) rotateX(12deg) rotateY(342deg); } }
+.cube-face {
+  position: absolute; width: 100%; height: 100%;
+  backface-visibility: hidden;
+  border: 2px solid rgba(0,0,0,0.35);
+  image-rendering: pixelated;
+}
+.cube-face.front { transform: rotateY(0deg) translateZ(60vw); }
+.cube-face.back { transform: rotateY(180deg) translateZ(60vw); }
+.cube-face.right { transform: rotateY(90deg) translateZ(60vw); }
+.cube-face.left { transform: rotateY(-90deg) translateZ(60vw); }
+.cube-face.top { transform: rotateX(90deg) translateZ(60vw); }
+.cube-face.bottom { transform: rotateX(-90deg) translateZ(60vw); }
+
+.panorama-vignette {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.58) 92%);
+  pointer-events: none;
+}
+.panorama-vignette.stronger { background: radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.68) 88%); }
+
+.floating-blocks { position: absolute; inset: 0; }
+.float-block {
+  position: absolute; width: 22px; height: 22px;
+  background: linear-gradient(180deg,#6cc24a 0 6px,#8a5a36 6px 100%);
+  border: 2px solid #1a1a1a;
+  box-shadow: inset 0 0 0 1px #c7c7cb;
+  animation: floatBob 3.6s ease-in-out infinite;
+  opacity: 0.18;
+}
+@keyframes floatBob { 0%,100% { transform: translateY(0) rotate(2deg); } 50% { transform: translateY(-18px) rotate(-4deg); } }
+
+.panorama-label {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 14px;
+  background: rgba(0,0,0,0.58);
+  border: 2px solid rgba(255,255,255,0.22);
+  color: #d0e8ff;
+  font: 10px var(--eaoin-pixel-font);
+  text-shadow: 1px 1px #000;
+  pointer-events: none;
+  letter-spacing: 0.6px;
+}
+.panorama-label .emoji { margin-right: 6px; }
+
+/* --- 3D warped effect professional UI --- */
+.warped-3d {
+  transform: perspective(1000px) rotateX(2.5deg) rotateY(-1.2deg);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.warped-3d:hover { transform: perspective(1000px) rotateX(1deg) rotateY(-0.4deg) translateZ(6px); }
+
+.menu-title-3d { position: relative; margin-bottom: 18px; }
+.title-warped {
+  position: relative;
+  font-family: var(--eaoin-pixel-font);
+  font-size: clamp(52px, 9vw, 92px);
+  line-height: 0.95;
+  letter-spacing: 8px;
+  font-weight: 900;
+  image-rendering: pixelated;
+}
+.title-warped.small { font-size: clamp(38px, 6vw, 62px); letter-spacing: 6px; }
+.title-shadow {
+  position: absolute; inset: 0;
+  color: #000;
+  transform: translate(6px,6px);
+  filter: blur(1px);
+  opacity: 0.85;
+}
+.title-front {
+  position: relative;
+  background: linear-gradient(180deg,#fff9c6 0%,#ffd166 22%,#7dd8ff 52%,#a879ff 82%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 22px rgba(255,209,102,0.35);
+}
+
+/* Splash yellow text like Minecraft */
+.splash-text {
+  position: absolute;
+  right: -18px; top: -6px;
+  transform: rotate(-14deg) translateZ(22px);
+  background: #fffa5c;
+  color: #3a2a00;
+  border: 2px solid #000;
+  padding: 4px 10px;
+  font: 800 13px var(--eaoin-pixel-font);
+  text-shadow: 1px 1px 0 #fff9a0;
+  box-shadow: 0 3px 0 #000, 0 0 12px rgba(255,250,92,0.65);
+  cursor: pointer;
+  animation: splashWobble 0.58s ease-in-out infinite;
+  z-index: 4;
+  max-width: 220px;
+  white-space: nowrap;
+  user-select: none;
+}
+.splash-text.small { font-size: 11px; right: -10px; top: -2px; padding: 3px 8px; }
+@keyframes splashWobble {
+  0%,100% { transform: rotate(-14deg) scale(1) translateZ(22px); }
+  50% { transform: rotate(-12deg) scale(1.12) translateZ(28px); }
+}
+
+/* Splash play big button */
+.splash-play-phase,
+.boot-phase { background: #060a12; }
+.boot-phase .mc-panorama-boot { position: absolute; inset: 0; perspective: 800px; }
+.panorama-orbit { position: absolute; inset: 20%; transform-style: preserve-3d; animation: orbitSlow 18s linear infinite; }
+@keyframes orbitSlow { from { transform: rotateY(0deg) rotateX(8deg); } to { transform: rotateY(360deg) rotateX(8deg); } }
+.panorama-face { position: absolute; width: 50%; height: 50%; background: linear-gradient(180deg,#4a8fc7,#6cc24a); border: 2px solid #000; }
+.face-0 { transform: translateZ(120px); }
+.face-1 { transform: rotateY(60deg) translateZ(120px); }
+.face-2 { transform: rotateY(120deg) translateZ(120px); }
+.face-3 { transform: rotateY(180deg) translateZ(120px); }
+.face-4 { transform: rotateY(240deg) translateZ(120px); }
+.face-5 { transform: rotateY(300deg) translateZ(120px); }
+
+.boot-card {
+  position: relative; z-index: 2;
+  padding: 32px 38px;
+  background: rgba(0,0,0,0.62);
+  border: 5px solid #c5c5c8;
+  border-bottom-color: #1a1a1d;
+  box-shadow: inset 0 0 0 3px #000, 0 18px 60px #000;
+  text-align: center;
+  max-width: 560px;
+}
+.boot-logo { font: 900 64px var(--eaoin-pixel-font); letter-spacing: 8px; color: #fff; text-shadow: 3px 3px #000, 0 0 24px #5dd6ff; }
+.boot-subtitle { color: #ffd166; font: 11px var(--eaoin-pixel-font); margin-top: 8px; letter-spacing: 1.8px; }
+.boot-footer, .boot-footer.minimal { margin-top: 18px; font: 10px var(--eaoin-pixel-font); color: rgba(255,255,255,0.55); }
+.splash-play-card {
+  position: relative; z-index: 2;
+  padding: 38px 44px 28px;
+  background: rgba(0,0,0,0.62);
+  border: 5px solid #c5c5c8;
+  border-bottom-color: #1a1a1d;
+  box-shadow: inset 0 0 0 3px #000, 0 12px 0 #1a1a1d, 0 24px 80px rgba(0,0,0,0.7);
+  max-width: 620px;
+  text-align: center;
+}
+.btn-play-big {
+  width: 100%; margin-top: 28px;
+  padding: 18px 22px 14px;
+  background: linear-gradient(180deg,#7ef07e 0%,#3aa83a 58%,#205b20 100%);
+  border-top: 5px solid #aef7ae;
+  border-left: 5px solid #aef7ae;
+  border-right: 5px solid #143814;
+  border-bottom: 5px solid #143814;
+  box-shadow: inset 0 0 0 3px #000, 0 6px 0 #143814, 0 0 28px rgba(93,214,95,0.35);
+  color: #fff;
+  font-family: var(--eaoin-pixel-font);
+  cursor: pointer;
+  transition: transform 90ms ease, filter 90ms ease;
+  image-rendering: pixelated;
+}
+.btn-play-big:hover { filter: brightness(1.12) saturate(1.1); transform: translateZ(8px) scale(1.01); }
+.btn-play-big:active { transform: translate(3px,3px) scale(0.99); box-shadow: inset 0 0 0 3px #000, 0 0 0 #143814; }
+.btn-label-main { display:block; font-size: 28px; font-weight: 900; letter-spacing: 4px; text-shadow: 3px 3px #000; }
+.btn-label-sub { display:block; margin-top: 4px; font-size: 11px; color: #eaffea; text-shadow: 1px 1px #000; letter-spacing: 0.8px; }
+
+.splash-hints { margin-top: 16px; display: grid; gap: 4px; font: 10px var(--eaoin-pixel-font); color: rgba(255,255,255,0.62); }
+.splash-hints span:last-child { color: #8ad6ff; }
+
+/* Colourful loading bars — different colours, Minecraft Plus */
+.loading-track.colorful { height: 22px; padding: 4px; background: #0e0e0e; border: 3px solid #000; box-shadow: inset 0 2px 0 #555, inset 0 -2px 0 #000; position: relative; overflow: hidden; }
+.loading-track.colorful span.rainbow {
+  display: block; height: 100%;
+  background: linear-gradient(90deg,#ff4d4d,#ffcc00,#4dff88,#4da3ff,#c84dff,#ff4d9c);
+  background-size: 200% 100%;
+  animation: rainbowShift 1.2s linear infinite, menuLoadColour 1.1s ease-out forwards;
+  box-shadow: 0 0 12px rgba(255,255,255,0.35);
+}
+.loading-track.colorful.multi { height: 26px; }
+.loading-track.colorful span.rainbow.animated { background-size: 300% 100%; animation: rainbowShift 0.9s linear infinite; }
+.rainbow-overlay { position: absolute; left: 4px; top: 4px; bottom: 4px; background: linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent); animation: shimmer 1.1s linear infinite; pointer-events: none; }
+@keyframes rainbowShift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+@keyframes menuLoadColour { from { width: 0; } to { width: 100%; } }
+.loading-dots { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+.loading-dots i { width: 10px; height: 10px; display: block; border: 2px solid #000; box-shadow: 0 0 6px currentColor; animation: dotPulse 0.7s ease-in-out infinite; }
+@keyframes dotPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.4); } }
+
+.loading-card.big { position: relative; z-index: 2; padding: 28px; background: rgba(0,0,0,0.66); border: 5px solid #c5c5c8; box-shadow: inset 0 0 0 3px #000, 0 16px 80px #000; max-width: 640px; width: min(92vw,640px); }
+.loading-title { font: 900 18px var(--eaoin-pixel-font); color: #ffd166; text-shadow: 2px 2px #000; margin-bottom: 12px; }
+.menu-loading.bigger { width: 100%; }
+.colorful-blocks-row { margin-top: 14px; display: flex; gap: 8px; justify-content: center; }
+.mini-block { width: 18px; height: 18px; border: 2px solid #000; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); }
+.mini-grass { background: linear-gradient(180deg,#6cc24a 0 6px,#8a5a36 6px 100%); }
+.mini-dirt { background: #8a5a36; }
+.mini-stone { background: #8a8a8c; }
+.mini-water { background: #3a86d0; }
+.mini-crystal { background: linear-gradient(180deg,#5ff,#a78bfa); }
+.mini-rocket { background: linear-gradient(180deg,#ddd,#888); }
+.mini-portal { background: linear-gradient(180deg,#a78bfa,#5dd6ff); }
+
+/* Main phase professionally dense but still Minecraft */
+.main-phase { justify-content: flex-start; padding: 18px 16px; }
+.main-phase .mc-skybox { filter: saturate(1.1); }
+.main-layout { position: relative; z-index: 2; width: 100%; max-width: 1280px; margin: 0 auto; display: flex; justify-content: center; padding-top: 38px; }
+.release-2-menu.pro { max-width: min(1240px,96vw); width: 100%; padding: 18px 18px 14px; }
+.menu-background.pro { background: rgba(0,0,0,0.56); backdrop-filter: blur(6px); }
+.menu-title-3d.small { margin-bottom: 10px; }
+.grid-pro { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; align-items: start; width: 100%; }
+.left-col, .right-col { display: flex; flex-direction: column; gap: 12px; }
+.col-title { font: 800 11px var(--eaoin-pixel-font); color: #ffd166; letter-spacing: 1.4px; text-transform: uppercase; text-shadow: 1px 1px #000; }
+
+.mode-select.pro { width: 100%; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode-card.pro { min-height: 92px; padding: 10px 11px; }
+.mode-card.pro small { margin-top: 4px; color: rgba(255,255,255,0.48); font: 10px var(--eaoin-pixel-font); line-height: 1.25; }
+.mode-card.pro.hovered { transform: translateZ(8px) scale(1.02); filter: brightness(1.18); }
+
+.seed-input.pro { width: 100%; padding: 11px; font-size: 12px; }
+.minecraft-btn { image-rendering: pixelated; }
+.minecraft-btn.big { padding: 14px 18px; font-size: 16px; }
+.minecraft-btn.big small { display:block; margin-top:4px; font-size:10px; color: #d5ffd5; }
+.minecraft-btn.mini { padding: 8px 12px; font-size: 11px; }
+
+.quick-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 2px; }
+.mc-link { background: rgba(0,0,0,0.45); border: 2px solid rgba(255,255,255,0.18); padding: 6px 10px; border-radius: 2px; color: #bfeaff; font: 10px var(--eaoin-pixel-font); cursor: pointer; text-decoration: none; }
+.mc-link:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+/* Settings front-page */
+.menu-settings-card.pro { position: relative; inset: auto; z-index: 2; display: grid; gap: 12px; padding: 14px; background: rgba(20,16,14,0.94); border: 4px solid #9a9a9a; max-height: 62vh; overflow: auto; }
+.menu-settings-card.pro.settings-front { border-color: #5dd6ff; box-shadow: 0 0 18px rgba(93,214,255,0.25); }
+.menu-settings-card.pro.marketplace-front { border-color: #ffd166; box-shadow: 0 0 18px rgba(255,209,102,0.25); }
+.settings-grid { display: grid; gap: 10px; }
+.settings-grid label { display: grid; gap: 4px; font: 11px var(--eaoin-pixel-font); color: #eee; }
+.settings-grid label.checkbox { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+.settings-grid select { background: #1a1a1a; border: 2px solid #555; color: #fff; padding: 6px; font: 11px var(--eaoin-pixel-font); }
+.settings-grid input[type=range] { width: 100%; }
+.marketplace-list { display: grid; gap: 8px; }
+.market-pack { padding: 8px; background: #2a2a2a; border: 2px solid #444; display: grid; gap: 2px; }
+.market-pack strong { color: #ffd166; font-size: 12px; }
+.market-pack span, .market-pack em { font-size: 10px; color: #ccc; }
+.market-stats, .market-actions { display: flex; gap: 8px; flex-wrap: wrap; font: 10px var(--eaoin-pixel-font); color: #bbb; }
+.menu-info-card.pro { padding: 12px; background: rgba(0,0,0,0.52); border: 2px solid rgba(255,255,255,0.14); max-height: 58vh; overflow: auto; }
+.menu-info-card.pro h4 { color: #7ef7a0; font: 800 12px var(--eaoin-pixel-font); margin-bottom: 8px; text-shadow: 1px 1px #000; }
+.menu-info-card.pro ul { list-style: none; display: grid; gap: 5px; }
+.menu-info-card.pro li { font: 10px/1.4 var(--eaoin-pixel-font); color: #d6d6d6; text-shadow: 1px 1px #000; }
+
+.btn-secondary.mini, .btn-primary.mini { padding: 7px 10px; font-size: 10px; border-width: 3px; width: fit-content; }
+
+/* Character creator pro */
+.character-creator.pro { inset: auto; }
+.avatar-preview.pro { width: 86px; height: 110px; position: relative; border: 8px solid; background: #2467c7; }
+.preview-head { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 32px; height: 28px; background: #b86f48; border: 2px solid #000; }
+
+.menu-footer.pro { margin-top: 10px; font-size: 9px; opacity: 0.72; line-height: 1.4; }
+
+/* === HUD DE-CLUTTER === */
+.objectives-panel.decluttered,
+.objectives-panel {
+  width: 228px !important;
+  top: 14px !important;
+  left: 14px !important;
+  padding: 10px 10px 8px !important;
+  background: rgba(0,0,0,0.42) !important;
+  backdrop-filter: blur(8px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(1.15) !important;
+  border: 2px solid rgba(255,255,255,0.14) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.06) !important;
+  font-size: 10px !important;
+  line-height: 1.35 !important;
+  max-height: 36vh !important;
+  opacity: 0.88 !important;
+  transition: opacity 0.22s ease, transform 0.22s ease !important;
+}
+.systems-panel.decluttered,
+.systems-panel {
+  width: 204px !important;
+  top: 14px !important;
+  right: 14px !important;
+  padding: 10px 10px 8px !important;
+  background: rgba(10,12,18,0.46) !important;
+  backdrop-filter: blur(10px) saturate(1.2) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.2) !important;
+  border: 2px solid rgba(138,121,255,0.18) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.05) !important;
+  font-size: 9.5px !important;
+  line-height: 1.32 !important;
+  max-height: 38vh !important;
+  opacity: 0.86 !important;
+}
+.objectives-panel h3,
+.systems-panel h3 {
+  font-size: 10px !important;
+  letter-spacing: 1.2px !important;
+  margin-bottom: 6px !important;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.objectives-panel h3::after { content:'[O] toggle'; font-size: 8px; opacity: 0.55; }
+.systems-panel h3::after { content:'[U] toggle'; font-size: 8px; opacity: 0.55; }
+
+/* Semi-transparent background padding for professional look — extra inner padding */
+.objectives-panel .objective,
+.systems-panel div {
+  background: rgba(255,255,255,0.025);
+  border-radius: 2px;
+  padding: 3px 5px !important;
+  margin: 1px 0;
+}
+.objectives-panel:empty,
+.systems-panel:empty { opacity: 0 !important; pointer-events: none !important; }
+
+/* Survival panel declutter — smaller, not overlapping hotbar */
+.survival-panel {
+  width: 198px !important;
+  left: 10px !important;
+  bottom: 98px !important;
+  padding: 8px 9px !important;
+  gap: 4px !important;
+  background: rgba(0,0,0,0.44) !important;
+  backdrop-filter: blur(6px) !important;
+  font-size: 10px !important;
+  opacity: 0.88;
+}
+.render-stats-panel {
+  font-size: 9.5px !important;
+  line-height: 1.32 !important;
+  min-width: 168px !important;
+  padding: 8px 9px !important;
+  background: rgba(0,0,0,0.48) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.status-bar { bottom: 76px !important; font-size: 9.5px !important; gap: 12px !important; opacity: 0.72; }
+.toolbelt { bottom: 54px !important; gap: 3px !important; }
+.hotbar { gap: 2px !important; padding: 3px !important; }
+
+/* Rainbow subtitle */
+.rainbow-subtitle {
+  background: linear-gradient(90deg,#ffd166,#7ef7a0,#5dd6ff,#a879ff,#ff7ac1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: rainbowShift 3.2s linear infinite;
+  background-size: 200% 100%;
+}
+
+/* Responsive tweaks */
+@media (max-width: 1100px) {
+  .grid-pro { grid-template-columns: 1fr; }
+  .main-layout { padding-top: 12px; }
+  .panorama-label { display: none; }
+}
+@media (max-width: 780px) {
+  .mode-select.pro { grid-template-columns: 1fr; }
+  .splash-play-card { padding: 22px 18px; }
+  .title-warped { font-size: 42px; letter-spacing: 4px; }
+  .splash-text { display: none; }
+  .objectives-panel, .systems-panel { width: 176px !important; font-size: 9px !important; }
+}
+
+/* Marketplace fix: ensure button visibility */
+.marketplace-list { max-height: 38vh; overflow: auto; padding-right: 4px; }
+
+/* Fix: Ensure O/U toggles don't overlap crosshair — push panels slightly inward */
+.crosshair { z-index: 2; text-shadow: 0 0 2px #000, 0 0 8px #000, 0 0 1px #fff; }
+
+/* Pro glass for inventory/settings pausing — ensures professional */
+.inventory-panel,
+.settings-panel,
+.pause-panel {
+  backdrop-filter: blur(10px) saturate(1.18);
+  -webkit-backdrop-filter: blur(10px) saturate(1.18);
+}
+

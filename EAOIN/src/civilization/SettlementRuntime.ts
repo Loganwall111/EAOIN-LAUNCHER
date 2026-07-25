@@ -1,6 +1,7 @@
-/** Runtime settlement placeholders: huts, villagers, discovery, and simple village life. */
+/** Runtime settlement placeholders: huts, villagers, discovery, and simple village life. De-cluttered to 50+ blocks away. */
 import { Color3, Mesh, MeshBuilder, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import { TerrainGenerator } from '../world/TerrainGenerator';
+import { getWorldLayout } from '../world/WorldDistribution';
 
 export interface SettlementStats {
   name: string;
@@ -45,11 +46,11 @@ export class SettlementRuntime {
 
   update(playerPosition: Vector3, deltaSeconds: number): void {
     const distance = Vector3.Distance(playerPosition, this.center);
-    if (!this.discovered && distance < 34) {
+    // discovery range larger now because village is farther
+    if (!this.discovered && distance < 38) {
       this.discovered = true;
-      this.discoveryMessage = `Discovered settlement: ${this.name}`;
+      this.discoveryMessage = `Discovered settlement: ${this.name} (${Math.round(distance)}m from spawn)`;
     }
-
     this.updateEconomy(deltaSeconds);
     const now = performance.now();
     for (const villager of this.villagers) this.updateVillager(villager, now, deltaSeconds);
@@ -62,16 +63,14 @@ export class SettlementRuntime {
   }
 
   deliverSupplies(kind: 'wood' | 'stone' | 'crate', amount: number): string {
-    if (!this.discovered) return 'Find the settlement before delivering supplies';
+    if (!this.discovered) return 'Find the settlement first — 50 blocks NW (check compass)';
     if (amount <= 0) return 'No supplies delivered';
-
     if (kind === 'wood') this.woodStockpile += amount;
     if (kind === 'stone') this.stoneStockpile += amount;
     if (kind === 'crate') {
       this.woodStockpile += amount * 2;
       this.stoneStockpile += amount;
     }
-
     this.prosperity = Math.min(10, this.prosperity + amount * (kind === 'crate' ? 0.6 : 0.25));
     this.activeTask = this.prosperity >= 5 ? 'Expanding village paths' : 'Building supply cache';
     return `${this.name} received ${amount} ${kind} supply${amount === 1 ? '' : 'ies'}`;
@@ -103,7 +102,6 @@ export class SettlementRuntime {
 
   private updateEconomy(deltaSeconds: number): void {
     if (!this.discovered || (this.woodStockpile <= 0 && this.stoneStockpile <= 0)) return;
-
     this.jobProgress += deltaSeconds * (6 + this.prosperity);
     if (this.jobProgress >= 100) {
       this.jobProgress = 0;
@@ -123,13 +121,11 @@ export class SettlementRuntime {
     const hutMaterial = this.material('settlement_hut_wood', new Color3(0.46, 0.26, 0.12));
     const roofMaterial = this.material('settlement_roof', new Color3(0.22, 0.18, 0.16));
     const villagerMaterial = this.material('settlement_villager', new Color3(0.2, 0.56, 0.86));
-
     const hutOffsets = [
       new Vector3(-4, 0, -3),
       new Vector3(5, 0, -2),
       new Vector3(0, 0, 5),
     ];
-
     for (const [index, offset] of hutOffsets.entries()) {
       const position = this.groundPosition(this.center.x + offset.x, this.center.z + offset.z);
       const hut = MeshBuilder.CreateBox(`settlement_hut_${index}`, { width: 3.2, height: 2.1, depth: 3.2 }, this.scene);
@@ -137,7 +133,6 @@ export class SettlementRuntime {
       hut.material = hutMaterial;
       hut.checkCollisions = true;
       this.meshes.push(hut);
-
       const roof = MeshBuilder.CreateCylinder(`settlement_roof_${index}`, { height: 0.9, diameter: 4.2, tessellation: 4 }, this.scene);
       roof.position = position.add(new Vector3(0, 2.55, 0));
       roof.rotation.y = Math.PI / 4;
@@ -145,7 +140,6 @@ export class SettlementRuntime {
       roof.checkCollisions = true;
       this.meshes.push(roof);
     }
-
     for (let i = 0; i < 4; i += 1) {
       const root = new TransformNode(`settlement_villager_${i}`, this.scene);
       root.position = this.groundPosition(this.center.x + i - 1.5, this.center.z + 1 + (i % 2));
@@ -161,6 +155,15 @@ export class SettlementRuntime {
       head.isPickable = false;
       this.villagers.push({ root, target: root.position.clone(), nextDecisionAt: 0, seed: i * 9973 + 11 });
     }
+    // Beacon marker so player can find it from afar
+    const beacon = MeshBuilder.CreateCylinder('settlement_beacon', { height: 0.1, diameter: 2.8, tessellation: 12 }, this.scene);
+    beacon.position = this.groundPosition(this.center.x, this.center.z).add(new Vector3(0, 0.05, 0));
+    const bMat = this.material('settlement_beacon', new Color3(0.1, 0.9, 0.2));
+    bMat.emissiveColor = new Color3(0.05, 0.45, 0.1);
+    bMat.alpha = 0.6;
+    beacon.material = bMat;
+    beacon.isPickable = false;
+    this.meshes.push(beacon);
   }
 
   private updateVillager(villager: VillagerRuntime, now: number, deltaSeconds: number): void {
@@ -172,7 +175,6 @@ export class SettlementRuntime {
       villager.target = this.groundPosition(this.center.x + Math.cos(angle) * distance, this.center.z + Math.sin(angle) * distance);
       villager.nextDecisionAt = now + 2500 + (villager.seed % 3500);
     }
-
     const toTarget = villager.target.subtract(villager.root.position);
     const horizontal = new Vector3(toTarget.x, 0, toTarget.z);
     if (horizontal.length() > 0.01) {
@@ -191,10 +193,9 @@ export class SettlementRuntime {
   }
 
   private pickCenter(seed: string): Vector3 {
-    const hash = this.hash(seed);
-    const signX = hash % 2 === 0 ? 1 : -1;
-    const signZ = hash % 3 === 0 ? 1 : -1;
-    return new Vector3(signX * 42, 0, signZ * 36);
+    // Use world distribution - settlement 50+ blocks away
+    const layout = getWorldLayout(seed, { x: 0.5, y: 9.95, z: 0.5 });
+    return new Vector3(layout.settlement.x, 0, layout.settlement.z);
   }
 
   private pickName(seed: string): string {
