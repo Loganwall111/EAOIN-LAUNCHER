@@ -1,0 +1,100 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0e14;
+  color: #e0e8f0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.eaoin-app { width: 100%; height: 100%; position: relative; }
+
+.game-canvas {
+  width: 100%; height: 100%;
+  display: block;
+  cursor: crosshair;
+}
+
+.game-hud {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.hud-top {
+  position: absolute; top: 16px; left: 16px; right: 16px;
+  display: flex; justify-content: space-between; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+.crosshair {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px; color: rgba(255,255,255,0.7); pointer-events: none;
+}
+
+.exit-game {
+  pointer-events: auto;
+  position: absolute; bottom: 16px; right: 16px;
+  padding: 8px 16px; background: rgba(220, 53, 69, 0.85); border: none;
+  border-radius: 6px; color: white; font-weight: 600; cursor: pointer;
+}
+
+.main-menu {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #0a0e14 0%, #142233 100%);
+}
+
+.menu-background {
+  text-align: center; padding: 48px; border-radius: 16px;
+  background: rgba(10, 16, 30, 0.7); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.menu-title h1 {
+  font-size: 72px; letter-spacing: 6px; background: linear-gradient(90deg, #4fc3f7, #a78bfa);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.subtitle { font-size: 20px; color: #7a8aa8; margin-top: 8px; letter-spacing: 2px; }
+
+.menu-card { margin-top: 32px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+
+.seed-input {
+  padding: 14px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05); color: #e0e8f0; font-size: 16px; width: 320px;
+  text-align: center;
+}
+
+.btn-primary {
+  padding: 14px 32px; border-radius: 8px; border: none;
+  background: linear-gradient(90deg, #4fc3f7, #a78bfa); color: #0a0e14;
+  font-size: 18px; font-weight: 700; cursor: pointer; transition: transform 0.1s;
+}
+.btn-primary:hover { transform: translateY(-2px); }
+
+.btn-secondary {
+  padding: 12px 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+  background: transparent; color: #e0e8f0; font-size: 16px; cursor: pointer;
+}
+
+.menu-footer { margin-top: 32px; font-size: 12px; color: #4a5568; }
+
+.hotbar {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; pointer-events: auto;
+}
+
+.slot {
+  width: 56px; height: 56px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.12);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: #e0e8f0;
+}
+
+.slot.selected { border-color: #4fc3f7; box-shadow: 0 0 12px rgba(79, 195, 247, 0.4); }
+
+.status-bar {
+  position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 24px; font-size: 12px; color: #8896b3; pointer-events: none;
+}

@@ -1,0 +1,37 @@
+{
+  "name": "eaoin",
+  "version": "0.01.0",
+  "description": "Production-quality voxel sandbox RPG — EAOIN Ultimate Sandbox",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "server": "tsx server/src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "docs": "tsc && node scripts/generate-docs.js"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^7.0.0",
+    "@babylonjs/loaders": "^7.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0",
+    "tsx": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": ["voxel", "sandbox", "rpg", "eaoin", "minecraft-style"],
+  "author": "EAOIN Engine Team",
+  "license": "MIT"
+}
