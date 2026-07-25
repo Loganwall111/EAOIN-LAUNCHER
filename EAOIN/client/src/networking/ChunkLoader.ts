@@ -1,7 +1,6 @@
 /**
  * ChunkLoader — Async Chunk Streaming with Background Loading
  */
-import { Chunk } from '../world/Chunk';
 import { ChunkCache } from '../rendering/ChunkRenderer';
 
 export class ChunkLoader {

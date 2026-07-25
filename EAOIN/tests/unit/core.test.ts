@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../client/src/world/Chunk';
-import { ChunkMeshBuilder } from '../client/src/rendering/ChunkMeshBuilder';
+import { Chunk, CHUNK_SIZE, CHUNK_HEIGHT } from '../../client/src/world/Chunk';
+import { ChunkMeshBuilder } from '../../client/src/rendering/ChunkMeshBuilder';
 
 describe('Chunk System', () => {
   it('creates chunk with correct dimensions', () => {
     const chunk = new Chunk(0, 0, 'test');
     expect(chunk.x).toBe(0);
     expect(chunk.z).toBe(0);
+    expect(CHUNK_SIZE).toBe(16);
+    expect(CHUNK_HEIGHT).toBe(128);
   });
 
   it('sets and gets blocks correctly', () => {

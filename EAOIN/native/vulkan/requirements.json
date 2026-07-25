@@ -1,0 +1,29 @@
+{
+  "release": "EAOIN 1.0 Release to Life",
+  "status": "native-vulkan-bootstrap-added",
+  "currentWebRenderer": "BabylonJS WebGPU-first with WebGL fallback",
+  "rawVulkanInBrowser": false,
+  "nativeVulkanSupport": {
+    "vulkanInstanceCreation": true,
+    "physicalDeviceEnumeration": true,
+    "graphicsQueueSelection": true,
+    "logicalDeviceCreation": true,
+    "swapchain": false,
+    "nativeVoxelRenderer": false
+  },
+  "minimumVulkanVersion": "1.2",
+  "tooling": [
+    "Vulkan SDK",
+    "CMake 3.20+",
+    "C++20 compiler",
+    "SDL2/GLFW/native window layer for future swapchain",
+    "SPIR-V shader compiler for future rendering pipeline"
+  ],
+  "candidateRuntimePaths": [
+    "Current: C++ Vulkan bootstrap",
+    "Future: native window/swapchain",
+    "Future: native voxel renderer bridge",
+    "Alternative: Babylon Native",
+    "Alternative: Rust WGPU native shell"
+  ]
+}

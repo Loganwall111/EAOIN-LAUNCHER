@@ -21,8 +21,8 @@
     "baseUrl": ".",
     "paths": {
       "@eaoin/*": ["src/*"],
-      "@shared/*": ["../shared/src/*"],
-      "@client/*": ["src/*"]
+      "@shared/*": ["shared/src/*"],
+      "@client/*": ["client/src/*"]
     }
   },
   "include": ["src/**/*", "shared/**/*", "tests/**/*"],

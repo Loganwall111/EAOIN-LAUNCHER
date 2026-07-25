@@ -25,7 +25,15 @@ export class GameEngine {
   start(): void {
     this.running = true;
     this.lastTime = performance.now();
-    console.log('[Engine] GameEngine started with', this.systems.length, 'systems');
+    console.log(
+      '[Engine] GameEngine started with',
+      this.systems.length,
+      'systems at',
+      this.targetFPS,
+      'FPS target /',
+      this.tickRate,
+      'TPS'
+    );
   }
 
   stop(): void {
