@@ -44,7 +44,9 @@ export function createDefaultSettings(): GameSettings {
     commandBlocksEnabled: true,
     multiplayerServersEnabled: true,
     texturePack: 'classic',
-    cameraSpeed: 0.42,
+    // Babylon camera speed is world-units per frame; 0.42 feels sluggish
+    // against the voxel scale, so use a comfortable survival-walk default.
+    cameraSpeed: 0.78,
   };
 }
 
@@ -68,7 +70,7 @@ export function clampSettings(settings: GameSettings): GameSettings {
     commandBlocksEnabled: settings.commandBlocksEnabled,
     multiplayerServersEnabled: settings.multiplayerServersEnabled,
     texturePack: ['classic', 'soft', 'vibrant', 'noir'].includes(settings.texturePack) ? settings.texturePack : 'classic',
-    cameraSpeed: Math.max(0.12, Math.min(1.1, settings.cameraSpeed)),
+    cameraSpeed: Math.max(0.35, Math.min(1.6, settings.cameraSpeed)),
   };
 }
 

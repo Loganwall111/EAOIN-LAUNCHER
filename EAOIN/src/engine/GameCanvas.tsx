@@ -207,7 +207,7 @@ export default function GameCanvas({
     camera.setTarget(new Vector3(spawn.x + 8, spawn.y - 0.35, spawn.z + 8));
     camera.minZ = 0.05;
     camera.maxZ = 450;
-    camera.speed = settingsRef.current.cameraSpeed;
+    camera.speed = Math.max(0.65, settingsRef.current.cameraSpeed);
     camera.inertia = 0.45;
     camera.angularSensibility = 1800;
     camera.applyGravity = true;
@@ -425,7 +425,7 @@ export default function GameCanvas({
         onGameplayEvent('dropsCollected', collectedCount);
         audio.play('pickup', settingsRef.current);
       }
-      camera.speed = settingsRef.current.cameraSpeed;
+      camera.speed = Math.max(0.65, settingsRef.current.cameraSpeed);
       scene.fogEnabled = settingsRef.current.fogEnabled;
       applyRenderScale(engine, settingsRef.current.renderScale);
       const horizontalDelta = Math.hypot(
