@@ -71,6 +71,18 @@ export default function App() {
     setInventoryOpen((open) => !open);
   }, [markInventoryOpened]);
 
+  const toggleSettings = useCallback(() => {
+    setSettingsOpen((open) => !open);
+  }, []);
+
+  const closeInventory = useCallback(() => {
+    setInventoryOpen(false);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+  }, []);
+
   const recordGameplayEvent = useCallback((event: GameplayCounterKey, amount = 1) => {
     setGameplayCounters((counters) => ({ ...counters, [event]: counters[event] + amount }));
   }, []);
@@ -140,7 +152,7 @@ export default function App() {
             settings={settings}
             onSettingsChange={setSettings}
             onToggleInventory={toggleInventory}
-            onToggleSettings={() => setSettingsOpen((open) => !open)}
+            onToggleSettings={toggleSettings}
             onGameplayEvent={recordGameplayEvent}
             onRuntimeStatusChange={setRuntimeStatus}
           />
@@ -158,8 +170,8 @@ export default function App() {
             objectives={objectives}
             craftingMessage={craftingMessage}
             onCraftRecipe={craft}
-            onCloseInventory={() => setInventoryOpen(false)}
-            onCloseSettings={() => setSettingsOpen(false)}
+            onCloseInventory={closeInventory}
+            onCloseSettings={closeSettings}
             onSettingsChange={setSettings}
             onResetPlayerProgress={resetPlayerProgress}
           />
