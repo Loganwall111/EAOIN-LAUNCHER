@@ -1498,3 +1498,18 @@ html, body, #root {
   from { bottom: -260px; }
   to { bottom: 110%; }
 }
+
+/* Next-generation title screen/loading and uncluttered HUD controls. */
+.menu-loading { width: min(460px, 80vw); display:grid; gap:10px; color:#fff; font-family:var(--eaoin-pixel-font); text-shadow:2px 2px #000; }
+.loading-track { height:18px; padding:3px; background:#171717; border:3px solid #090909; box-shadow:inset 2px 2px #666; }
+.loading-track span { display:block; height:100%; width:70%; background:linear-gradient(90deg,#59d85c,#f6df65,#65d9ff); animation:menuLoad 900ms ease-out forwards; transform-origin:left; }
+@keyframes menuLoad { from{width:0} to{width:100%} }
+.menu-settings-link { background:transparent; border:0; color:#bfeaff; text-decoration:underline; cursor:pointer; font:12px var(--eaoin-pixel-font); }
+.menu-settings-card { position:absolute; z-index:4; inset:30% 20%; display:grid; gap:12px; align-content:center; padding:24px; background:rgba(20,16,14,.96); border:4px solid #aaa; box-shadow:0 12px 40px #000; font-family:var(--eaoin-pixel-font); }
+.menu-settings-card span { color:#ddd; font-size:12px; }
+.menu-settings-card button { padding:9px; cursor:pointer; }
+/* Panels use compact glass backing and leave the crosshair/hotbar clear. */
+.objectives-panel,.systems-panel { max-height:42vh; overflow:auto; backdrop-filter:blur(5px); opacity:.92; transition:transform .2s ease,opacity .2s ease; }
+.objectives-panel { width:260px; top:18px; left:18px; }
+.systems-panel { width:220px; top:18px; right:18px; }
+.objectives-panel h3,.systems-panel h3 { font-size:11px; }

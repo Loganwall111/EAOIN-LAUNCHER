@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { RecipeID, RECIPES, canCraft, recipeCostLabel, recipeOutputLabel } from '../crafting/RecipeBook';
 import { GameMode } from '../modes/GameMode';
@@ -20,6 +21,10 @@ interface HUDProps {
   settings: GameSettings;
   runtimeStatus: RuntimeStatus;
   objectives: ObjectiveStatus[];
+  objectivesVisible: boolean;
+  systemsVisible: boolean;
+  onToggleObjectives: () => void;
+  onToggleSystems: () => void;
   craftingMessage: string;
   onCraftRecipe: (recipe: RecipeID) => void;
   onCloseInventory: () => void;
@@ -42,6 +47,10 @@ export default function HUD({
   settings,
   runtimeStatus,
   objectives,
+  objectivesVisible,
+  systemsVisible,
+  onToggleObjectives,
+  onToggleSystems,
   craftingMessage,
   onCraftRecipe,
   onCloseInventory,
@@ -53,6 +62,15 @@ export default function HUD({
     onSettingsChange(clampSettings({ ...settings, ...patch }));
   };
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'o') onToggleObjectives();
+      if (event.key.toLowerCase() === 'u') onToggleSystems();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onToggleObjectives, onToggleSystems]);
+
   return (
     <div className="game-hud-overlay">
       <div className="survival-panel">
@@ -62,7 +80,7 @@ export default function HUD({
         <div className="stat-row"><span>Stamina</span><meter min="0" max="100" value={survivalStats.stamina} /></div>
       </div>
 
-      <div className="systems-panel">
+      {systemsVisible && <div className="systems-panel">
         <h3>Runtime Systems</h3>
         <div><span>3.0</span><strong>{runtimeStatus.nextGen.version}</strong></div>
         <div><span>Vulkan</span><strong>{runtimeStatus.nextGen.vulkanOfficial ? 'official' : 'off'}</strong></div>
@@ -105,9 +123,9 @@ export default function HUD({
         <div><span>Actions</span><strong>{runtimeStatus.localActions}</strong></div>
         <div><span>Mods</span><strong>{runtimeStatus.loadedMods} / {runtimeStatus.texturePack}</strong></div>
         <div><span>API</span><strong>{runtimeStatus.moddingApiVersion}</strong></div>
-      </div>
+      </div>}
 
-      {settings.showObjectives && (
+      {settings.showObjectives && objectivesVisible && (
         <div className="objectives-panel">
           <h3>Objectives</h3>
           {objectives.map((objective) => (
