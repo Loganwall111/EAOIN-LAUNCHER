@@ -2,7 +2,7 @@
  * ChunkMeshBuilder — Modern Chunk Mesh Pipeline
  * Hidden face removal, vertex/index buffers, UV mapping.
  */
-import { Chunk } from '../../world/Chunk';
+import { Chunk } from '../world/Chunk';
 
 export interface MeshData {
   vertices: Float32Array;

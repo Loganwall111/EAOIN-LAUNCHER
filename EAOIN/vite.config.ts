@@ -27,8 +27,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@eaoin': path.resolve(__dirname, 'src'),
-      '@shared': path.resolve(__dirname, '../shared/src'),
-      '@client': path.resolve(__dirname, 'src'),
+      '@shared': path.resolve(__dirname, 'shared/src'),
+      '@client': path.resolve(__dirname, 'client/src'),
     }
   },
   optimizeDeps: {

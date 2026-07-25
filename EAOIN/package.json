@@ -1,7 +1,7 @@
 {
   "name": "eaoin",
-  "version": "0.01.0",
-  "description": "Production-quality voxel sandbox RPG — EAOIN Ultimate Sandbox",
+  "version": "1.0.0",
+  "description": "EAOIN Release 1.0 End Game Update \u2014 playable voxel sandbox with BabylonJS WebGPU, native Vulkan pipeline scaffolding, cinematic credits, city economy, multiplayer replication, marketplace, modding SDK, and advanced physics",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,27 +11,43 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
-    "docs": "tsc && node scripts/generate-docs.js"
+    "docs": "tsc && node scripts/generate-docs.js",
+    "native:vulkan:check": "node scripts/check-native-vulkan.mjs",
+    "native:vulkan:install-deps": "bash scripts/install-native-vulkan-deps.sh",
+    "native:vulkan:configure": "cmake -S native/vulkan -B native/vulkan/build",
+    "native:vulkan:build": "cmake --build native/vulkan/build --config Release",
+    "native:vulkan:run": "./native/vulkan/build/eaoin-vulkan-bootstrap",
+    "native:vulkan:docker-build": "docker build -t eaoin-vulkan native/vulkan",
+    "native:vulkan:docker-run": "docker run --rm -v \"$PWD\":/workspace/EAOIN eaoin-vulkan"
   },
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
     "@babylonjs/loaders": "^7.0.0",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "vite": "^5.4.0",
-    "vitest": "^2.0.0",
-    "tsx": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
-    "eslint": "^9.0.0"
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
+    "eslint": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.0.0"
   },
   "engines": {
     "node": ">=20"
   },
-  "keywords": ["voxel", "sandbox", "rpg", "eaoin", "minecraft-style"],
+  "keywords": [
+    "voxel",
+    "sandbox",
+    "rpg",
+    "eaoin",
+    "minecraft-style"
+  ],
   "author": "EAOIN Engine Team",
   "license": "MIT"
 }

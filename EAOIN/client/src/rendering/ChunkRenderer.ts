@@ -1,9 +1,8 @@
 /**
  * ChunkRenderer — Chunk Cache + Mesh Rebuild Queue + Frustum Culling
  */
-import { Scene, Mesh, VertexData } from '@babylonjs/core';
-import { Chunk } from '../../world/Chunk';
-import { ChunkMeshBuilder } from './ChunkMeshBuilder';
+import { Mesh } from '@babylonjs/core';
+import { Chunk } from '../world/Chunk';
 
 export class ChunkCache {
   private chunks = new Map<string, Chunk>();
