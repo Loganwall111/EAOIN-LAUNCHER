@@ -61,6 +61,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const survivalStatsRef = useRef<SurvivalStats>(survivalStats);
   const settingsRef = useRef<GameSettings>(settings);
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
+  const flightEnabledRef = useRef(false);
   const [position, setPosition] = useState<PlayerPosition>({ x: 0, y: 0, z: 0 });
   const [actionMessage, setActionMessage] = useState('WASD move • SPACE jump • Left mine with hand punch • Right place • T chat /day /time • O objectives U systems');
   const [saveStatus, setSaveStatus] = useState('Save ready');
@@ -76,6 +77,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [chatMessages, setChatMessages] = useState<Array<{ text: string; system?: boolean }>>([{ text: 'Welcome — T to chat, / for commands, Q to cycle tools, SPACE to jump, clouds moving', system: true }]);
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO });
+  const [flightEnabled, setFlightEnabled] = useState(false);
 
   useEffect(() => { selectedBlockRef.current = selectedBlock; }, [selectedBlock]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
@@ -96,7 +98,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       if (disposed) { engine.dispose(); return; }
       setRenderStats(c => ({ ...c, renderer: runtimeEngine.info }));
       const scene = new Scene(engine);
-      scene.clearColor = new Color4(0.58, 0.72, 0.95, 1);
+      scene.clearColor = new Color4(0.42, 0.62, 0.86, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);
       scene.fogEnabled = settingsRef.current.fogEnabled;
@@ -106,7 +108,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const terrain = new TerrainGenerator(seed, savedEdits);
       const spawn = terrain.getSpawnPoint();
       const layout = getWorldLayout(seed, spawn);
-      setSaveStatus(savedEdits.length > 0 ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.rocket.z))}m • Clouds moving • 16 chunks` : `Spawn clear • Clouds moving stunning far • Mountains & caves volumetric • 20min day`);
+      setSaveStatus(savedEdits.length > 0 ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.rocket.z))}m • Clouds visible • F fly` : `Regular Minecraft-like world • clouds visible • F fly • 20min day`);
 
       const camera = new UniversalCamera('player_camera', new Vector3(spawn.x, spawn.y, spawn.z), scene);
       camera.attachControl(canvas, true);
@@ -156,7 +158,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       if (optionalPostEffectsEnabled) {
         try {
           pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
-          pipeline.fxaaEnabled = true; pipeline.samples = 2; pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.contrast = 1.05; pipeline.imageProcessing.exposure = 1.08; pipeline.imageProcessing.vignetteEnabled = false;
+          pipeline.fxaaEnabled = true; pipeline.samples = 2; pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.contrast = 1.03; pipeline.imageProcessing.exposure = 0.92; pipeline.imageProcessing.vignetteEnabled = false;
           pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.82; pipeline.bloomWeight = 0.28; pipeline.bloomKernel = 64; pipeline.bloomScale = 0.6;
           pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic'; pipeline.depthOfField.focalLength = 10; pipeline.depthOfField.fStop = 2.8;
         } catch (error) {
@@ -165,7 +167,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
         }
       }
-      scene.environmentIntensity = 0.85;
+      scene.environmentIntensity = 0.72;
       dimensionRuntime.applyCurrent();
       const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
 
@@ -183,7 +185,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const showActionMessage = (message: string): void => {
         setActionMessage(message);
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
-        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • Left click punch tree • Right place • T chat /day /time • Q tools • O/U panels'); }, 2400);
+        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • F fly • Left click punch tree • Right place • T chat /day /time • Q tools • O/U panels'); }, 2400);
       };
 
       const publishInventory = (next: InventoryStacks): void => { inventoryRef.current = next; onInventoryChange(next); };
@@ -227,6 +229,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
 
       let velocityY = 0; let grounded = false; let jumpRequested = false; let fallStartY = camera.position.y; let wasFalling = false;
+      const pressedKeys = new Set<string>();
+      const setFlightMode = (enabled: boolean): void => {
+        flightEnabledRef.current = enabled;
+        setFlightEnabled(enabled);
+        velocityY = 0; jumpRequested = false; wasFalling = false; fallStartY = camera.position.y;
+        camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * (enabled ? 2.6 : 1.15));
+        showActionMessage(enabled ? 'Flight enabled — F toggles, SPACE up, Left Shift down' : 'Flight disabled — gravity back on');
+      };
+      const toggleFlightMode = (): void => setFlightMode(!flightEnabledRef.current);
+      const handleFlightButton = (): void => toggleFlightMode();
       const isGroundedCheck = (pos: Vector3): boolean => {
         const footY = Math.floor(pos.y - 0.84 - 0.08); const blockTop = footY + 1;
         const checks: Array<[number, number]> = [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]];
@@ -301,23 +313,37 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         applyRenderScale(engine, settingsRef.current.renderScale);
         if (thirdPerson) { avatar.position.copyFrom(camera.position); avatar.position.y -= 1.05; avatar.rotation.y = camera.rotation.y; }
 
-        grounded = isGroundedCheck(camera.position);
-        if (grounded) {
-          if (velocityY < -0.5 && wasFalling) {
-            const fallDist = fallStartY - camera.position.y;
-            if (fallDist > 5.8) { const dmg = Math.round((fallDist - 5.8) * 5.2); const next = applyDamage(survivalStatsRef.current, dmg); survivalStatsRef.current = next; publishSurvivalStats(next); showActionMessage(`Fall damage -${dmg} HP from ${fallDist.toFixed(1)}m`); }
+        if (flightEnabledRef.current) {
+          grounded = false; velocityY = 0; jumpRequested = false; wasFalling = false; fallStartY = camera.position.y;
+          camera.speed = Math.max(1.1, settingsRef.current.cameraSpeed * 2.6);
+          let vertical = 0;
+          if (pressedKeys.has('Space')) vertical += 1;
+          if (pressedKeys.has('ShiftLeft') || pressedKeys.has('ShiftRight')) vertical -= 1;
+          if (vertical !== 0) {
+            const flyStep = vertical * Math.max(5.5, settingsRef.current.cameraSpeed * 5.8) * deltaSeconds;
+            (camera as any).moveWithCollisions?.(new Vector3(0, flyStep, 0));
+            if (!(camera as any).moveWithCollisions) camera.position.y += flyStep;
           }
-          wasFalling = false; fallStartY = camera.position.y; if (velocityY <= 0.2) velocityY = 0;
-          if (jumpRequested) { velocityY = jumpVel; grounded = false; jumpRequested = false; audio.play('ui', settingsRef.current); showActionMessage(`Jump!`); }
         } else {
-          if (!wasFalling) { wasFalling = true; fallStartY = lastCameraPosition.y; }
-          velocityY += gravityStrength * deltaSeconds; if (velocityY < TERMINAL_VELOCITY) velocityY = TERMINAL_VELOCITY;
+          camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
+          grounded = isGroundedCheck(camera.position);
+          if (grounded) {
+            if (velocityY < -0.5 && wasFalling) {
+              const fallDist = fallStartY - camera.position.y;
+              if (fallDist > 5.8) { const dmg = Math.round((fallDist - 5.8) * 5.2); const next = applyDamage(survivalStatsRef.current, dmg); survivalStatsRef.current = next; publishSurvivalStats(next); showActionMessage(`Fall damage -${dmg} HP from ${fallDist.toFixed(1)}m`); }
+            }
+            wasFalling = false; fallStartY = camera.position.y; if (velocityY <= 0.2) velocityY = 0;
+            if (jumpRequested) { velocityY = jumpVel; grounded = false; jumpRequested = false; audio.play('ui', settingsRef.current); showActionMessage(`Jump!`); }
+          } else {
+            if (!wasFalling) { wasFalling = true; fallStartY = lastCameraPosition.y; }
+            velocityY += gravityStrength * deltaSeconds; if (velocityY < TERMINAL_VELOCITY) velocityY = TERMINAL_VELOCITY;
+          }
+          if (Math.abs(velocityY) > 0.001) {
+            (camera as any).moveWithCollisions?.(new Vector3(0, velocityY * deltaSeconds, 0));
+            if (!(camera as any).moveWithCollisions) { const nextY = camera.position.y + velocityY * deltaSeconds; const footId = terrain.getBlockAt(Math.floor(camera.position.x), Math.floor(nextY - 0.84), Math.floor(camera.position.z)); if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY; else velocityY = 0; }
+          }
+          if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
         }
-        if (Math.abs(velocityY) > 0.001) {
-          (camera as any).moveWithCollisions?.(new Vector3(0, velocityY * deltaSeconds, 0));
-          if (!(camera as any).moveWithCollisions) { const nextY = camera.position.y + velocityY * deltaSeconds; const footId = terrain.getBlockAt(Math.floor(camera.position.x), Math.floor(nextY - 0.84), Math.floor(camera.position.z)); if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY; else velocityY = 0; }
-        }
-        if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
 
         const horiz = Math.hypot(camera.position.x - lastCameraPosition.x, camera.position.z - lastCameraPosition.z);
         const moving = horiz > 0.01;
@@ -347,7 +373,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         lastCameraPosition = camera.position.clone();
       });
 
-      const lockPointerIfNeeded = (): boolean => { canvas.focus(); if (document.pointerLockElement === canvas) return true; void canvas.requestPointerLock?.(); showActionMessage('Mouse locked — WASD walk, SPACE jump, left click punch'); return false; };
+      const lockPointerIfNeeded = (): boolean => { canvas.focus(); if (document.pointerLockElement === canvas) return true; void canvas.requestPointerLock?.(); showActionMessage('Mouse locked — WASD walk, SPACE jump, F fly, left click punch'); return false; };
       const pickTargetBlock = (): { target: BlockCoordinate; blockId: BlockID; normal: Vector3; point: Vector3 } | null => {
         const pick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH), (mesh) => mesh.name.startsWith('voxel_world_'));
         if (!pick?.hit || !pick.pickedPoint) return null;
@@ -394,8 +420,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       const handleMouseUp = (event: MouseEvent): void => { if (event.button !== 0 || !miningSession) return; showActionMessage('Mining canceled'); clearMining(); };
       const handleKeyDown = (event: KeyboardEvent): void => {
-        if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (grounded) jumpRequested = true; return; }
+        pressedKeys.add(event.code);
+        if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (!flightEnabledRef.current && grounded) jumpRequested = true; return; }
         if (event.key === 'F5') { event.preventDefault(); thirdPerson = !thirdPerson; arm.isVisible = !thirdPerson; avatar.isVisible = thirdPerson; camera.position.y += thirdPerson ? 0.45 : -0.45; camera.position.z -= thirdPerson ? 3.8 : -3.8; showActionMessage(thirdPerson ? 'Third-person' : 'First-person'); return; }
+        if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
         if (event.key === 'Escape') { event.preventDefault(); if (commandOpen || chatOpen) { setCommandOpen(false); setChatOpen(false); return; } document.exitPointerLock?.(); setPaused(true); return; }
         if (event.key === '/' && settingsRef.current.commandBlocksEnabled) { event.preventDefault(); document.exitPointerLock?.(); setCommandText('/'); setCommandOpen(true); setChatOpen(false); showActionMessage('Command console / — try /day /time /summon'); return; }
         if (event.key.toLowerCase() === 't' && !commandOpen && !chatOpen) { event.preventDefault(); document.exitPointerLock?.(); setChatText(''); setChatOpen(true); showActionMessage('Chat opened — T like Minecraft, type /day /time /summon'); return; }
@@ -415,10 +443,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (event.key.toLowerCase() === 'b') { event.preventDefault(); const settlement = settlementRuntime.getStats(camera.position); if (!settlement.discovered) { showActionMessage('Find settlement'); return; } if (getStackCount(inventoryRef.current, 8) > 0) { let ni = removeFromInventory(inventoryRef.current, 8, 1); ni = addToInventory(ni, 17, 1); publishInventory(ni); authorityRuntime.recordAction(); audio.play('craft', settingsRef.current); showActionMessage(`${settlementRuntime.completeTrade()} — Coal for Crate`); } else if (getStackCount(inventoryRef.current, 10) > 0) { let ni = removeFromInventory(inventoryRef.current, 10, 1); ni = addToInventory(ni, 16, 2); publishInventory(ni); authorityRuntime.recordAction(); audio.play('craft', settingsRef.current); showActionMessage(`${settlementRuntime.completeTrade()} — Gold for Shards`); } else showActionMessage('Need Coal or Gold'); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'o') { event.preventDefault(); document.exitPointerLock?.(); onToggleSettings(); return; }
       };
+      const handleKeyUp = (event: KeyboardEvent): void => { pressedKeys.delete(event.code); };
       const handleContextMenu = (e: MouseEvent): void => { e.preventDefault(); };
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
-      window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('resize', handleResize);
+      window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       let recoveredFromRenderError = false;
       engine.runRenderLoop(() => {
         try {
@@ -438,13 +467,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       cleanupScene = () => {
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
-        window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('resize', handleResize);
+        window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
         itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     })();
     return () => { disposed = true; cleanupScene?.(); };
-  }, [onGameplayEvent, onInventoryChange, onRuntimeStatusChange, onSelectedBlockChange, onSelectedToolChange, onSurvivalStatsChange, onToggleInventory, onToggleSettings, seed, settings.rendererPreference, worldVersion]);
+  }, [gameMode, onGameplayEvent, onInventoryChange, onRuntimeStatusChange, onSelectedBlockChange, onSelectedToolChange, onSurvivalStatsChange, onToggleInventory, onToggleSettings, seed, settings.rendererPreference, worldVersion]);
 
   const submitCommand = (): void => {
     const result = runCommand(commandText, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage });
@@ -466,25 +495,26 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
     setChatOpen(false); setChatText('');
   };
   const resetSavedWorld = (): void => {
-    document.exitPointerLock?.(); const r = WorldSaveManager.clearSeed(seed); setSaveStatus(r.message); setActionMessage('World reset — clouds moving, mountains bigger, caves bigger, 20min day'); setMiningProgress(0); setMiningLabel(''); setWorldVersion(v => v + 1);
+    document.exitPointerLock?.(); const r = WorldSaveManager.clearSeed(seed); setSaveStatus(r.message); setActionMessage('World reset — regular Minecraft-like terrain, grounded lakes, clouds visible, 20min day'); setMiningProgress(0); setMiningLabel(''); setWorldVersion(v => v + 1);
   };
 
   return (
     <div className="game-screen">
       <canvas ref={canvasRef} className="game-canvas" />
       <div className="game-hud">
-        <div className="hud-top"><div>❤️ {Math.round(survivalStats.health)}</div><div>🍗 {Math.round(survivalStats.food)} ⚡ {Math.round(survivalStats.stamina)}</div><div>EAOIN {GAME_VERSION} • {RELEASE_NAME} • SEED: {seed}</div><div>Tool: {getTool(selectedTool).name} • SPACE=Jump • Q=Tools</div><div>XYZ {position.x}, {position.y}, {position.z}</div><div>{saveStatus}</div></div>
-        {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: moving voxel stunning far • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: mountains/caves/cliffs/flats volumetric</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
+        <div className="hud-top"><div>❤️ {Math.round(survivalStats.health)}</div><div>🍗 {Math.round(survivalStats.food)} ⚡ {Math.round(survivalStats.stamina)}</div><div>EAOIN {GAME_VERSION} • {RELEASE_NAME} • SEED: {seed}</div><div>Tool: {getTool(selectedTool).name} • SPACE=Jump • F=Fly • Q=Tools</div><div>XYZ {position.x}, {position.y}, {position.z}</div><div>{saveStatus}</div></div>
+        {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
         <div className="crosshair">+</div>
         {targetLabel && <div className="target-label">{targetLabel}</div>}
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
-        <div className="control-hint">{actionMessage} • Time {worldTime.timeOfDay.toFixed(1)}{worldTime.frozen ? ' frozen' : ''} • Mode {gameMode} • T chat / • Q tools • O/U panels • Fog 100-1000</div>
+        <div className="control-hint">{actionMessage} • Time {worldTime.timeOfDay.toFixed(1)}{worldTime.frozen ? ' frozen' : ''} • Mode {gameMode} • Flight {flightEnabled ? 'ON' : 'OFF'} • T chat / • Q tools • O/U panels • Fog 100-1000</div>
         {commandOpen && <div className="command-console"><input value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
         {chatOpen && <div className="chat-panel"><div className="chat-log">{chatMessages.slice(-10).map((m, i) => <div key={i} className={`chat-line ${m.system ? 'system' : ''}`}>{m.text}</div>)}</div><div className="chat-input-row"><input className="chat-input" value={chatText} autoFocus placeholder="Chat or /day /time 12 /summon sheep" onChange={e => setChatText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitChat(); if (e.key === 'Escape') setChatOpen(false); }} /><button className="chat-send" onClick={submitChat}>Send</button></div></div>}
+        <button className={`fly-game ${flightEnabled ? 'active' : ''}`} onClick={() => window.dispatchEvent(new Event('eaoin-toggle-flight'))}>FLY [F] {flightEnabled ? 'ON' : 'OFF'}</button>
         <button className="settings-game" onClick={onToggleSettings}>SETTINGS</button>
         <button className="reset-world" onClick={resetSavedWorld}>RESET WORLD</button>
         <button className="exit-game" onClick={onExit}>EXIT</button>
-        {paused && <div className="pause-panel"><h2>Paused — 3.2 Clouds + Mountains + Caves</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 16 chunks, Terrain mountains bigger caves bigger cliffs + flats via volumetric noise square, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
+        {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 16 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
       </div>
     </div>
   );
@@ -493,17 +523,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeOfDay: number, realistic: boolean): void {
   const angle = (timeOfDay / 24) * Math.PI * 2;
   const daylight = Math.max(0.08, Math.sin(angle - Math.PI / 2) * 0.5 + 0.5);
-  const moonlight = 1 - daylight; const boost = realistic ? 1.22 : 1;
-  lighting.sun.intensity = daylight * 1.55 * boost; lighting.sky.intensity = (0.32 + daylight * 0.82) * boost; lighting.spawnLight.intensity = 0.40 + moonlight * 1.1;
-  scene.fogDensity = realistic ? 0.0012 + moonlight * 0.0006 : 0.0014;
-  scene.ambientColor = new Color3(0.12 + daylight * 0.42, 0.14 + daylight * 0.46, 0.20 + daylight * 0.50);
+  const moonlight = 1 - daylight; const boost = realistic ? 1.08 : 1;
+  lighting.sun.intensity = daylight * 1.18 * boost; lighting.sky.intensity = (0.24 + daylight * 0.56) * boost; lighting.spawnLight.intensity = 0.32 + moonlight * 0.95;
+  scene.fogDensity = realistic ? 0.0010 + moonlight * 0.0005 : 0.0011;
+  scene.ambientColor = new Color3(0.10 + daylight * 0.28, 0.12 + daylight * 0.32, 0.18 + daylight * 0.38);
   const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22); const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4)); const rayAlpha = sunset * (realistic ? 1.3 : 0.85);
   lighting.godRays.visibility = rayAlpha; lighting.godRays.rotation.y += 0.00012; const rayMaterial = lighting.godRays.material as any; if (rayMaterial) rayMaterial.alpha = 0.072 * rayAlpha;
-  const skyMat = lighting.skyDome.material as StandardMaterial; if (skyMat) { skyMat.emissiveColor = new Color3(0.18 + daylight * 0.32 + sunset * 0.55, 0.28 + daylight * 0.42 + sunset * 0.22, 0.42 + daylight * 0.52 - sunset * 0.10); }
+  const skyMat = lighting.skyDome.material as StandardMaterial; if (skyMat) { skyMat.emissiveColor = new Color3(0.13 + daylight * 0.22 + sunset * 0.34, 0.22 + daylight * 0.28 + sunset * 0.15, 0.36 + daylight * 0.34 - sunset * 0.08); }
   lighting.sunDisk.visibility = Math.max(0, daylight - 0.12); lighting.moonDisk.visibility = Math.max(0, 1 - daylight - 0.05);
   lighting.stars.forEach((star, index) => { star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index)); });
-  scene.clearColor = new Color4(0.035 + daylight * 0.55 + sunset * 0.36, 0.045 + daylight * 0.68 + sunset * 0.14, 0.09 + daylight * 0.86 - sunset * 0.06, 1);
-  scene.fogColor = new Color3(0.22 + daylight * 0.42 + sunset * 0.42, 0.28 + daylight * 0.52 + sunset * 0.12, 0.48 + daylight * 0.42 - sunset * 0.18);
+  scene.clearColor = new Color4(0.03 + daylight * 0.39 + sunset * 0.26, 0.04 + daylight * 0.50 + sunset * 0.10, 0.08 + daylight * 0.68 - sunset * 0.04, 1);
+  scene.fogColor = new Color3(0.18 + daylight * 0.28 + sunset * 0.30, 0.24 + daylight * 0.36 + sunset * 0.10, 0.42 + daylight * 0.30 - sunset * 0.12);
   const sunOrbit = angle; lighting.sunDisk.position.x = 0 + Math.cos(sunOrbit) * 180; lighting.sunDisk.position.y = 50 + Math.sin(sunOrbit) * 110; lighting.sunDisk.position.z = 0 + Math.sin(sunOrbit) * 40;
 }
 function toBlockCoordinate(point: Vector3): BlockCoordinate { return { x: Math.floor(point.x), y: Math.floor(point.y), z: Math.floor(point.z) }; }
