@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, Scene, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Scene, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
 import { runCommand, WorldTimeState } from '../commands/CommandRuntime';
@@ -240,6 +240,20 @@ export default function GameCanvas({
       (cx, cz) => terrain.generateChunk(cx, cz)
     );
     const lighting = configureSceneLighting(scene, spawn);
+    // Browser-safe cinematic approximation of ray-traced presentation: HDR
+    // bloom, multisample antialiasing and image processing. Real hardware ray
+    // tracing is not exposed consistently by WebGL/WebGPU browsers.
+    const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 32 });
+    glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.38 : 0;
+    const pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
+    pipeline.fxaaEnabled = true;
+    pipeline.samples = 2;
+    pipeline.imageProcessingEnabled = true;
+    pipeline.imageProcessing.contrast = 1.08;
+    pipeline.imageProcessing.exposure = 1.05;
+    pipeline.bloomEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting;
+    pipeline.bloomThreshold = 0.82;
+    pipeline.bloomWeight = 0.18;
     dimensionRuntime.applyCurrent();
     const creatureManager = new CreatureManager(scene, terrain, seed);
     creatureManager.update(camera.position, 1);

@@ -27,6 +27,17 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   scene.fogDensity = 0.0045;
   scene.fogColor = new Color3(0.58, 0.7, 0.92);
 
+  // A large inverted dome gives the overworld a stable Minecraft-like sky
+  // instead of a flat clear-color void while retaining the procedural horizon.
+  const skyDome = MeshBuilder.CreateSphere('overworld_sky_dome', { diameter: 900, segments: 16, sideOrientation: Mesh.BACKSIDE }, scene);
+  skyDome.isPickable = false;
+  const skyMaterial = new StandardMaterial('overworld_sky_material', scene);
+  skyMaterial.backFaceCulling = false;
+  skyMaterial.disableLighting = true;
+  skyMaterial.emissiveColor = new Color3(0.25, 0.52, 0.82);
+  skyMaterial.alpha = 0.48;
+  skyDome.material = skyMaterial;
+
   const sky = new HemisphericLight('global_sky_light', new Vector3(0.2, 1, 0.15), scene);
   sky.intensity = 0.95;
   sky.diffuse = new Color3(0.72, 0.84, 1.0);
