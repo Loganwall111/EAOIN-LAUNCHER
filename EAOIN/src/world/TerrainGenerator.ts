@@ -109,9 +109,14 @@ export class TerrainGenerator {
   getSpawnPoint(): SpawnPoint {
     const x = 0.5;
     const z = 0.5;
+    // Spawn a comfortable eye height above the local surface. We use 1.95 so
+    // the player lands inside the protected spawn patch with their feet on the
+    // grass and their head clear of any neighbouring block — not floating in
+    // empty spectator space high above the world.
+    const groundY = this.getHeightAt(Math.floor(x), Math.floor(z));
     return {
       x,
-      y: this.getHeightAt(Math.floor(x), Math.floor(z)) + 2.8,
+      y: groundY + 1.95,
       z,
     };
   }
