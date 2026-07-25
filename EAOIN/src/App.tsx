@@ -29,6 +29,8 @@ export default function App() {
   const [craftingMessage, setCraftingMessage] = useState('Crafting ready');
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(() => createDefaultRuntimeStatus());
+  const [objectivesVisible, setObjectivesVisible] = useState(true);
+  const [systemsVisible, setSystemsVisible] = useState(false);
 
   const objectives = useMemo(
     () => buildObjectives(inventory, toolInventory, gameplayCounters, runtimeStatus),
@@ -168,6 +170,10 @@ export default function App() {
             settings={settings}
             runtimeStatus={runtimeStatus}
             objectives={objectives}
+            objectivesVisible={objectivesVisible}
+            systemsVisible={systemsVisible}
+            onToggleObjectives={() => setObjectivesVisible((value) => !value)}
+            onToggleSystems={() => setSystemsVisible((value) => !value)}
             craftingMessage={craftingMessage}
             onCraftRecipe={craft}
             onCloseInventory={closeInventory}

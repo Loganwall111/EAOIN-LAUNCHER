@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, Scene, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
 import { runCommand, WorldTimeState } from '../commands/CommandRuntime';
@@ -207,7 +207,7 @@ export default function GameCanvas({
     camera.setTarget(new Vector3(spawn.x + 8, spawn.y - 0.35, spawn.z + 8));
     camera.minZ = 0.05;
     camera.maxZ = 450;
-    camera.speed = settingsRef.current.cameraSpeed;
+    camera.speed = Math.max(0.65, settingsRef.current.cameraSpeed);
     camera.inertia = 0.45;
     camera.angularSensibility = 1800;
     camera.applyGravity = true;
@@ -217,6 +217,20 @@ export default function GameCanvas({
     camera.keysDown = [83, 40]; // S / ArrowDown
     camera.keysLeft = [65, 37]; // A / ArrowLeft
     camera.keysRight = [68, 39]; // D / ArrowRight
+
+    // Minecraft-inspired first-person arm and a complete low-poly avatar.
+    const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
+    const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
+    const arm = MeshBuilder.CreateBox('first_person_blocky_arm', { width: 0.22, height: 0.72, depth: 0.22 }, scene);
+    arm.parent = camera; arm.position = new Vector3(0.42, -0.48, 0.72); arm.rotation.z = -0.12; arm.material = skin; arm.isPickable = false;
+    const avatar = new Mesh('third_person_avatar', scene); avatar.position.copyFrom(camera.position); avatar.isVisible = false;
+    const torso = MeshBuilder.CreateBox('avatar_torso', { width: 0.7, height: 0.95, depth: 0.38 }, scene); torso.parent = avatar; torso.position.y = 0.15; torso.material = shirt;
+    const head = MeshBuilder.CreateBox('avatar_head', { width: 0.55, height: 0.55, depth: 0.55 }, scene); head.parent = avatar; head.position.y = 0.9; head.material = skin;
+    const legA = MeshBuilder.CreateBox('avatar_leg_a', { width: 0.25, height: 0.85, depth: 0.28 }, scene); legA.parent = avatar; legA.position.set(-0.18, -0.72, 0); legA.material = shirt;
+    const legB = legA.clone('avatar_leg_b'); if (legB) { legB.parent = avatar; legB.position.x = 0.18; }
+    const armA = MeshBuilder.CreateBox('avatar_arm_a', { width: 0.22, height: 0.82, depth: 0.25 }, scene); armA.parent = avatar; armA.position.set(-0.48, 0.12, 0); armA.material = skin;
+    const armB = armA.clone('avatar_arm_b'); if (armB) { armB.parent = avatar; armB.position.x = 0.48; }
+    let thirdPerson = false;
 
     const materials = createBlockMaterials(scene, settingsRef.current.texturePack);
     const audio = new GameAudio();
@@ -240,6 +254,20 @@ export default function GameCanvas({
       (cx, cz) => terrain.generateChunk(cx, cz)
     );
     const lighting = configureSceneLighting(scene, spawn);
+    // Browser-safe cinematic approximation of ray-traced presentation: HDR
+    // bloom, multisample antialiasing and image processing. Real hardware ray
+    // tracing is not exposed consistently by WebGL/WebGPU browsers.
+    const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 32 });
+    glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.38 : 0;
+    const pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
+    pipeline.fxaaEnabled = true;
+    pipeline.samples = 2;
+    pipeline.imageProcessingEnabled = true;
+    pipeline.imageProcessing.contrast = 1.08;
+    pipeline.imageProcessing.exposure = 1.05;
+    pipeline.bloomEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting;
+    pipeline.bloomThreshold = 0.82;
+    pipeline.bloomWeight = 0.18;
     dimensionRuntime.applyCurrent();
     const creatureManager = new CreatureManager(scene, terrain, seed);
     creatureManager.update(camera.position, 1);
@@ -425,9 +453,14 @@ export default function GameCanvas({
         onGameplayEvent('dropsCollected', collectedCount);
         audio.play('pickup', settingsRef.current);
       }
-      camera.speed = settingsRef.current.cameraSpeed;
+      camera.speed = Math.max(0.65, settingsRef.current.cameraSpeed);
       scene.fogEnabled = settingsRef.current.fogEnabled;
       applyRenderScale(engine, settingsRef.current.renderScale);
+      if (thirdPerson) {
+        avatar.position.copyFrom(camera.position);
+        avatar.position.y -= 1.05;
+        avatar.rotation.y = camera.rotation.y;
+      }
       const horizontalDelta = Math.hypot(
         camera.position.x - lastCameraPosition.x,
         camera.position.z - lastCameraPosition.z
@@ -631,6 +664,14 @@ export default function GameCanvas({
     };
 
     const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'F5') {
+        event.preventDefault(); thirdPerson = !thirdPerson;
+        arm.isVisible = !thirdPerson; avatar.isVisible = thirdPerson;
+        camera.position.y += thirdPerson ? 0.45 : -0.45;
+        camera.position.z -= thirdPerson ? 3.8 : -3.8;
+        showActionMessage(thirdPerson ? 'Third-person view' : 'First-person view');
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         if (commandOpen) {
@@ -974,12 +1015,23 @@ function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeO
   lighting.spawnLight.intensity = 0.35 + moonlight * 0.9;
   scene.fogDensity = realistic ? 0.0035 + moonlight * 0.003 : 0.0045;
   scene.ambientColor = new Color3(0.12 + daylight * 0.38, 0.14 + daylight * 0.42, 0.2 + daylight * 0.45);
+  const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22);
+  const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4));
+  const rayAlpha = sunset * (realistic ? 1.15 : 0.75);
+  lighting.godRays.visibility = rayAlpha;
+  lighting.godRays.rotation.y += 0.00012;
+  const rayMaterial = lighting.godRays.material as any;
+  if (rayMaterial) rayMaterial.alpha = 0.055 * rayAlpha;
+  lighting.stars.forEach((star, index) => {
+    star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index));
+  });
   scene.clearColor = new Color4(
-    0.035 + daylight * 0.55,
-    0.045 + daylight * 0.68,
-    0.09 + daylight * 0.86,
+    0.035 + daylight * 0.55 + sunset * 0.34,
+    0.045 + daylight * 0.68 + sunset * 0.12,
+    0.09 + daylight * 0.86 - sunset * 0.08,
     1
   );
+  scene.fogColor = new Color3(0.22 + daylight * 0.42 + sunset * 0.42, 0.28 + daylight * 0.52 + sunset * 0.12, 0.48 + daylight * 0.42 - sunset * 0.18);
 }
 
 function toBlockCoordinate(point: Vector3): BlockCoordinate {

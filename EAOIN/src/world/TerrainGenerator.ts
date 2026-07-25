@@ -228,8 +228,13 @@ export class TerrainGenerator {
 
   private placeWaterPool(chunk: Chunk, localX: number, localZ: number, worldX: number, worldZ: number): void {
     if (worldX >= -12 && worldX <= -9 && worldZ >= -3 && worldZ <= 4) {
-      chunk.setBlock(localX, 8, localZ, 5);
-      for (let y = 9; y < 12; y += 1) chunk.setBlock(localX, y, localZ, 0);
+      // Keep the water surface on the shared sea level and never replace the
+      // supporting terrain below it. This prevents the old floating puddles.
+      for (let y = 0; y < WATER_LEVEL; y += 1) {
+        if (chunk.getBlock(localX, y, localZ) === 0) chunk.setBlock(localX, y, localZ, 3);
+      }
+      chunk.setBlock(localX, WATER_LEVEL, localZ, 5);
+      for (let y = WATER_LEVEL + 1; y < CHUNK_HEIGHT; y += 1) chunk.setBlock(localX, y, localZ, 0);
     }
   }
 

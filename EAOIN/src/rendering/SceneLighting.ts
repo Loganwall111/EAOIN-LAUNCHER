@@ -19,6 +19,8 @@ export interface SceneLightingHandles {
   sky: HemisphericLight;
   spawnLight: PointLight;
   spawnMarker: Mesh;
+  stars: Mesh[];
+  godRays: Mesh;
 }
 
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
@@ -26,6 +28,17 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   scene.fogMode = Scene.FOGMODE_EXP2;
   scene.fogDensity = 0.0045;
   scene.fogColor = new Color3(0.58, 0.7, 0.92);
+
+  // A large inverted dome gives the overworld a stable Minecraft-like sky
+  // instead of a flat clear-color void while retaining the procedural horizon.
+  const skyDome = MeshBuilder.CreateSphere('overworld_sky_dome', { diameter: 900, segments: 16, sideOrientation: Mesh.BACKSIDE }, scene);
+  skyDome.isPickable = false;
+  const skyMaterial = new StandardMaterial('overworld_sky_material', scene);
+  skyMaterial.backFaceCulling = false;
+  skyMaterial.disableLighting = true;
+  skyMaterial.emissiveColor = new Color3(0.25, 0.52, 0.82);
+  skyMaterial.alpha = 0.48;
+  skyDome.material = skyMaterial;
 
   const sky = new HemisphericLight('global_sky_light', new Vector3(0.2, 1, 0.15), scene);
   sky.intensity = 0.95;
@@ -45,7 +58,40 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   spawnLight.range = 14;
 
   const spawnMarker = createSpawnMarker(scene, spawn);
-  return { sun, sky, spawnLight, spawnMarker };
+  const stars = createStars(scene, spawn);
+  const godRays = createGodRays(scene, spawn);
+  return { sun, sky, spawnLight, spawnMarker, stars, godRays };
+}
+
+function createGodRays(scene: Scene, spawn: SpawnPoint): Mesh {
+  const rays = MeshBuilder.CreateCylinder('sunset_god_rays', { height: 36, diameterTop: 0.8, diameterBottom: 18, tessellation: 8 }, scene);
+  rays.position = new Vector3(spawn.x + 32, spawn.y + 30, spawn.z + 24);
+  rays.rotation.z = -0.55;
+  rays.isPickable = false;
+  const material = new StandardMaterial('sunset_god_ray_material', scene);
+  material.disableLighting = true;
+  material.emissiveColor = new Color3(1, 0.52, 0.16);
+  material.alpha = 0.055;
+  material.backFaceCulling = false;
+  material.alphaMode = 2;
+  rays.material = material;
+  return rays;
+}
+
+function createStars(scene: Scene, spawn: SpawnPoint): Mesh[] {
+  const material = new StandardMaterial('night_star_material', scene);
+  material.disableLighting = true;
+  material.emissiveColor = new Color3(0.75, 0.88, 1);
+  const stars: Mesh[] = [];
+  for (let i = 0; i < 72; i += 1) {
+    const star = MeshBuilder.CreateSphere(`night_star_${i}`, { diameter: 0.16 + (i % 3) * 0.05, segments: 4 }, scene);
+    const angle = (i / 72) * Math.PI * 2;
+    star.position = new Vector3(spawn.x + Math.cos(angle) * (180 + (i % 5) * 12), spawn.y + 55 + (i % 9) * 8, spawn.z + Math.sin(angle) * (180 + (i % 7) * 10));
+    star.material = material;
+    star.isPickable = false;
+    stars.push(star);
+  }
+  return stars;
 }
 
 function createSpawnMarker(scene: Scene, spawn: SpawnPoint): Mesh {
