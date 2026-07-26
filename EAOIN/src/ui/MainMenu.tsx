@@ -96,6 +96,8 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [splash, setSplash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
+  const [multiplayerOpen, setMultiplayerOpen] = useState(false);
+  const [modsOpen, setModsOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [skinTone, setSkinTone] = useState('#b86f48');
   const [shirtColor, setShirtColor] = useState('#2467c7');
@@ -371,7 +373,9 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
               <button onClick={() => beginWorld(undefined, 'experimental')} className="btn-secondary minecraft-btn">Quick Experimental — Ray Traced Shadows + Clouds</button>
               <div className="quick-row">
                 <button className="menu-settings-link mc-link" onClick={() => setSettingsOpen(v => !v)}>⚙️ Settings (front-page)</button>
-                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace (fixed)</button>
+                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace</button>
+                <button className="menu-settings-link mc-link" onClick={() => setMultiplayerOpen(v => !v)}>🌐 Multiplayer</button>
+                <button className="menu-settings-link mc-link" onClick={() => setModsOpen(v => !v)}>🧩 Mods & Packs</button>
                 {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Family / Character Creator</button>}
               </div>
             </div>
@@ -417,7 +421,26 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                 </div>
               )}
               {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
-              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
+              {multiplayerOpen && (
+                <div className="menu-settings-card pro multiplayer-front">
+                  <strong>🌐 Multiplayer</strong>
+                  <p>Join friends and discover community worlds.</p>
+                  <div className="market-pack"><strong>EAOIN Official Realms</strong><span>Online • 128 players • Survival / Creative</span><button className="btn-primary mini">Join</button></div>
+                  <div className="market-pack"><strong>Community Adventure Hub</strong><span>Online • Cross-play • Quests and worlds</span><button className="btn-secondary mini">View</button></div>
+                  <button onClick={() => setMultiplayerOpen(false)} className="btn-secondary mini">Close</button>
+                </div>
+              )}
+              {modsOpen && (
+                <div className="menu-settings-card pro mods-front">
+                  <strong>🧩 Mods & Packs</strong>
+                  <p>Manage your installed content before entering a world.</p>
+                  <div className="market-pack"><strong>World & Gameplay Packs</strong><span>12 installed • 4 enabled</span><button className="btn-primary mini">Manage</button></div>
+                  <div className="market-pack"><strong>Texture Packs</strong><span>HD voxel materials • shaders • UI themes</span><button className="btn-secondary mini">Browse</button></div>
+                  <div className="market-pack"><strong>Upload Pack</strong><span>Worlds, skins, textures, mods and DLC</span><button className="btn-secondary mini">Upload</button></div>
+                  <button onClick={() => setModsOpen(false)} className="btn-secondary mini">Close</button>
+                </div>
+              )}
+              {!settingsOpen && !marketOpen && !multiplayerOpen && !modsOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
             </div>
           </div>
           <div className="menu-footer pro"><p>3.2 • Clouds visible • 16 chunks • Regular Minecraft-like worlds by default • Floating Islands preset seed • F fly button • 20min day • Inventory logos • Hand punch + cracking • Fog 100-1000 • T chat /day /time • World list centered</p></div>
