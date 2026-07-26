@@ -99,7 +99,9 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [shirtColor, setShirtColor] = useState('#2467c7');
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
   const [mouseParallax, setMouseParallax] = useState({ x: 0, y: 0 });
-  const marketplace = useMemo(() => new MarketplaceRuntime(), []);
+  const categories = ['Worlds', 'Skins', 'Shaders', 'Texture Packs', 'DLC', 'Mod Packs', 'Music', 'Content'];
+  const [catFilter, setCatFilter] = useState('All');
+  const filteredPacks = marketplace.getPacks().filter(p => catFilter === 'All' || p.category === catFilter.toLowerCase());
   const containerRef = useRef<HTMLDivElement>(null);
 
   // World selection state
