@@ -2,7 +2,15 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { BlockID } from '@shared/blocks/BlockRegistry';
 import { craftRecipe, RECIPES, RecipeID } from './crafting/RecipeBook';
 import MainMenu from './ui/MainMenu';
-import GameCanvas from './engine/GameCanvas';
+import TitleScreen from './ui/TitleScreen';
+import CharacterCreator from './ui/CharacterCreator';
+import HudFrame from './ui/HudFrame';
+import MultiplayerScreen from './ui/MultiplayerScreen';
+import ModsScreen from './ui/ModsScreen';
+import OptionsScreen from './ui/OptionsScreen';
+import { ModPackRegistry } from './modding/ModPackRegistry';
+import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
+import GameCanvas, { HudTelemetry } from './engine/GameCanvas';
 import { GameMode } from './modes/GameMode';
 import HUD from './ui/HUD';
 import { buildObjectives, createGameplayCounters, GameplayCounterKey, GameplayCounters } from './objectives/ObjectiveTracker';
@@ -31,6 +39,35 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(() => createDefaultRuntimeStatus());
   const [objectivesVisible, setObjectivesVisible] = useState(true);
   const [systemsVisible, setSystemsVisible] = useState(false);
+
+  /* ---- concept-art shell: title screen -> (creator) -> world ---- */
+  type Screen = 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options';
+  const [screen, setScreen] = useState<Screen>('title');
+  const [appearance, setAppearance] = useState<CharacterAppearance>(() => {
+    try {
+      const raw = localStorage.getItem('eaoin_appearance');
+      if (raw) return { ...DEFAULT_APPEARANCE, ...(JSON.parse(raw) as Partial<CharacterAppearance>) };
+    } catch { /* first run */ }
+    return DEFAULT_APPEARANCE;
+  });
+  const [telemetry, setTelemetry] = useState<HudTelemetry>({
+    position: { x: 0, y: 0, z: 0 }, yaw: 0, timeOfDay: 12, day: 1, biome: 'Meadows', flightEnabled: false,
+  });
+
+  /** Ability buttons re-use the engine's real keyboard handlers. */
+  const fireAbility = useCallback((key: string) => {
+    window.dispatchEvent(new CustomEvent('eaoin-ability', { detail: { key } }));
+  }, []);
+  const modRegistry = useMemo(() => new ModPackRegistry(), []);
+  const [modRevision, setModRevision] = useState(0);
+  const toggleMod = useCallback((id: Parameters<ModPackRegistry['toggle']>[0]) => {
+    modRegistry.toggle(id);
+    setModRevision((v) => v + 1);
+  }, [modRegistry]);
+
+  useEffect(() => {
+    try { localStorage.setItem('eaoin_appearance', JSON.stringify(appearance)); } catch { /* storage disabled */ }
+  }, [appearance]);
 
   const objectives = useMemo(
     () => buildObjectives(inventory, toolInventory, gameplayCounters, runtimeStatus),
@@ -62,6 +99,7 @@ export default function App() {
     setInventoryOpen(false);
     setSettingsOpen(false);
     setGameStarted(false);
+    setScreen('title');
   }, []);
 
   const markInventoryOpened = useCallback(() => {
@@ -135,10 +173,87 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
+  const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
+
+  if (!gameStarted) {
+    if (screen === 'title') {
+      return (
+        <div className={shellClass}>
+          <TitleScreen
+            appearance={appearance}
+            onSingleplayer={() => setScreen('worlds')}
+            onMultiplayer={() => setScreen('multiplayer')}
+            onMods={() => setScreen('mods')}
+            onOptions={() => setScreen('options')}
+            onQuit={() => window.close()}
+            onEditCharacter={() => setScreen('creator')}
+            onOpenNews={() => setScreen('worlds')}
+            onOpenGuide={() => setScreen('worlds')}
+            onOpenStats={() => setScreen('options')}
+            onOpenFriends={() => setScreen('multiplayer')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'multiplayer') {
+      return (
+        <div className={shellClass}>
+          <MultiplayerScreen
+            onBack={() => setScreen('title')}
+            onJoin={() => setScreen('worlds')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'mods') {
+      return (
+        <div className={shellClass}>
+          <ModsScreen
+            registry={modRegistry}
+            revision={modRevision}
+            onToggle={toggleMod}
+            onBack={() => setScreen('title')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'options') {
+      return (
+        <div className={shellClass}>
+          <OptionsScreen
+            settings={settings}
+            onChange={setSettings}
+            onBack={() => setScreen('title')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'creator') {
+      return (
+        <div className={shellClass}>
+          <CharacterCreator
+            appearance={appearance}
+            onChange={setAppearance}
+            onConfirm={() => setScreen('title')}
+            onCancel={() => setScreen('title')}
+          />
+        </div>
+      );
+    }
+  }
+
   return (
-    <div className={`eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`}>
+    <div className={shellClass}>
       {!gameStarted ? (
-        <MainMenu onStart={startGame} currentSeed={worldSeed} />
+        <>
+          <button
+            className="back-to-title"
+            onClick={() => setScreen('title')}
+          >
+            ← Title Screen
+          </button>
+          <MainMenu onStart={startGame} currentSeed={worldSeed} />
+        </>
       ) : (
         <>
           <GameCanvas
@@ -160,6 +275,29 @@ export default function App() {
             onToggleSettings={toggleSettings}
             onGameplayEvent={recordGameplayEvent}
             onRuntimeStatusChange={setRuntimeStatus}
+            onTelemetry={setTelemetry}
+          />
+          <HudFrame
+            appearance={appearance}
+            survivalStats={survivalStats}
+            inventory={inventory}
+            selectedBlock={selectedBlock}
+            selectedTool={selectedTool}
+            onSelectBlock={setSelectedBlock}
+            position={telemetry.position}
+            yaw={telemetry.yaw}
+            timeOfDay={telemetry.timeOfDay}
+            day={telemetry.day}
+            biome={telemetry.biome}
+            runtimeStatus={runtimeStatus}
+            objectives={objectives}
+            flightEnabled={telemetry.flightEnabled}
+            onAbility={fireAbility}
+            onOpenInventory={toggleInventory}
+            onOpenGuide={toggleInventory}
+            onOpenFriends={toggleSettings}
+            onOpenSettings={toggleSettings}
+            onOpenQuests={() => setObjectivesVisible((v) => !v)}
           />
           <HUD
             gameMode={gameMode}

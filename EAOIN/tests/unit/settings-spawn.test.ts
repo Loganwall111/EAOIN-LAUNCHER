@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createDefaultSettings } from '../../src/settings/GameSettings';
 import { loadSettings, saveSettings, loadSettingsDetailed, resetPersistedSettings } from '../../src/settings/SettingsSave';
 import { TerrainGenerator } from '../../src/world/TerrainGenerator';
+import AdvancedTerrainGenerator from '../../src/world/AdvancedTerrainGenerator';
 
 const STORAGE_KEY = 'eaoin:settings:v1';
 
@@ -128,17 +129,55 @@ describe('SettingsSave migration', () => {
 });
 
 describe('TerrainGenerator.getSpawnPoint', () => {
-  it('spawns the player safely on top of the protected spawn patch', () => {
-    const generator = new TerrainGenerator('eaoin_test_seed');
-    // Pre-generate the spawn chunk so getHeightAt has data to read.
+  // The old assertion hardcoded ground Y=8, which was the sea level constant
+  // rather than the spawn platform height. The protected spawn patch actually
+  // builds its grass cap at SPAWN_GROUND_Y (12). Assert the invariants that
+  // matter -- solid footing, clear headroom, above water, spawn sits on top --
+  // instead of a magic number that silently drifts with worldgen tuning.
+  const WATER_LEVEL = 8;
+  const SEEDS = ['eaoin_test_seed', 'eaoin_seed_2026', 'classic_legacy', 'hello world'];
+
+  it.each(SEEDS)('places the player on solid, clear ground above water (%s)', (seed) => {
+    const generator = new TerrainGenerator(seed);
     generator.generateChunk(0, 0);
-    const spawn = generator.getSpawnPoint();
+
     const ground = generator.getHeightAt(0, 0);
-    expect(spawn.y).toBeCloseTo(ground + 1.95, 5);
-    // The protected spawn patch guarantees a solid grass block at the
-    // expected surface height (Y=8) for the default seed.
-    expect(ground).toBe(8);
+    const spawn = generator.getSpawnPoint();
+
     expect(spawn.x).toBe(0.5);
     expect(spawn.z).toBe(0.5);
+    expect(spawn.y).toBeCloseTo(ground + 1.95, 5);
+
+    // Solid block underfoot, breathable space above, and never underwater.
+    expect(generator.getBlockAt(0, ground, 0)).not.toBe(0);
+    expect(generator.getBlockAt(0, ground + 1, 0)).toBe(0);
+    expect(generator.getBlockAt(0, ground + 2, 0)).toBe(0);
+    expect(ground).toBeGreaterThan(WATER_LEVEL);
+  });
+
+  it('reports the same spawn height as the advanced generator', () => {
+    // Regression: the two generators must not disagree about spawn elevation,
+    // otherwise the player falls or suffocates when the default world switches
+    // between them.
+    for (const seed of SEEDS) {
+      const legacy = new TerrainGenerator(seed);
+      legacy.generateChunk(0, 0);
+      const advanced = new AdvancedTerrainGenerator({ seed });
+      advanced.generateChunk(0, 0);
+
+      expect(advanced.getHeightAt(0, 0)).toBe(legacy.getHeightAt(0, 0));
+      expect(advanced.getSpawnPoint().y).toBeCloseTo(legacy.getSpawnPoint().y, 5);
+    }
+  });
+
+  it('matches the real top solid block in the spawn column', () => {
+    const generator = new TerrainGenerator('eaoin_test_seed');
+    generator.generateChunk(0, 0);
+
+    let topSolid = -1;
+    for (let y = 127; y >= 0; y--) {
+      if (generator.getBlockAt(0, y, 0) !== 0) { topSolid = y; break; }
+    }
+    expect(generator.getHeightAt(0, 0)).toBe(topSolid);
   });
 });

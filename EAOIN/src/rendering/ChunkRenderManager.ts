@@ -21,6 +21,17 @@ export interface ChunkRenderStats {
 export interface StreamUpdateResult {
   loaded: number;
   unloaded: number;
+  /** Chunks still queued because the per-call budget was reached. */
+  pending: number;
+}
+
+export interface StreamUpdateOptions {
+  /**
+   * Maximum number of chunks to generate + mesh in this call. Streaming the
+   * whole render radius in one synchronous burst froze the canvas on a black
+   * screen for minutes, so callers spread the work over several frames.
+   */
+  budget?: number;
 }
 
 interface MutableMeshData {
@@ -73,14 +84,32 @@ export class ChunkRenderManager {
     centerChunkX: number,
     centerChunkZ: number,
     radius: number,
-    generateChunk: (cx: number, cz: number) => Chunk
+    generateChunk: (cx: number, cz: number) => Chunk,
+    options: StreamUpdateOptions = {}
   ): StreamUpdateResult {
+    const budget = options.budget ?? Number.POSITIVE_INFINITY;
+
+    // Build the needed set, nearest-first so the player always gets ground
+    // under their feet before the distant ring is filled in.
     const needed = new Set<string>();
+    const missing: Array<{ cx: number; cz: number; distance: number }> = [];
     for (let cx = centerChunkX - radius; cx <= centerChunkX + radius; cx += 1) {
       for (let cz = centerChunkZ - radius; cz <= centerChunkZ + radius; cz += 1) {
-        needed.add(this.key(cx, cz));
+        const key = this.key(cx, cz);
+        needed.add(key);
+        if (!this.chunks.has(key)) {
+          const dx = cx - centerChunkX;
+          const dz = cz - centerChunkZ;
+          missing.push({ cx, cz, distance: dx * dx + dz * dz });
+        }
       }
     }
+    missing.sort((a, b) => a.distance - b.distance);
+
+    // Rebuilds are collected into a dirty set and flushed once. Previously each
+    // loaded chunk immediately re-meshed its four neighbours, so a full radius
+    // load re-meshed most chunks five times over.
+    const dirty = new Set<string>();
 
     let unloaded = 0;
     for (const key of Array.from(this.chunks.keys())) {
@@ -88,23 +117,36 @@ export class ChunkRenderManager {
         const [cx, cz] = this.parseKey(key);
         this.disposeChunk(cx, cz);
         unloaded += 1;
-        this.rebuildChunkNeighbors(cx, cz);
+        this.markNeighborsDirty(dirty, cx, cz);
       }
     }
 
     let loaded = 0;
-    for (const key of needed) {
-      if (!this.chunks.has(key)) {
-        const [cx, cz] = this.parseKey(key);
-        const chunk = generateChunk(cx, cz);
-        this.chunks.set(key, chunk);
-        this.rebuildChunk(cx, cz);
-        this.rebuildChunkNeighbors(cx, cz);
-        loaded += 1;
-      }
+    for (const entry of missing) {
+      if (loaded >= budget) break;
+      const chunk = generateChunk(entry.cx, entry.cz);
+      this.chunks.set(this.key(entry.cx, entry.cz), chunk);
+      dirty.add(this.key(entry.cx, entry.cz));
+      this.markNeighborsDirty(dirty, entry.cx, entry.cz);
+      loaded += 1;
     }
 
-    return { loaded, unloaded };
+    for (const key of dirty) {
+      const [cx, cz] = this.parseKey(key);
+      this.rebuildChunk(cx, cz);
+    }
+
+    return { loaded, unloaded, pending: Math.max(0, missing.length - loaded) };
+  }
+
+  /** True when the render radius around this center is fully meshed. */
+  hasPendingChunks(centerChunkX: number, centerChunkZ: number, radius: number): boolean {
+    for (let cx = centerChunkX - radius; cx <= centerChunkX + radius; cx += 1) {
+      for (let cz = centerChunkZ - radius; cz <= centerChunkZ + radius; cz += 1) {
+        if (!this.chunks.has(this.key(cx, cz))) return true;
+      }
+    }
+    return false;
   }
 
   rebuildForWorldBlock(worldX: number, worldZ: number): void {
@@ -136,10 +178,11 @@ export class ChunkRenderManager {
     this.triangles.clear();
   }
 
-  private rebuildChunkNeighbors(cx: number, cz: number): void {
+  private markNeighborsDirty(dirty: Set<string>, cx: number, cz: number): void {
     for (const [dx, dz] of NEIGHBOR_CHUNKS) {
       if (dx === 0 && dz === 0) continue;
-      this.rebuildChunk(cx + dx, cz + dz);
+      const key = this.key(cx + dx, cz + dz);
+      if (this.chunks.has(key)) dirty.add(key);
     }
   }
 

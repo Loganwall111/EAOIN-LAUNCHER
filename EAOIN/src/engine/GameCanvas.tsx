@@ -35,8 +35,18 @@ import { RealityRiftSystem } from '../world/RealityRifts';
 import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
 import { CinematicLighting, DEFAULT_CINEMATIC } from '../rendering/CinematicLighting';
 import { getWorldLayout } from '../world/WorldDistribution';
-import { RELEASE_NAME, GAME_VERSION } from '../version';
 import { WorldSaveManager } from '../world/WorldSave';
+
+/** Live world readouts pushed to the HUD each sampling tick. */
+export interface HudTelemetry {
+  position: { x: number; y: number; z: number };
+  /** Camera yaw in radians. */
+  yaw: number;
+  timeOfDay: number;
+  day: number;
+  biome: string;
+  flightEnabled: boolean;
+}
 
 interface GameCanvasProps {
   seed: string; gameMode: GameMode; onExit: () => void;
@@ -48,8 +58,8 @@ interface GameCanvasProps {
   onToggleInventory: () => void; onToggleSettings: () => void;
   onGameplayEvent: (e: GameplayCounterKey, amount?: number) => void;
   onRuntimeStatusChange: (s: RuntimeStatus) => void;
+  onTelemetry?: (t: HudTelemetry) => void;
 }
-interface PlayerPosition { x: number; y: number; z: number; }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
 interface RuntimeRenderStats extends ChunkRenderStats { fps: number; streamCenter: string; creatures: CreatureStats; drops: number; renderer: RendererBackendInfo; }
@@ -58,9 +68,13 @@ const BLOCK_REACH = 7;
 const GRAVITY_BASE = -20;
 const JUMP_VELOCITY_BASE = 7.5;
 const TERMINAL_VELOCITY = -28;
+/** Chunks meshed synchronously before the first frame is presented. */
+const INITIAL_CHUNK_RADIUS = 2;
+/** Chunks generated + meshed per frame while streaming the render radius in. */
+const CHUNKS_PER_FRAME = 2;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
 
-export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -70,9 +84,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const settingsRef = useRef<GameSettings>(settings);
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const flightEnabledRef = useRef(false);
-  const [position, setPosition] = useState<PlayerPosition>({ x: 0, y: 0, z: 0 });
+  const telemetryRef = useRef(onTelemetry);
+  useEffect(() => { telemetryRef.current = onTelemetry; }, [onTelemetry]);
   const [actionMessage, setActionMessage] = useState('WASD move • SPACE jump • Left mine with hand punch • Right place • T chat /day /time • O objectives U systems');
-  const [saveStatus, setSaveStatus] = useState('Save ready');
   const [worldVersion, setWorldVersion] = useState(0);
   const [miningProgress, setMiningProgress] = useState(0);
   const [miningLabel, setMiningLabel] = useState('');
@@ -126,7 +140,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       void floatingIslands; // reserved for future floating-island content injection
       const spawn = terrain.getSpawnPoint();
       const layout = getWorldLayout(seed, spawn);
-      setSaveStatus(savedEdits.length > 0
+      setActionMessage(savedEdits.length > 0
         ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.settlement.z))}m • 1.0 advanced world`
         : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
 
@@ -185,7 +199,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const settlementRuntime = new SettlementRuntime(scene, terrain, seed);
       const authorityRuntime = new LocalAuthorityRuntime(seed);
       let streamCenter = toChunkCoordinate(spawn.x, spawn.z);
-      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, renderRadius, (cx, cz) => terrain.generateChunk(cx, cz));
+      // Load only the chunks directly around spawn synchronously so the first
+      // frame has ground in it. The rest of the render radius is streamed in a
+      // few chunks per frame below, which keeps the canvas from sitting on a
+      // black screen while thousands of chunks are meshed.
+      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => terrain.generateChunk(cx, cz));
       const lighting = configureSceneLighting(scene, spawn);
       const cloudRuntime = new CloudRuntime(scene, spawn.y, seed);
 
@@ -275,7 +293,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         });
       };
       const rebuildEditedBlock = (target: BlockCoordinate): void => { renderer.rebuildForWorldBlock(target.x, target.z); publishRenderStats(); };
-      const saveWorldEdits = (): void => { const r = saveManager.save(terrain.getEdits()); setSaveStatus(r.message); };
+      const saveWorldEdits = (): void => { const r = saveManager.save(terrain.getEdits()); showActionMessage(r.message); };
       publishRenderStats(); publishRuntimeStatus();
 
       const finishMining = (session: MiningSession): void => {
@@ -313,6 +331,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
 
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
+      let worldDay = 1, lastTimeOfDay = worldTimeRef.current.timeOfDay;
       let timeState: WorldTimeState = worldTimeRef.current;
       let lastCameraPosition = camera.position.clone();
 
@@ -350,6 +369,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const deltaSeconds = Math.min(engine.getDeltaTime() / 1000, 0.05);
         if (!timeState.frozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * 0.02) % 24 }; worldTimeRef.current = timeState; }
         else if (worldTimeRef.current !== timeState) timeState = worldTimeRef.current;
+        // Wrapping past midnight advances the day counter shown in the HUD.
+        if (timeState.timeOfDay < lastTimeOfDay) worldDay += 1;
+        lastTimeOfDay = timeState.timeOfDay;
         const dimGravityY = dimensionRuntime.getState().id === 'overworld' ? -0.52 : dimensionRuntime.getState().id === 'crystal_realm' ? -0.30 : dimensionRuntime.getState().id === 'moon' ? -0.14 : -0.62;
         const gravityStrength = GRAVITY_BASE * (Math.abs(dimGravityY) / 0.52);
         const jumpVel = JUMP_VELOCITY_BASE * (dimGravityY < -0.3 ? 1 : 0.9 + Math.abs(dimGravityY) / 0.52 * 0.2);
@@ -442,15 +464,28 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const moving = horiz > 0.01;
         let nextSurvival = updateSurvivalLoop(survivalStatsRef.current, deltaSeconds, moving);
         survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
-        streamFrame += 1;
-        if (streamFrame % 12 === 0) {
-          const nextCenter = toChunkCoordinate(camera.position.x, camera.position.z);
-          if (nextCenter.cx !== streamCenter.cx || nextCenter.cz !== streamCenter.cz) {
-            streamCenter = nextCenter;
-            const result = renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, renderRadius, (cx, cz) => terrain.generateChunk(cx, cz));
-            showActionMessage(`Streaming +${result.loaded}/-${result.unloaded} • Clouds moving • Fog ${settingsRef.current.fogEnabled ? '100-1000' : 'off'}`);
+        // Incremental world streaming — a small budget every frame so the world
+        // keeps filling in without ever blocking the render loop.
+        const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);
+        const centerChanged = movedChunk.cx !== streamCenter.cx || movedChunk.cz !== streamCenter.cz;
+        if (centerChanged) streamCenter = movedChunk;
+        if (centerChanged || renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
+          const result = renderer.updateVisibleChunks(
+            streamCenter.cx, streamCenter.cz, renderRadius,
+            (cx, cz) => terrain.generateChunk(cx, cz),
+            { budget: CHUNKS_PER_FRAME }
+          );
+          if (result.loaded > 0 || result.unloaded > 0) {
             try { const sg = lighting.shadowGenerator; for (const m of scene.meshes) if (m.name.startsWith('voxel_world_')) { sg.addShadowCaster(m as Mesh, true); (m as Mesh).receiveShadows = true; } } catch {}
           }
+          if (result.pending > 0 && streamFrame % 30 === 0) {
+            showActionMessage(`Loading world — ${result.pending} chunks remaining`);
+          } else if (result.pending === 0 && result.loaded > 0) {
+            showActionMessage(`World loaded • render distance ${renderRadius} chunks`);
+          }
+        }
+        streamFrame += 1;
+        if (streamFrame % 12 === 0) {
           logicRuntime.scanPlacedNetwork(camera.position); publishRuntimeStatus();
           const targetPick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH));
           const creatureId = targetPick?.pickedMesh?.metadata?.creatureId as string | undefined;
@@ -467,7 +502,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           const synced: WorldTimeState = { ...timeState, timeOfDay: dynamicSky.config.timeOfDay };
           worldTimeRef.current = synced;
           setWorldTime(synced);
-          setPosition({ x: Number(camera.position.x.toFixed(1)), y: Number(camera.position.y.toFixed(1)), z: Number(camera.position.z.toFixed(1)) });
+          // Feed the concept-art HUD (compass, minimap, clock, coordinates).
+          if (telemetryRef.current) {
+            let biomeName = 'Meadows';
+            try {
+              const raw = (terrain as unknown as { getBiomeAt?: (x: number, z: number) => unknown })
+                .getBiomeAt?.(camera.position.x, camera.position.z);
+              if (typeof raw === 'string') biomeName = raw;
+              else if (raw && typeof raw === 'object' && 'name' in raw) biomeName = String((raw as { name: unknown }).name);
+            } catch { /* biome lookup is cosmetic — never break the frame */ }
+            telemetryRef.current({
+              position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+              yaw: camera.rotation.y,
+              timeOfDay: synced.timeOfDay,
+              day: worldDay,
+              biome: biomeName,
+              flightEnabled: flightEnabledRef.current,
+            });
+          }
         }
         lastCameraPosition = camera.position.clone();
       });
@@ -573,6 +625,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleContextMenu = (e: MouseEvent): void => { e.preventDefault(); };
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
+      const handleAbilityEvent = (event: Event): void => {
+        const key = (event as CustomEvent<{ key: string }>).detail?.key;
+        if (!key) return;
+        handleKeyDown(new KeyboardEvent('keydown', { key, bubbles: false }));
+      };
+      window.addEventListener('eaoin-ability', handleAbilityEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       let recoveredFromRenderError = false;
       engine.runRenderLoop(() => {
@@ -593,6 +651,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       cleanupScene = () => {
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
+        window.removeEventListener('eaoin-ability', handleAbilityEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
         audio.stopMusic(); itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
@@ -621,25 +680,23 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
     setChatOpen(false); setChatText('');
   };
   const resetSavedWorld = (): void => {
-    document.exitPointerLock?.(); const r = WorldSaveManager.clearSeed(seed); setSaveStatus(r.message); setActionMessage('World reset — regular Minecraft-like terrain, grounded lakes, clouds visible, 20min day'); setMiningProgress(0); setMiningLabel(''); setWorldVersion(v => v + 1);
+    document.exitPointerLock?.(); const r = WorldSaveManager.clearSeed(seed); void r; setActionMessage('World reset — regular Minecraft-like terrain, grounded lakes, clouds visible, 20min day'); setMiningProgress(0); setMiningLabel(''); setWorldVersion(v => v + 1);
   };
 
   return (
     <div className="game-screen">
       <canvas ref={canvasRef} className="game-canvas" />
       <div className="game-hud">
-        <div className="hud-top"><div>❤️ {Math.round(survivalStats.health)}</div><div>🍗 {Math.round(survivalStats.food)} ⚡ {Math.round(survivalStats.stamina)}</div><div>EAOIN {GAME_VERSION} • {RELEASE_NAME} • SEED: {seed}</div><div>Tool: {getTool(selectedTool).name} • SPACE=Jump • F=Fly • Q=Tools</div><div>XYZ {position.x}, {position.y}, {position.z}</div><div>{saveStatus}</div></div>
         {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
-        <div className="crosshair">+</div>
         {targetLabel && <div className="target-label">{targetLabel}</div>}
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
-        <div className="control-hint">{actionMessage} • Time {worldTime.timeOfDay.toFixed(1)}{worldTime.frozen ? ' frozen' : ''} • Mode {gameMode} • Flight {flightEnabled ? 'ON' : 'OFF'} • T chat / • Q tools • O/U panels • Fog 100-1000</div>
         {commandOpen && <div className="command-console"><input value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
         {chatOpen && <div className="chat-panel"><div className="chat-log">{chatMessages.slice(-10).map((m, i) => <div key={i} className={`chat-line ${m.system ? 'system' : ''}`}>{m.text}</div>)}</div><div className="chat-input-row"><input className="chat-input" value={chatText} autoFocus placeholder="Chat or /day /time 12 /summon sheep" onChange={e => setChatText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitChat(); if (e.key === 'Escape') setChatOpen(false); }} /><button className="chat-send" onClick={submitChat}>Send</button></div></div>}
-        <button className={`fly-game ${flightEnabled ? 'active' : ''}`} onClick={() => window.dispatchEvent(new Event('eaoin-toggle-flight'))}>FLY [F] {flightEnabled ? 'ON' : 'OFF'}</button>
-        <button className="settings-game" onClick={onToggleSettings}>SETTINGS</button>
-        <button className="reset-world" onClick={resetSavedWorld}>RESET WORLD</button>
-        <button className="exit-game" onClick={onExit}>EXIT</button>
+        <div className="world-action-rail">
+          <button className={`world-action fly ${flightEnabled ? 'active' : ''}`} onClick={() => window.dispatchEvent(new Event('eaoin-toggle-flight'))}>FLY [F] {flightEnabled ? 'ON' : 'OFF'}</button>
+          <button className="world-action" onClick={resetSavedWorld}>RESET</button>
+          <button className="world-action danger" onClick={onExit}>EXIT</button>
+        </div>
         {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 16 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
       </div>
     </div>
