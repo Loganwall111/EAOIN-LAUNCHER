@@ -21,6 +21,8 @@ import { createStarterSurvivalStats, SurvivalStats } from './player/SurvivalStat
 import { createStarterToolInventory, isToolUnlocked, ToolID, ToolInventory } from './player/ToolState';
 import { GameSettings } from './settings/GameSettings';
 import { loadSettings, saveSettings } from './settings/SettingsSave';
+import CinematicBoot from './ui/CinematicBoot';
+import SignInScreen, { SignedInUser } from './ui/SignInScreen';
 
 export default function App() {
   const [gameStarted, setGameStarted] = useState(false);
@@ -40,9 +42,11 @@ export default function App() {
   const [objectivesVisible, setObjectivesVisible] = useState(true);
   const [systemsVisible, setSystemsVisible] = useState(false);
 
-  /* ---- concept-art shell: title screen -> (creator) -> world ---- */
-  type Screen = 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options';
-  const [screen, setScreen] = useState<Screen>('title');
+  /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options';
+  const [appPhase, setAppPhase] = useState<AppPhase>('signin');
+  const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
+
   const [appearance, setAppearance] = useState<CharacterAppearance>(() => {
     try {
       const raw = localStorage.getItem('eaoin_appearance');
@@ -99,7 +103,7 @@ export default function App() {
     setInventoryOpen(false);
     setSettingsOpen(false);
     setGameStarted(false);
-    setScreen('title');
+    setAppPhase('title');
   }, []);
 
   const markInventoryOpened = useCallback(() => {
@@ -173,156 +177,195 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
+  // Handlers for sign-in flow
+  const handleSignedIn = useCallback((user: SignedInUser) => {
+    setSignedInUser(user);
+    // Update the character name from the signed-in user
+    setAppearance((prev) => ({ ...prev, name: user.name }));
+    setAppPhase('boot');
+  }, []);
+
+  const handleSkipSignIn = useCallback(() => {
+    setSignedInUser(null);
+    setAppPhase('boot');
+  }, []);
+
+  const handleBootComplete = useCallback(() => {
+    setAppPhase('title');
+  }, []);
+
   const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
 
+  // ===== SIGN-IN PHASE =====
+  if (appPhase === 'signin' && !gameStarted) {
+    return (
+      <div className={shellClass}>
+        <SignInScreen
+          onSignedIn={handleSignedIn}
+          onSkip={handleSkipSignIn}
+        />
+      </div>
+    );
+  }
+
+  // ===== CINEMATIC BOOT PHASE =====
+  if (appPhase === 'boot' && !gameStarted) {
+    return (
+      <div className={shellClass}>
+        <CinematicBoot onComplete={handleBootComplete} />
+      </div>
+    );
+  }
+
+  // ===== TITLE SCREEN PHASE =====
   if (!gameStarted) {
-    if (screen === 'title') {
+    if (appPhase === 'title') {
       return (
         <div className={shellClass}>
           <TitleScreen
             appearance={appearance}
-            onSingleplayer={() => setScreen('worlds')}
-            onMultiplayer={() => setScreen('multiplayer')}
-            onMods={() => setScreen('mods')}
-            onOptions={() => setScreen('options')}
+            signedInUser={signedInUser}
+            onSignIn={() => setAppPhase('signin')}
+            onSingleplayer={() => setAppPhase('worlds')}
+            onMultiplayer={() => setAppPhase('multiplayer')}
+            onMods={() => setAppPhase('mods')}
+            onOptions={() => setAppPhase('options')}
             onQuit={() => window.close()}
-            onEditCharacter={() => setScreen('creator')}
-            onOpenNews={() => setScreen('worlds')}
-            onOpenGuide={() => setScreen('worlds')}
-            onOpenStats={() => setScreen('options')}
-            onOpenFriends={() => setScreen('multiplayer')}
+            onEditCharacter={() => setAppPhase('creator')}
+            onOpenNews={() => setAppPhase('worlds')}
+            onOpenGuide={() => setAppPhase('worlds')}
+            onOpenStats={() => setAppPhase('options')}
+            onOpenFriends={() => setAppPhase('multiplayer')}
           />
         </div>
       );
     }
-    if (screen === 'multiplayer') {
+    if (appPhase === 'worlds') {
+      return (
+        <div className={shellClass}>
+          <MainMenu
+            onStart={startGame}
+            currentSeed={worldSeed}
+            onBack={() => setAppPhase('title')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'multiplayer') {
       return (
         <div className={shellClass}>
           <MultiplayerScreen
-            onBack={() => setScreen('title')}
-            onJoin={() => setScreen('worlds')}
+            onBack={() => setAppPhase('title')}
+            onJoin={() => setAppPhase('worlds')}
           />
         </div>
       );
     }
-    if (screen === 'mods') {
+    if (appPhase === 'mods') {
       return (
         <div className={shellClass}>
           <ModsScreen
             registry={modRegistry}
             revision={modRevision}
             onToggle={toggleMod}
-            onBack={() => setScreen('title')}
+            onBack={() => setAppPhase('title')}
           />
         </div>
       );
     }
-    if (screen === 'options') {
+    if (appPhase === 'options') {
       return (
         <div className={shellClass}>
           <OptionsScreen
             settings={settings}
             onChange={setSettings}
-            onBack={() => setScreen('title')}
+            onBack={() => setAppPhase('title')}
           />
         </div>
       );
     }
-    if (screen === 'creator') {
+    if (appPhase === 'creator') {
       return (
         <div className={shellClass}>
           <CharacterCreator
             appearance={appearance}
             onChange={setAppearance}
-            onConfirm={() => setScreen('title')}
-            onCancel={() => setScreen('title')}
+            onConfirm={() => setAppPhase('title')}
+            onCancel={() => setAppPhase('title')}
           />
         </div>
       );
     }
   }
 
+  // ===== IN-GAME =====
   return (
     <div className={shellClass}>
-      {!gameStarted ? (
-        <>
-          <button
-            className="back-to-title"
-            onClick={() => setScreen('title')}
-          >
-            ← Title Screen
-          </button>
-          <MainMenu onStart={startGame} currentSeed={worldSeed} />
-        </>
-      ) : (
-        <>
-          <GameCanvas
-            seed={worldSeed}
-            gameMode={gameMode}
-            onExit={exitToMenu}
-            selectedBlock={selectedBlock}
-            onSelectedBlockChange={setSelectedBlock}
-            selectedTool={selectedTool}
-            onSelectedToolChange={setSelectedTool}
-            toolInventory={toolInventory}
-            inventory={inventory}
-            onInventoryChange={setInventory}
-            survivalStats={survivalStats}
-            onSurvivalStatsChange={setSurvivalStats}
-            settings={settings}
-            onSettingsChange={setSettings}
-            onToggleInventory={toggleInventory}
-            onToggleSettings={toggleSettings}
-            onGameplayEvent={recordGameplayEvent}
-            onRuntimeStatusChange={setRuntimeStatus}
-            onTelemetry={setTelemetry}
-          />
-          <HudFrame
-            appearance={appearance}
-            survivalStats={survivalStats}
-            inventory={inventory}
-            selectedBlock={selectedBlock}
-            selectedTool={selectedTool}
-            onSelectBlock={setSelectedBlock}
-            position={telemetry.position}
-            yaw={telemetry.yaw}
-            timeOfDay={telemetry.timeOfDay}
-            day={telemetry.day}
-            biome={telemetry.biome}
-            runtimeStatus={runtimeStatus}
-            objectives={objectives}
-            flightEnabled={telemetry.flightEnabled}
-            onAbility={fireAbility}
-            onOpenInventory={toggleInventory}
-            onOpenGuide={toggleInventory}
-            onOpenFriends={toggleSettings}
-            onOpenSettings={toggleSettings}
-            onOpenQuests={() => setObjectivesVisible((v) => !v)}
-          />
-          <HUD
-            gameMode={gameMode}
-            selectedBlock={selectedBlock}
-            selectedTool={selectedTool}
-            toolInventory={toolInventory}
-            inventory={inventory}
-            survivalStats={survivalStats}
-            inventoryOpen={inventoryOpen}
-            settingsOpen={settingsOpen}
-            settings={settings}
-            runtimeStatus={runtimeStatus}
-            objectives={objectives}
-            objectivesVisible={objectivesVisible}
-            systemsVisible={systemsVisible}
-            onToggleObjectives={() => setObjectivesVisible((value) => !value)}
-            onToggleSystems={() => setSystemsVisible((value) => !value)}
-            craftingMessage={craftingMessage}
-            onCraftRecipe={craft}
-            onCloseInventory={closeInventory}
-            onCloseSettings={closeSettings}
-            onSettingsChange={setSettings}
-          />
-        </>
-      )}
+      <GameCanvas
+        seed={worldSeed}
+        gameMode={gameMode}
+        onExit={exitToMenu}
+        selectedBlock={selectedBlock}
+        onSelectedBlockChange={setSelectedBlock}
+        selectedTool={selectedTool}
+        onSelectedToolChange={setSelectedTool}
+        toolInventory={toolInventory}
+        inventory={inventory}
+        onInventoryChange={setInventory}
+        survivalStats={survivalStats}
+        onSurvivalStatsChange={setSurvivalStats}
+        settings={settings}
+        onSettingsChange={setSettings}
+        onToggleInventory={toggleInventory}
+        onToggleSettings={toggleSettings}
+        onGameplayEvent={recordGameplayEvent}
+        onRuntimeStatusChange={setRuntimeStatus}
+        onTelemetry={setTelemetry}
+      />
+      <HudFrame
+        appearance={appearance}
+        survivalStats={survivalStats}
+        inventory={inventory}
+        selectedBlock={selectedBlock}
+        selectedTool={selectedTool}
+        onSelectBlock={setSelectedBlock}
+        position={telemetry.position}
+        yaw={telemetry.yaw}
+        timeOfDay={telemetry.timeOfDay}
+        day={telemetry.day}
+        biome={telemetry.biome}
+        runtimeStatus={runtimeStatus}
+        objectives={objectives}
+        flightEnabled={telemetry.flightEnabled}
+        onAbility={fireAbility}
+        onOpenInventory={toggleInventory}
+        onOpenGuide={toggleInventory}
+        onOpenFriends={toggleSettings}
+        onOpenSettings={toggleSettings}
+        onOpenQuests={() => setObjectivesVisible((v) => !v)}
+      />
+      <HUD
+        gameMode={gameMode}
+        selectedBlock={selectedBlock}
+        selectedTool={selectedTool}
+        toolInventory={toolInventory}
+        inventory={inventory}
+        survivalStats={survivalStats}
+        inventoryOpen={inventoryOpen}
+        settingsOpen={settingsOpen}
+        settings={settings}
+        runtimeStatus={runtimeStatus}
+        objectives={objectives}
+        objectivesVisible={objectivesVisible}
+        systemsVisible={systemsVisible}
+        onToggleObjectives={() => setObjectivesVisible((value) => !value)}
+        onToggleSystems={() => setSystemsVisible((value) => !value)}
+        craftingMessage={craftingMessage}
+        onCraftRecipe={craft}
+        onCloseInventory={closeInventory}
+        onCloseSettings={closeSettings}
+        onSettingsChange={setSettings}
+      />
     </div>
   );
 }

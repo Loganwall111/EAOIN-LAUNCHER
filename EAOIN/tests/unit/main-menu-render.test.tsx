@@ -1,19 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import MainMenu from '../../src/ui/MainMenu';
 
-// Regression: MainMenu referenced an undefined `marketplace` identifier, which threw a
-// ReferenceError on first render. React then unmounted the whole tree and the game
-// showed a completely black screen instead of the main menu.
+// Regression: MainMenu should render the singleplayer world selection screen
+// without throwing and display the correct content.
 describe('MainMenu render', () => {
-  it('mounts and advances through boot to the main phase without throwing', async () => {
-    const { container } = render(<MainMenu onStart={() => {}} currentSeed="regression_seed" />);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    });
+  it('mounts and renders the world selection screen without throwing', () => {
+    const { container } = render(
+      <MainMenu onStart={() => {}} currentSeed="regression_seed" onBack={() => {}} />
+    );
 
-    expect(container.textContent).toContain('EAOIN');
-    expect(container.querySelector('.main-menu')).not.toBeNull();
+    expect(container.textContent).toContain('Select World');
+    expect(container.querySelector('.singleplayer-screen')).not.toBeNull();
   }, 20000);
 });

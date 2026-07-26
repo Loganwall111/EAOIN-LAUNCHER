@@ -20,6 +20,8 @@ function renderTitle(overrides: Partial<Parameters<typeof TitleScreen>[0]> = {})
   return render(
     <TitleScreen
       appearance={DEFAULT_APPEARANCE}
+      signedInUser={null}
+      onSignIn={noop}
       onSingleplayer={noop}
       onMultiplayer={noop}
       onMods={noop}
