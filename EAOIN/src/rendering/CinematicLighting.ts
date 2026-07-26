@@ -62,6 +62,20 @@ export const DEFAULT_CINEMATIC: CinematicConfig = {
   depthOfField: false,
 };
 
+/** First directional light already in the scene, if any. */
+function findDirectionalLight(scene: Scene): DirectionalLight | null {
+  const hit = scene.lights.find(
+    (light) => light.getClassName?.() === 'DirectionalLight' && light.name !== 'moon_light'
+  );
+  return (hit as DirectionalLight) ?? null;
+}
+
+/** First hemispheric light already in the scene, if any. */
+function findHemisphericLight(scene: Scene): HemisphericLight | null {
+  const hit = scene.lights.find((light) => light.getClassName?.() === 'HemisphericLight');
+  return (hit as HemisphericLight) ?? null;
+}
+
 export class CinematicLighting {
   scene: Scene;
   config: CinematicConfig;
@@ -73,24 +87,70 @@ export class CinematicLighting {
   glow: GlowLayer;
   shadowGen: ShadowGenerator | null = null;
   pointLights: Map<string, PointLight> = new Map();
+  /** True when the corresponding resource was reused rather than created. */
+  adoptedSun = false;
+  adoptedHemi = false;
+  adoptedGlow = false;
 
-  constructor(scene: Scene, config: Partial<CinematicConfig> = {}) {
+  /**
+   * @param adoptExisting When true (the default) the rig reuses any sun /
+   *   hemispheric light / glow layer already present in the scene instead of
+   *   constructing duplicates.
+   *
+   *   BUGFIX: `GameCanvas` calls `configureSceneLighting()` *and* then builds a
+   *   `CinematicLighting`. Previously that produced two directional suns, two
+   *   hemispheric lights and two glow layers in the same scene. Babylon sums
+   *   every light per pixel, so the world rendered at roughly double exposure
+   *   and washed out to white — the reported "sky is way too bright and
+   *   everything". Adopting the existing rig keeps total scene energy correct.
+   */
+  constructor(scene: Scene, config: Partial<CinematicConfig> = {}, adoptExisting = true) {
     this.scene = scene;
     this.config = { ...DEFAULT_CINEMATIC, ...config };
-    this.sun = new DirectionalLight('sun_light', new Vector3(-0.4, -1, 0.4), scene);
-    this.sun.intensity = 1.0;
-    this.sun.diffuse = new Color3(1, 0.95, 0.85);
-    this.sun.specular = new Color3(1, 0.95, 0.85);
-    this.moon = new DirectionalLight('moon_light', new Vector3(0.4, -1, -0.4), scene);
+
+    const existingSun = adoptExisting ? findDirectionalLight(scene) : null;
+    if (existingSun) {
+      this.sun = existingSun;
+      this.adoptedSun = true;
+    } else {
+      this.sun = new DirectionalLight('sun_light', new Vector3(-0.4, -1, 0.4), scene);
+      this.sun.intensity = 1.0;
+      this.sun.diffuse = new Color3(1, 0.95, 0.85);
+      this.sun.specular = new Color3(1, 0.95, 0.85);
+    }
+
+    // The moon is unique to this rig, so it is always ours to create — but we
+    // still guard against a second instance if the rig is built twice.
+    const existingMoon = adoptExisting
+      ? (scene.lights.find((l) => l.name === 'moon_light') as DirectionalLight | undefined)
+      : undefined;
+    this.moon = existingMoon ?? new DirectionalLight('moon_light', new Vector3(0.4, -1, -0.4), scene);
     this.moon.intensity = 0.18;
     this.moon.diffuse = new Color3(0.5, 0.6, 0.95);
     this.moon.specular = new Color3(0.3, 0.4, 0.7);
-    this.hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
-    this.hemi.intensity = 0.45;
-    this.hemi.diffuse = new Color3(0.8, 0.85, 0.95);
-    this.hemi.groundColor = new Color3(0.2, 0.18, 0.15);
-    this.glow = new GlowLayer('cinematic_glow', scene, { blurKernelSize: 64 });
-    this.glow.intensity = 0.45;
+
+    const existingHemi = adoptExisting ? findHemisphericLight(scene) : null;
+    if (existingHemi) {
+      this.hemi = existingHemi;
+      this.adoptedHemi = true;
+    } else {
+      this.hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
+      this.hemi.intensity = 0.45;
+      this.hemi.diffuse = new Color3(0.8, 0.85, 0.95);
+      this.hemi.groundColor = new Color3(0.2, 0.18, 0.15);
+    }
+
+    // A second GlowLayer means a second full bloom pass stacked on the first.
+    const existingGlow = adoptExisting
+      ? scene.effectLayers?.find((layer) => layer.getClassName?.() === 'GlowLayer')
+      : undefined;
+    if (existingGlow) {
+      this.glow = existingGlow as GlowLayer;
+      this.adoptedGlow = true;
+    } else {
+      this.glow = new GlowLayer('cinematic_glow', scene, { blurKernelSize: 64 });
+      this.glow.intensity = 0.45;
+    }
   }
 
   /** Build a post-process pipeline matching the chosen shader + config. */
@@ -117,7 +177,10 @@ export class CinematicLighting {
         this.pipeline.depthOfField.focalLength = 10;
         this.pipeline.depthOfField.fStop = 2.8;
       }
-      if (this.config.dynamicShadows) {
+      // Only build a shadow map if the adopted sun does not already drive one.
+      // Two generators on one light doubles the depth pass for no visual gain.
+      const sunAlreadyCastsShadows = (this.sun.getShadowGenerator?.() ?? null) !== null;
+      if (this.config.dynamicShadows && !sunAlreadyCastsShadows) {
         this.shadowGen = new ShadowGenerator(2048, this.sun);
         this.shadowGen.useExponentialShadowMap = true;
         this.shadowGen.usePercentageCloserFiltering = true;
@@ -147,13 +210,22 @@ export class CinematicLighting {
   /** Re-orient sun & moon by time of day (0-24). */
   setTimeOfDay(t: number): void {
     const angle = ((t - 6) / 24) * Math.PI * 2;
-    this.sun.direction = new Vector3(-Math.cos(angle), -Math.sin(angle), 0.4);
     this.moon.direction = new Vector3(Math.cos(angle), Math.sin(angle), -0.4);
     const dayFactor = Math.max(0, Math.sin(angle - Math.PI / 2) * 0.5 + 0.5);
     const nightFactor = 1 - dayFactor;
-    this.sun.intensity = dayFactor * 1.1;
     this.moon.intensity = nightFactor * 0.4;
-    this.hemi.intensity = 0.3 + dayFactor * 0.4;
+
+    // When the sun / hemispheric light were adopted from an existing rig, that
+    // rig is the single owner of their orientation and intensity. Writing them
+    // here too would make two systems fight over scene exposure every frame.
+    if (!this.adoptedSun) {
+      this.sun.direction = new Vector3(-Math.cos(angle), -Math.sin(angle), 0.4);
+      this.sun.intensity = dayFactor * 1.1;
+    }
+    if (!this.adoptedHemi) {
+      this.hemi.intensity = 0.3 + dayFactor * 0.4;
+    }
+
     this.ambient = new Color3(0.2 + dayFactor * 0.4, 0.2 + dayFactor * 0.42, 0.3 + dayFactor * 0.5);
     this.scene.ambientColor = this.ambient;
   }

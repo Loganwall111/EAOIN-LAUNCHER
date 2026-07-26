@@ -209,25 +209,37 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
       glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.42 : 0.15;
-      let pipeline: DefaultRenderingPipeline | null = null;
       const optionalPostEffectsEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.qualityPreset === 'cinematic' || settingsRef.current.experimentalShaders;
+      scene.environmentIntensity = 0.72;
+      dimensionRuntime.applyCurrent();
+      // 1.0 — wire in the new cinematic lighting, dynamic sky, portals, rifts, physics, command blocks.
+      //
+      // BUGFIX: this used to build a `voxel_cinematic_pipeline` here *and* let
+      // CinematicLighting build a second `cinematic_pipeline` below. Two
+      // DefaultRenderingPipelines on one scene stack their tone-mapping and
+      // bloom passes, which blew out the image to white. CinematicLighting now
+      // owns the single post stack, and adopts the sun/hemi/glow created by
+      // configureSceneLighting() rather than duplicating them.
+      const cinematicLighting = new CinematicLighting(scene, DEFAULT_CINEMATIC);
+      let pipeline: DefaultRenderingPipeline | null = null;
       if (optionalPostEffectsEnabled) {
         try {
-          pipeline = new DefaultRenderingPipeline('voxel_cinematic_pipeline', true, scene, [camera]);
-          pipeline.fxaaEnabled = true; pipeline.samples = 2; pipeline.imageProcessingEnabled = true; pipeline.imageProcessing.contrast = 1.03; pipeline.imageProcessing.exposure = 0.92; pipeline.imageProcessing.vignetteEnabled = false;
-          pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.82; pipeline.bloomWeight = 0.28; pipeline.bloomKernel = 64; pipeline.bloomScale = 0.6;
-          pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic'; pipeline.depthOfField.focalLength = 10; pipeline.depthOfField.fStop = 2.8;
+          cinematicLighting.buildPipeline();
+          pipeline = cinematicLighting.pipeline;
+          if (pipeline) {
+            pipeline.samples = 2;
+            pipeline.imageProcessing.vignetteEnabled = false;
+            // Clamp exposure — the scene is already fully lit by the adopted rig.
+            pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.92);
+            pipeline.imageProcessing.contrast = 1.03;
+            pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic';
+          }
         } catch (error) {
           pipeline?.dispose(); pipeline = null;
           scene.postProcessesEnabled = false;
           console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
         }
       }
-      scene.environmentIntensity = 0.72;
-      dimensionRuntime.applyCurrent();
-      // 1.0 — wire in the new cinematic lighting, dynamic sky, portals, rifts, physics, command blocks.
-      const cinematicLighting = new CinematicLighting(scene, DEFAULT_CINEMATIC);
-      if (optionalPostEffectsEnabled) cinematicLighting.buildPipeline();
       const dynamicSky = new DynamicSky(scene, DEFAULT_SKY);
       dynamicSky.attach();
       const portalSystem = new PortalSystem(scene);
