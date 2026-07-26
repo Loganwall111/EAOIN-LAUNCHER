@@ -352,7 +352,23 @@ html, body, #root {
 .game-hud-overlay {
   position: absolute;
   inset: 0;
+  /* HUD is a transparent layer: never hide the Babylon canvas behind it. */
+  background: transparent;
   pointer-events: none;
+  z-index: 10;
+}
+
+.game-hud-overlay > * { pointer-events: auto; }
+
+/* AAA/Minecraft HUD framing: glassy dark panels with warm voxel highlights. */
+.game-hud-overlay .survival-panel,
+.game-hud-overlay .systems-panel,
+.game-hud-overlay .objectives-panel {
+  background: linear-gradient(135deg, rgba(18,24,31,.92), rgba(11,14,20,.84));
+  border: 2px solid rgba(255,255,255,.18);
+  border-left-color: var(--eaoin-accent-warm);
+  box-shadow: 0 8px 28px rgba(0,0,0,.42), inset 0 1px rgba(255,255,255,.08);
+  backdrop-filter: blur(6px);
 }
 
 .render-stats-panel {

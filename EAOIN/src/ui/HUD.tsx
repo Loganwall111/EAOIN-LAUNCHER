@@ -212,7 +212,7 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
   const pagedCreative = creativeItems.slice(creativePage * CREATIVE_PER_PAGE, (creativePage + 1) * CREATIVE_PER_PAGE);
 
   return (
-    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`} style={{ background: '#0a0a12' }}>
+    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`} aria-label="EAOIN gameplay HUD">
       {/* Survival panel */}
       <div className="survival-panel">
         <div className="stat-row"><span>Mode</span><strong>{gameMode === 'creative' ? '✏️ Creative' : gameMode === 'survival' ? '⚔ Survival' : gameMode}</strong></div>
