@@ -9,7 +9,7 @@ import { addToInventory, canConsumeBlock, getStackCount, HOTBAR_BLOCKS, Inventor
 import { applyDamage, SurvivalStats, updateSurvivalLoop } from '../player/SurvivalState';
 import { estimateMining, getTool, nextTool, ToolID, ToolInventory } from '../player/ToolState';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
-import { DimensionRuntime, RuntimeDimensionID } from '../dimensions/DimensionRuntime';
+import DimensionRuntime, { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
 import { AmbientParticleRuntime } from '../effects/AmbientParticleRuntime';
 import { WorldInteractionRuntime } from '../effects/WorldInteractionRuntime';
 import { ItemDropManager } from '../items/ItemDropManager';
@@ -121,17 +121,35 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
       const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
       const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
+      const pants = new StandardMaterial('player_pants', scene); pants.diffuseColor = new Color3(0.20, 0.28, 0.50);
       const arm = MeshBuilder.CreateBox('first_person_blocky_arm', { width: 0.22, height: 0.72, depth: 0.22 }, scene);
       arm.parent = camera; arm.position = new Vector3(0.42, -0.48, 0.72); arm.rotation.z = -0.12; arm.material = skin; arm.isPickable = false;
       const armPunchBase = new Vector3(0.42, -0.48, 0.72);
-      const avatar = new Mesh('third_person_avatar', scene); avatar.position.copyFrom(camera.position); avatar.isVisible = false;
-      const torso = MeshBuilder.CreateBox('avatar_torso', { width: 0.7, height: 0.95, depth: 0.38 }, scene); torso.parent = avatar; torso.position.y = 0.15; torso.material = shirt;
-      const head = MeshBuilder.CreateBox('avatar_head', { width: 0.55, height: 0.55, depth: 0.55 }, scene); head.parent = avatar; head.position.y = 0.9; head.material = skin;
-      const legA = MeshBuilder.CreateBox('avatar_leg_a', { width: 0.25, height: 0.85, depth: 0.28 }, scene); legA.parent = avatar; legA.position.set(-0.18, -0.72, 0); legA.material = shirt;
-      const legB = legA.clone('avatar_leg_b'); if (legB) { legB.parent = avatar; legB.position.x = 0.18; }
-      const armA = MeshBuilder.CreateBox('avatar_arm_a', { width: 0.22, height: 0.82, depth: 0.25 }, scene); armA.parent = avatar; armA.position.set(-0.48, 0.12, 0); armA.material = skin;
-      const armB = armA.clone('avatar_arm_b'); if (armB) { armB.parent = avatar; armB.position.x = 0.48; }
+
+      // Third-person avatar — built as a parent transform so we can position
+      // it independently of the camera and avoid the visual jitter of moving
+      // the camera itself on toggle.  This makes the player actually visible
+      // when the user presses F5.
+      const avatar = new Mesh('third_person_avatar', scene);
+      avatar.isVisible = false; // hidden in first person
+      avatar.isPickable = false;
+      // Local origin is the avatar's feet; we offset body parts upward.
+      const torso = MeshBuilder.CreateBox('avatar_torso', { width: 0.7, height: 0.95, depth: 0.38 }, scene);
+      torso.parent = avatar; torso.position.y = 1.27; torso.material = shirt; torso.isPickable = false;
+      const head = MeshBuilder.CreateBox('avatar_head', { width: 0.55, height: 0.55, depth: 0.55 }, scene);
+      head.parent = avatar; head.position.y = 2.02; head.material = skin; head.isPickable = false;
+      const legA = MeshBuilder.CreateBox('avatar_leg_a', { width: 0.25, height: 0.85, depth: 0.28 }, scene);
+      legA.parent = avatar; legA.position.set(-0.18, 0.4, 0); legA.material = pants; legA.isPickable = false;
+      const legB = MeshBuilder.CreateBox('avatar_leg_b', { width: 0.25, height: 0.85, depth: 0.28 }, scene);
+      legB.parent = avatar; legB.position.set(0.18, 0.4, 0); legB.material = pants; legB.isPickable = false;
+      const armA = MeshBuilder.CreateBox('avatar_arm_a', { width: 0.22, height: 0.82, depth: 0.25 }, scene);
+      armA.parent = avatar; armA.position.set(-0.48, 1.24, 0); armA.material = skin; armA.isPickable = false;
+      const armB = MeshBuilder.CreateBox('avatar_arm_b', { width: 0.22, height: 0.82, depth: 0.25 }, scene);
+      armB.parent = avatar; armB.position.set(0.48, 1.24, 0); armB.material = skin; armB.isPickable = false;
+      // Walking animation
+      let walkPhase = 0;
       let thirdPerson = false;
+      const THIRD_PERSON_DISTANCE = 3.5;
 
       const materials = createBlockMaterials(scene, settingsRef.current.texturePack);
       const audio = new GameAudio();
@@ -311,7 +329,29 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
         scene.fogEnabled = settingsRef.current.fogEnabled;
         applyRenderScale(engine, settingsRef.current.renderScale);
-        if (thirdPerson) { avatar.position.copyFrom(camera.position); avatar.position.y -= 1.05; avatar.rotation.y = camera.rotation.y; }
+        if (thirdPerson) {
+          // Place the avatar at the player's feet (camera is at eye level ~1.62).
+          avatar.position.x = camera.position.x;
+          avatar.position.y = camera.position.y - 1.62;
+          avatar.position.z = camera.position.z;
+          // Face the same direction as the camera
+          avatar.rotation.y = camera.rotation.y;
+          // Walk animation
+          const horiz = Math.hypot(camera.position.x - lastCameraPosition.x, camera.position.z - lastCameraPosition.z);
+          if (horiz > 0.01) {
+            walkPhase += deltaSeconds * 8;
+            const swing = Math.sin(walkPhase) * 0.6;
+            legA.rotation.x = swing;
+            legB.rotation.x = -swing;
+            armA.rotation.x = -swing * 0.5;
+            armB.rotation.x = swing * 0.5;
+          } else {
+            legA.rotation.x *= 0.85;
+            legB.rotation.x *= 0.85;
+            armA.rotation.x *= 0.85;
+            armB.rotation.x *= 0.85;
+          }
+        }
 
         if (flightEnabledRef.current) {
           grounded = false; velocityY = 0; jumpRequested = false; wasFalling = false; fallStartY = camera.position.y;
@@ -422,7 +462,31 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleKeyDown = (event: KeyboardEvent): void => {
         pressedKeys.add(event.code);
         if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (!flightEnabledRef.current && grounded) jumpRequested = true; return; }
-        if (event.key === 'F5') { event.preventDefault(); thirdPerson = !thirdPerson; arm.isVisible = !thirdPerson; avatar.isVisible = thirdPerson; camera.position.y += thirdPerson ? 0.45 : -0.45; camera.position.z -= thirdPerson ? 3.8 : -3.8; showActionMessage(thirdPerson ? 'Third-person' : 'First-person'); return; }
+        if (event.key === 'F5') {
+          event.preventDefault();
+          thirdPerson = !thirdPerson;
+          arm.isVisible = !thirdPerson; // hide first-person arm in third-person
+          avatar.isVisible = thirdPerson; // show the player model in third-person
+          // For third-person we back the camera away from the player slightly,
+          // but we do this via the camera's local position rather than by
+          // teleporting the camera in world space, which used to cause the
+          // player to fall out of the world.
+          if (thirdPerson) {
+            // Move camera back along its forward direction.
+            const forward = camera.getForwardRay().direction;
+            camera.position = camera.position.add(forward.scale(-THIRD_PERSON_DISTANCE));
+            // Slight downward look so the player is centered in the frame.
+            camera.rotation.x -= 0.18;
+            // The avatar follows the camera in the render loop now.
+          } else {
+            // Return to first-person: snap camera back behind the player model.
+            const forward = camera.getForwardRay().direction;
+            camera.position = camera.position.add(forward.scale(THIRD_PERSON_DISTANCE));
+            camera.rotation.x += 0.18;
+          }
+          showActionMessage(thirdPerson ? '🎥 Third-person view — your player is now visible' : '🎥 First-person view');
+          return;
+        }
         if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
         if (event.key === 'Escape') { event.preventDefault(); if (commandOpen || chatOpen) { setCommandOpen(false); setChatOpen(false); return; } document.exitPointerLock?.(); setPaused(true); return; }
         if (event.key === '/' && settingsRef.current.commandBlocksEnabled) { event.preventDefault(); document.exitPointerLock?.(); setCommandText('/'); setCommandOpen(true); setChatOpen(false); showActionMessage('Command console / — try /day /time /summon'); return; }
