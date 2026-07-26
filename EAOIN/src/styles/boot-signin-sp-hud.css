@@ -1,0 +1,1369 @@
+/* ==========================================================================
+   EAOIN — Cinematic Boot Sequence, Sign-In, Sign-In Button, Singleplayer
+   World Selection, and HUD improvements.
+   ========================================================================== */
+
+/* ============================================================================
+   CINEMATIC BOOT SEQUENCE
+   ONBLOCKAWAY STUDIOS → Loading bar → PRESENTS → EAOIN title → Main menu
+   ========================================================================== */
+
+.cinematic-boot {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  overflow: hidden;
+  font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* --- Phase 1: ONBLOCKAWAY STUDIOS --- */
+.cinematic-studio {
+  background: radial-gradient(circle at 50% 42%, #172b3b 0%, #070b11 48%, #020305 100%);
+  color: #f4f8fb;
+  animation: cbFadeInOut 2.8s ease both;
+}
+
+.cb-orbit-ring {
+  position: absolute;
+  width: min(55vw, 440px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(107, 215, 255, 0.22);
+  border-radius: 50%;
+  transform: rotate(-20deg);
+  animation: cbOrbitSpin 3.2s linear infinite;
+}
+
+.cb-orbit-ring span {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8ce6ff;
+  box-shadow: 0 0 16px #55cfff, 0 0 32px rgba(86, 207, 255, 0.4);
+  top: 50%;
+  left: -3px;
+}
+
+.cb-orbit-ring span:nth-child(2) { left: auto; right: 15%; top: 6%; }
+.cb-orbit-ring span:nth-child(3) { left: 38%; top: auto; bottom: -3px; }
+.cb-orbit-ring span:nth-child(4) { left: 70%; top: 12%; width: 4px; height: 4px; }
+
+.cb-studio-name {
+  font: 700 clamp(26px, 5.5vw, 72px) / 1 'Arial Narrow', Arial, sans-serif;
+  letter-spacing: 0.3em;
+  margin-left: 0.3em;
+  color: #f4f8fb;
+  text-shadow: 0 0 24px rgba(107, 215, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.8);
+  animation: cbStudioRise 1.4s ease both;
+}
+
+.cb-studio-sub {
+  font: 600 clamp(10px, 1.4vw, 16px) / 1 Arial, sans-serif;
+  letter-spacing: 0.8em;
+  margin-left: 0.8em;
+  margin-top: 0.8rem;
+  color: #80d8ff;
+  animation: cbStudioRise 1.6s 0.15s ease both;
+  text-shadow: 0 0 12px rgba(128, 216, 255, 0.4);
+}
+
+/* --- Phase 2: LOADING --- */
+.cinematic-loading {
+  background: radial-gradient(circle at 50% 38%, #0d1926 0%, #050810 55%, #010204 100%);
+  color: #f4f8fb;
+  gap: 18px;
+}
+
+.cb-loading-logo {
+  font: 900 clamp(36px, 7vw, 80px) / 1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.1em;
+  background: linear-gradient(180deg, #e9edf1 0%, #a9b2bb 46%, #6e7883 66%, #8e979f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 3px 0 #4d545c) drop-shadow(0 7px 0 #31363d) drop-shadow(0 11px 0 #1c2026) drop-shadow(0 18px 26px rgba(0, 0, 0, 0.72));
+  animation: cbPulse 1.5s ease-in-out infinite alternate;
+}
+
+.cb-loading-bar-track {
+  width: min(460px, 70vw);
+  height: 18px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 16px rgba(93, 214, 255, 0.1);
+}
+
+.cb-loading-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #5dd6ff 0%, #a879ff 40%, #ffd166 70%, #7ef7a0 100%);
+  background-size: 200% 100%;
+  animation: cbBarShimmer 1.6s linear infinite;
+  transition: width 0.12s ease-out;
+  box-shadow: 0 0 12px rgba(93, 214, 255, 0.4);
+}
+
+.cb-loading-tip {
+  font: 400 13px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.04em;
+  min-height: 1.2em;
+}
+
+.cb-loading-pct {
+  font: 700 11px/1 'Consolas', monospace;
+  color: rgba(93, 214, 255, 0.8);
+  letter-spacing: 0.08em;
+}
+
+/* --- Phase 3: PRESENTS --- */
+.cinematic-presents {
+  background: radial-gradient(circle at 50% 50%, #0d1420 0%, #030508 100%);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cb-presents-text {
+  font: 300 clamp(18px, 3.5vw, 42px) / 1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.6em;
+  margin-left: 0.6em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  animation: cbPresentsFade 1.2s ease both;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+/* --- Phase 4: TITLE fade in --- */
+.cinematic-title {
+  background: radial-gradient(circle at 50% 45%, #1a2536 0%, #060810 55%, #010204 100%);
+  color: #f4f8fb;
+  gap: 12px;
+}
+
+.cb-game-title {
+  font: 900 clamp(52px, 10vw, 140px) / 0.9 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.05em;
+  margin: 0;
+  background: linear-gradient(180deg, #e9edf1 0%, #a9b2bb 46%, #6e7883 66%, #8e979f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 0 #4d545c) drop-shadow(0 8px 0 #31363d) drop-shadow(0 14px 32px rgba(0, 0, 0, 0.72));
+  animation: cbTitleFadeIn 2.2s ease both;
+}
+
+.cb-game-tagline {
+  font: 800 clamp(10px, 1.3vw, 16px) / 1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: #ffc23d;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  animation: cbTitleFadeIn 2.2s 0.3s ease both;
+}
+
+/* --- Boot keyframes --- */
+@keyframes cbFadeInOut {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes cbStudioRise {
+  from { opacity: 0; transform: translateY(16px); letter-spacing: 0.6em; }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cbOrbitSpin {
+  from { transform: rotate(-20deg); }
+  to { transform: rotate(340deg); }
+}
+
+@keyframes cbPulse {
+  from { filter: drop-shadow(0 3px 0 #4d545c) drop-shadow(0 7px 0 #31363d) drop-shadow(0 11px 0 #1c2026) drop-shadow(0 18px 26px rgba(0, 0, 0, 0.72)); }
+  to { filter: drop-shadow(0 3px 0 #4d545c) drop-shadow(0 7px 0 #31363d) drop-shadow(0 11px 0 #1c2026) drop-shadow(0 18px 26px rgba(0, 0, 0, 0.72)) brightness(1.08); }
+}
+
+@keyframes cbBarShimmer {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+
+@keyframes cbPresentsFade {
+  from { opacity: 0; letter-spacing: 1em; }
+  to { opacity: 1; letter-spacing: 0.6em; }
+}
+
+@keyframes cbTitleFadeIn {
+  0% { opacity: 0; transform: scale(0.92); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+
+/* ============================================================================
+   SIGN-IN SCREEN
+   ========================================================================== */
+
+.signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  display: grid;
+  place-items: center;
+  font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  color: #f2f5f8;
+  overflow: hidden;
+}
+
+.signin-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(14, 22, 34, 0.7), rgba(4, 6, 10, 0.95) 70%),
+    linear-gradient(180deg, #0a1018 0%, #060810 40%, #020305 100%);
+  z-index: 0;
+}
+
+.signin-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.6) 1px, transparent 1px),
+    radial-gradient(circle, rgba(93, 214, 255, 0.4) 1px, transparent 1px);
+  background-size: 80px 80px, 120px 120px;
+  background-position: 0 0, 40px 60px;
+  opacity: 0.35;
+  animation: signinStarDrift 40s linear infinite;
+}
+
+@keyframes signinStarDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-80px, 60px, 0); }
+}
+
+.signin-card {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 90vw);
+  padding: 36px 32px 28px;
+  background: linear-gradient(145deg, rgba(14, 17, 22, 0.92), rgba(8, 11, 16, 0.96));
+  backdrop-filter: blur(20px);
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  border-left: 2px solid rgba(255, 255, 255, 0.16);
+  border-right: 2px solid rgba(0, 0, 0, 0.6);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 0 2px #05070a, 0 24px 80px rgba(0, 0, 0, 0.7), inset 0 1px rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.signin-logo-section {
+  text-align: center;
+}
+
+.signin-game-logo {
+  font: 900 clamp(36px, 6vw, 52px) / 0.9 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.08em;
+  margin: 0;
+  background: linear-gradient(180deg, #e9edf1 0%, #a9b2bb 46%, #6e7883 66%, #8e979f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 3px 0 #4d545c) drop-shadow(0 6px 0 #31363d) drop-shadow(0 10px 20px rgba(0, 0, 0, 0.7));
+}
+
+.signin-tagline {
+  margin: 8px 0 0;
+  font: 700 11px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #ffc23d;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.signin-google-section {
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.signin-prompt {
+  font: 400 13px/1.5 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+  max-width: 320px;
+}
+
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 280px;
+  padding: 12px 20px;
+  font: 600 14px/1 'Segoe UI', Arial, sans-serif;
+  color: #1a1a1a;
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.google-signin-btn:hover {
+  background: #f8f8f8;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.google-signin-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.google-signin-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.google-icon {
+  flex: none;
+}
+
+.google-btn-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.google-btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #4285F4;
+  border-radius: 50%;
+  animation: signinSpin 0.7s linear infinite;
+}
+
+@keyframes signinSpin {
+  to { transform: rotate(360deg); }
+}
+
+.signin-error {
+  font: 500 12px/1.4 'Segoe UI', Arial, sans-serif;
+  color: #e0483f;
+  margin: 0;
+}
+
+.signin-name-field {
+  width: 100%;
+  max-width: 280px;
+}
+
+.signin-name-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.signin-name-field span {
+  font: 600 11px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.signin-name-field input {
+  width: 100%;
+  padding: 10px 12px;
+  font: 400 14px/1 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.signin-name-field input:focus {
+  border-color: rgba(93, 214, 255, 0.6);
+}
+
+.signin-name-field input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.signin-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.signin-divider::before,
+.signin-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.signin-divider span {
+  font: 500 11px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.signin-skip-btn {
+  width: 100%;
+  max-width: 280px;
+  padding: 11px 18px;
+  font: 600 13px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.signin-skip-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.signin-skip-btn:active {
+  transform: translateY(0);
+}
+
+.signin-footer-note {
+  font: 400 10px/1.5 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  margin: 0;
+  max-width: 300px;
+}
+
+
+/* ============================================================================
+   SIGN-IN BUTTON on Title Screen
+   ========================================================================== */
+
+.title-signin-section {
+  position: absolute;
+  left: 18px;
+  bottom: 68px;
+  z-index: 5;
+}
+
+.title-signin-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  font: 700 12px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f2f5f8;
+  background: linear-gradient(180deg, #3c4652 0%, #262d37 52%, #1a1f27 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.26);
+  border-left: 2px solid rgba(255, 255, 255, 0.26);
+  border-right: 2px solid rgba(0, 0, 0, 0.72);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 0 2px #05070a, 0 5px 14px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  transition: filter 120ms, transform 120ms;
+}
+
+.title-signin-btn:hover {
+  filter: brightness(1.32);
+  transform: translateY(-2px);
+}
+
+.title-signin-btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+.google-icon-sm {
+  flex: none;
+}
+
+/* Signed-in user card on title screen */
+.title-signed-in-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--ui-panel, rgba(14, 17, 22, 0.88));
+  backdrop-filter: blur(10px);
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  border-left: 2px solid rgba(255, 255, 255, 0.16);
+  border-right: 2px solid rgba(0, 0, 0, 0.6);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 0 2px #05070a, 0 5px 14px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  min-width: 200px;
+  transition: filter 120ms, transform 120ms;
+}
+
+.title-signed-in-card:hover {
+  filter: brightness(1.2);
+  transform: translateY(-1px);
+}
+
+.signin-avatar-letter {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  font: 800 16px/1 'Segoe UI', Arial, sans-serif;
+  color: #fff;
+  background: linear-gradient(135deg, #4285F4, #34A853);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  flex: none;
+}
+
+.signin-meta {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.signin-meta strong {
+  display: block;
+  font: 700 12px/1 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signin-meta span {
+  font: 400 10px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ============================================================================
+   SINGLEPLAYER / WORLD SELECTION SCREEN
+   Matches the AAA title screen aesthetic
+   ========================================================================== */
+
+.singleplayer-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  color: #f2f5f8;
+  user-select: none;
+  overflow: hidden;
+}
+
+.sp-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transition: background 0.6s ease;
+}
+
+.sp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at 50% 40%, transparent 30%, rgba(0, 0, 0, 0.5) 100%),
+    linear-gradient(180deg, rgba(4, 7, 11, 0.6) 0%, transparent 20%, transparent 70%, rgba(4, 7, 11, 0.8) 100%);
+}
+
+/* --- Header --- */
+.sp-header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px clamp(18px, 3vw, 36px) 14px;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+}
+
+.sp-back-btn {
+  flex: none;
+  padding: 10px 18px;
+  font: 800 11px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f2f5f8;
+  cursor: pointer;
+  background: linear-gradient(180deg, #3c4652 0%, #262d37 52%, #1a1f27 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.26);
+  border-left: 2px solid rgba(255, 255, 255, 0.26);
+  border-right: 2px solid rgba(0, 0, 0, 0.72);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 0 2px #05070a, 0 5px 14px rgba(0, 0, 0, 0.5);
+  transition: filter 120ms, transform 120ms;
+}
+
+.sp-back-btn:hover {
+  filter: brightness(1.3);
+  transform: translateY(-2px);
+}
+
+.sp-back-btn:active {
+  transform: translateY(1px);
+}
+
+.sp-header-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-eyebrow {
+  font: 800 10px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: #ffc23d;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.sp-title {
+  margin: 6px 0 0;
+  font: 900 clamp(22px, 3vw, 36px) / 1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 #2b3039, 0 4px 12px rgba(0, 0, 0, 0.7);
+}
+
+.sp-header-actions {
+  flex: none;
+}
+
+.sp-create-btn {
+  padding: 11px 22px;
+  font: 800 12px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #0d1a06;
+  cursor: pointer;
+  background: linear-gradient(180deg, #8fd85e 0%, #67ac3c 52%, #4a8a2c 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.42);
+  border-left: 2px solid rgba(255, 255, 255, 0.42);
+  border-right: 2px solid rgba(0, 0, 0, 0.62);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.62);
+  box-shadow: 0 0 0 2px #05070a, 0 6px 18px rgba(0, 0, 0, 0.52);
+  transition: filter 120ms, transform 120ms;
+}
+
+.sp-create-btn:hover {
+  filter: brightness(1.14);
+  transform: translateY(-2px);
+}
+
+.sp-create-btn:active {
+  transform: translateY(1px);
+}
+
+/* --- Body layout --- */
+.sp-body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  padding: 18px clamp(18px, 3vw, 36px) 24px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 18px;
+  overflow: hidden;
+}
+
+/* --- World list panel --- */
+.sp-world-list-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.sp-world-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-empty {
+  padding: 32px;
+  text-align: center;
+  font: 400 14px/1.6 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sp-world-card {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(43, 50, 59, 0.6), rgba(23, 28, 35, 0.6));
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  border-left: 3px solid transparent;
+  transition: background 120ms, border-color 120ms, transform 120ms;
+}
+
+.sp-world-card:hover {
+  background: linear-gradient(180deg, rgba(58, 68, 80, 0.75), rgba(30, 37, 45, 0.75));
+  transform: translateX(2px);
+}
+
+.sp-world-card.selected {
+  border-left-color: #62d8ff;
+  background: linear-gradient(180deg, rgba(44, 61, 76, 0.85), rgba(26, 39, 50, 0.85));
+  box-shadow: inset 0 0 20px rgba(98, 216, 255, 0.08);
+}
+
+.sp-world-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  border: 2px solid rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  flex: none;
+}
+
+.sp-world-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sp-world-info strong {
+  font: 800 13px/1.25 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-world-seed {
+  font: 400 10px/1 'Consolas', monospace;
+  color: rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-world-mode {
+  font: 500 10.5px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.sp-world-meta {
+  font: 400 9.5px/1 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sp-badge {
+  padding: 1px 6px;
+  font: 700 8px/1.4 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+
+.sp-badge.cheats {
+  background: rgba(255, 209, 102, 0.2);
+  color: #ffd166;
+  border: 1px solid rgba(255, 209, 102, 0.35);
+}
+
+.sp-badge.mods {
+  background: rgba(126, 247, 160, 0.15);
+  color: #7ef7a0;
+  border: 1px solid rgba(126, 247, 160, 0.3);
+}
+
+.sp-world-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.sp-action-btn {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  cursor: pointer;
+  color: #f2f5f8;
+  background: linear-gradient(180deg, #262d36, #171b22);
+  border-top: 2px solid rgba(255, 255, 255, 0.14);
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  border-right: 2px solid rgba(0, 0, 0, 0.6);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+  transition: filter 120ms, transform 120ms;
+}
+
+.sp-action-btn:hover {
+  filter: brightness(1.3);
+  transform: translateY(-1px);
+}
+
+.sp-action-btn.edit {
+  color: #ffd166;
+}
+
+.sp-action-btn.delete {
+  color: #e0483f;
+}
+
+/* --- Detail panel --- */
+.sp-detail-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.sp-detail-content {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.sp-detail-hero {
+  width: 100%;
+  height: 100px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.sp-detail-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+
+.sp-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sp-detail-info h2 {
+  font: 900 20px/1.2 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.sp-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.sp-detail-stats > div {
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sp-detail-stats span {
+  display: block;
+  font: 700 9px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.sp-detail-stats strong {
+  display: block;
+  margin-top: 4px;
+  font: 700 13px/1.2 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-play-btn {
+  width: 100%;
+  padding: 16px 20px;
+  font: 800 16px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0d1a06;
+  cursor: pointer;
+  background: linear-gradient(180deg, #8fd85e 0%, #67ac3c 52%, #4a8a2c 100%);
+  border-top: 2px solid rgba(255, 255, 255, 0.42);
+  border-left: 2px solid rgba(255, 255, 255, 0.42);
+  border-right: 2px solid rgba(0, 0, 0, 0.62);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.62);
+  box-shadow: 0 0 0 2px #05070a, 0 6px 18px rgba(0, 0, 0, 0.52);
+  transition: filter 120ms, transform 120ms;
+  margin-top: auto;
+}
+
+.sp-play-btn:hover {
+  filter: brightness(1.14);
+  transform: translateY(-2px);
+}
+
+.sp-play-btn:active {
+  transform: translateY(1px);
+}
+
+/* --- Create / Edit form --- */
+.sp-create-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+}
+
+.sp-form-panel {
+  width: min(620px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sp-form-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-field > span {
+  font: 700 11px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.sp-field input[type="text"] {
+  width: 100%;
+  padding: 10px 14px;
+  font: 400 14px/1 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.sp-field input[type="text"]:focus {
+  border-color: rgba(98, 216, 255, 0.5);
+}
+
+.sp-field input[type="text"]::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.sp-seed-row {
+  display: flex;
+  gap: 8px;
+}
+
+.sp-seed-row input {
+  flex: 1;
+}
+
+.sp-seed-display {
+  flex: 1;
+  padding: 10px 14px;
+  font: 400 13px/1 'Consolas', monospace;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-seed-random {
+  flex: none;
+  padding: 10px 16px;
+  font: 700 12px/1 'Segoe UI', Arial, sans-serif;
+  color: #f2f5f8;
+  background: linear-gradient(180deg, #3c4652, #262d37);
+  border-top: 2px solid rgba(255, 255, 255, 0.2);
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  border-right: 2px solid rgba(0, 0, 0, 0.6);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: filter 120ms, transform 120ms;
+}
+
+.sp-seed-random:hover {
+  filter: brightness(1.25);
+  transform: translateY(-1px);
+}
+
+.sp-field-label {
+  font: 700 11px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 8px;
+}
+
+.sp-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.sp-mode-card {
+  min-height: 72px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(43, 50, 59, 0.6), rgba(23, 28, 35, 0.6));
+  border: 2px solid rgba(0, 0, 0, 0.4);
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+  transition: filter 120ms, transform 120ms, border-color 120ms;
+  text-align: left;
+}
+
+.sp-mode-card:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.sp-mode-card.selected {
+  border-color: #62d8ff;
+  background: linear-gradient(180deg, rgba(44, 61, 76, 0.85), rgba(26, 39, 50, 0.85));
+  box-shadow: 0 0 0 2px rgba(98, 216, 255, 0.2), inset 0 0 16px rgba(98, 216, 255, 0.06);
+}
+
+.sp-mode-card strong {
+  font: 800 12px/1.2 'Segoe UI', Arial, sans-serif;
+  color: #ffd166;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.sp-mode-card small {
+  font: 400 10px/1.3 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.sp-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font: 400 13px/1.4 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.sp-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sp-checkbox input[type="checkbox"]:checked {
+  background: linear-gradient(180deg, #4a8a2c, #2f6119);
+  border-color: rgba(126, 247, 160, 0.5);
+}
+
+.sp-checkbox input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font: 800 12px/1 'Segoe UI', Arial, sans-serif;
+  color: #cdf0a8;
+}
+
+.sp-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sp-btn {
+  padding: 11px 24px;
+  font: 800 12px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter 120ms, transform 120ms;
+  border-top: 2px solid rgba(255, 255, 255, 0.26);
+  border-left: 2px solid rgba(255, 255, 255, 0.26);
+  border-right: 2px solid rgba(0, 0, 0, 0.72);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.72);
+  box-shadow: 0 0 0 2px #05070a, 0 5px 14px rgba(0, 0, 0, 0.5);
+}
+
+.sp-btn:hover {
+  filter: brightness(1.2);
+  transform: translateY(-2px);
+}
+
+.sp-btn:active {
+  transform: translateY(1px);
+}
+
+.sp-btn.primary {
+  color: #0d1a06;
+  background: linear-gradient(180deg, #8fd85e 0%, #67ac3c 52%, #4a8a2c 100%);
+  border-top-color: rgba(255, 255, 255, 0.42);
+  border-left-color: rgba(255, 255, 255, 0.42);
+  border-right-color: rgba(0, 0, 0, 0.62);
+  border-bottom-color: rgba(0, 0, 0, 0.62);
+}
+
+.sp-btn.secondary {
+  color: #f2f5f8;
+  background: linear-gradient(180deg, #3c4652 0%, #262d37 52%, #1a1f27 100%);
+}
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+  .sp-body {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-detail-panel {
+    max-height: 40vh;
+  }
+
+  .sp-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .sp-mode-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .sp-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sp-world-card {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .sp-world-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
+
+
+/* ============================================================================
+   HUD IMPROVEMENTS
+   Cleaner, more professional in-game HUD
+   ========================================================================== */
+
+/* Clean up the HUD button row — make it more integrated */
+.hud-buttons {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 3px;
+  pointer-events: auto;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hud-btn {
+  padding: 5px 9px;
+  font: 700 8.5px 'Segoe UI', Arial, sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 100ms, transform 80ms, color 100ms;
+}
+
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.hud-btn:active {
+  transform: translateY(0);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Clean up hotbar strip */
+.hotbar-strip {
+  gap: 3px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.hot-slot {
+  width: 46px;
+  height: 46px;
+  background: rgba(30, 36, 44, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: transform 80ms, border-color 80ms, box-shadow 80ms;
+}
+
+.hot-slot:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.hot-slot.selected {
+  border-color: #ffc23d;
+  box-shadow: 0 0 0 2px #ffc23d, 0 0 14px rgba(255, 194, 61, 0.35);
+  transform: translateY(-3px);
+}
+
+/* Clean up ability buttons */
+.ability-btn {
+  width: 44px;
+  padding: 6px 0 4px;
+  background: rgba(20, 24, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.ability-btn:hover {
+  filter: brightness(1.3);
+  transform: translateY(-2px);
+}
+
+.ability-btn.active {
+  background: linear-gradient(180deg, rgba(77, 143, 216, 0.8), rgba(36, 85, 143, 0.8));
+  border-color: rgba(98, 216, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(5, 7, 10, 1), 0 0 12px rgba(98, 216, 255, 0.3);
+}
+
+/* Nav buttons cleaner */
+.nav-btn {
+  width: 44px;
+  padding: 6px 0 4px;
+  background: rgba(20, 24, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Equipped item card */
+.hud-equipped {
+  min-width: 170px;
+  background: rgba(14, 17, 22, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Player card - cleaner */
+.hud-player {
+  min-width: 220px;
+  background: rgba(14, 17, 22, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Compass - slimmer */
+.hud-compass {
+  height: 24px;
+  background: rgba(14, 17, 22, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Chat - more compact */
+.hud-chat {
+  background: rgba(14, 17, 22, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Minimap - cleaner frame */
+.hud-minimap {
+  background: rgba(14, 17, 22, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Quest tracker - cleaner */
+.hud-quests {
+  background: rgba(14, 17, 22, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}

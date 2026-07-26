@@ -30,7 +30,7 @@ export class GameAudio {
       if (settings.muted || settings.volume <= 0) return;
       const osc = context.createOscillator(); const gain = context.createGain(); const now = context.currentTime;
       osc.type = 'sine'; osc.frequency.value = notes[this.musicStep++ % notes.length];
-      gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.035 * settings.volume, now + .08); gain.gain.exponentialRampToValueAtTime(.0001, now + 2.4);
+      gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.12 * settings.volume, now + .08); gain.gain.exponentialRampToValueAtTime(.0001, now + 2.4);
       osc.connect(gain); gain.connect(context.destination); osc.start(now); osc.stop(now + 2.5);
     };
     play(); this.musicTimer = window.setInterval(play, 2600);
@@ -49,7 +49,7 @@ export class GameAudio {
       const osc = context.createOscillator(); const gain = context.createGain(); const now = context.currentTime;
       osc.type = this.ambienceProfile === 'nether' || this.ambienceProfile === 'cave' ? 'sawtooth' : 'sine';
       osc.frequency.value = root + Math.random() * root * .22;
-      gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(.012 * settings.volume, now + .2); gain.gain.exponentialRampToValueAtTime(.0001, now + 3.5);
+      gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(.04 * settings.volume, now + .2); gain.gain.exponentialRampToValueAtTime(.0001, now + 3.5);
       osc.connect(gain); gain.connect(context.destination); osc.start(now); osc.stop(now + 3.6);
     };
     playCue(); this.ambienceTimer = window.setInterval(playCue, 4200);
@@ -73,7 +73,7 @@ export class GameAudio {
     oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), now + duration);
 
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.08 * settings.volume, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.2 * settings.volume, now + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     oscillator.connect(gain);
