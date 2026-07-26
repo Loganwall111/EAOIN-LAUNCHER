@@ -4,9 +4,9 @@ import { RecipeID, RECIPES, canCraft, recipeCostLabel, recipeOutputLabel } from 
 import { GameMode } from '../modes/GameMode';
 import { ObjectiveStatus } from '../objectives/ObjectiveTracker';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
-import { getStackCount, HOTBAR_BLOCKS, InventoryStacks } from '../player/InventoryState';
+import { getStackCount, InventoryStacks } from '../player/InventoryState';
 import { SurvivalStats } from '../player/SurvivalState';
-import { getTool, isToolUnlocked, TOOLBELT, ToolID, ToolInventory } from '../player/ToolState';
+import { ToolID, ToolInventory } from '../player/ToolState';
 import { GameSettings, clampSettings } from '../settings/GameSettings';
 import { RELEASE_LABEL, RELEASE_TAGLINE, RELEASE_FEATURES, GAME_VERSION } from '../version';
 import { ALL_SHADERS, ShaderID, ShaderDefinition } from '../rendering/ShaderRegistry';
@@ -96,7 +96,7 @@ function BlockSlot({ id, count, selected, onClick, onDoubleClick, showKey, size 
 }
 
 /* --------------------- Main HUD --------------------- */
-export default function HUD({ gameMode, selectedBlock, selectedTool, toolInventory, inventory, survivalStats, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange }: HUDProps) {
+export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange }: HUDProps) {
   const updateSettings = (patch: Partial<GameSettings>) => onSettingsChange(clampSettings({ ...settings, ...patch }));
   const [craftMode, setCraftMode] = useState<2 | 3>(2);
   const [craftGrid, setCraftGrid] = useState<(BlockID | null)[]>([null, null, null, null]);
@@ -213,15 +213,6 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
 
   return (
     <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`} aria-label="EAOIN gameplay HUD">
-      {/* Survival panel */}
-      <div className="survival-panel">
-        <div className="stat-row"><span>Mode</span><strong>{gameMode === 'creative' ? '✏️ Creative' : gameMode === 'survival' ? '⚔ Survival' : gameMode}</strong></div>
-        <div className="stat-row"><span>❤️ HP</span><meter min={0} max={100} value={survivalStats.health} /></div>
-        <div className="stat-row"><span>🍗 Food</span><meter min={0} max={100} value={survivalStats.food} /></div>
-        <div className="stat-row"><span>⚡ Stm</span><meter min={0} max={100} value={survivalStats.stamina} /></div>
-        <div className="stat-row"><span>🌍 Dim</span><strong style={{ fontSize: 9 }}>{runtimeStatus.dimensionName}</strong></div>
-      </div>
-
       {systemsVisible && (
         <div className="systems-panel">
           <h3>Runtime [U]</h3>
@@ -236,7 +227,7 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
         </div>
       )}
 
-      {settings.showObjectives && objectivesVisible && (
+      {false && settings.showObjectives && objectivesVisible && (
         <div className="objectives-panel">
           <h3>Objectives [O]</h3>
           {objectives.slice(0, 6).map((o) => (
@@ -247,40 +238,6 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
           ))}
         </div>
       )}
-
-      {/* Toolbelt */}
-      <div className="toolbelt">
-        {TOOLBELT.map((toolId, index) => {
-          const unlocked = isToolUnlocked(toolInventory, toolId);
-          return (
-            <div key={toolId} className={`tool-slot ${selectedTool === toolId ? 'selected' : ''} ${unlocked ? '' : 'locked'}`}>
-              <span className="slot-key">{index === 0 ? 'Q' : `Q+${index}`}</span>
-              <span className="item-label">{unlocked ? getTool(toolId).name : '🔒'}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Hotbar */}
-      <div className="hotbar">
-        {HOTBAR_BLOCKS.map((blockId, index) => {
-          const count = getStackCount(inventory, blockId);
-          return (
-            <div key={blockId} className={`slot ${selectedBlock === blockId ? 'selected' : ''} ${count === 0 ? 'empty' : ''}`} title={getBlock(blockId).name}>
-              <SlotKey k={index + 1} />
-              <div style={{ marginTop: 8 }}><BlockLogo id={blockId} size={26} /></div>
-              <span className="item-label" style={{ fontSize: 7 }}>{getBlock(blockId).name.slice(0, 8)}</span>
-              <StackCount count={count} />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Status bar */}
-      <div className="status-bar">
-        <span>WASD move • SPACE jump • F fly • Left click mine • Right place • T chat</span>
-        <span>Shaders [F6] • Mods [F7] • Dims [F8] • Bosses [F9] • Quests [F10] • Civs [F11] • Space [F12]</span>
-      </div>
 
       {/* ===================== INVENTORY ===================== */}
       {inventoryOpen && (
@@ -658,9 +615,6 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
           <label className="setting-row"><span>Reduced motion</span><input type="checkbox" checked={settings.reducedMotion} onChange={(e) => updateSettings({ reducedMotion: e.target.checked })} /></label>
         </div>
       )}
-
-      {/* Marketplace at bottom */}
-      <div className="marketplace-bar"><h3>🛒 Marketplace</h3><p>Packs: Black Hole, Space Exploration, Skin Packs • Upload your own mod packs, worlds, skins, texture packs</p></div>
 
       {/* Biome ambience */}
       <audio src="/assets/ambience/forest.mp3" loop />
