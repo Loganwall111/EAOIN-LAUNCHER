@@ -99,9 +99,20 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [shirtColor, setShirtColor] = useState('#2467c7');
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
   const [mouseParallax, setMouseParallax] = useState({ x: 0, y: 0 });
-  const categories = ['Worlds', 'Skins', 'Shaders', 'Texture Packs', 'DLC', 'Mod Packs', 'Music', 'Content'];
+  const categories = ['All', 'World', 'Skin', 'Shader', 'Systems', 'Texture', 'DLC', 'Modpack', 'Music'];
   const [catFilter, setCatFilter] = useState('All');
-  const filteredPacks = marketplace.getPacks().filter(p => catFilter === 'All' || p.category === catFilter.toLowerCase());
+  const [marketRevision, setMarketRevision] = useState(0);
+  const marketplace = useMemo(() => new MarketplaceRuntime(), []);
+  const marketStatus = useMemo(() => {
+    void marketRevision;
+    return marketplace.getStatus();
+  }, [marketplace, marketRevision]);
+  const filteredPacks = useMemo(() => {
+    void marketRevision;
+    return marketplace
+      .getPacks()
+      .filter((pack) => catFilter === 'All' || pack.category === catFilter.toLowerCase());
+  }, [marketplace, marketRevision, catFilter]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // World selection state
@@ -373,7 +384,30 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                 </div>
               )}
               {marketOpen && (
-                <div className="menu-settings-card pro marketplace-front"><strong>🛒 Marketplace — Fixed</strong><div className="marketplace-list">{marketplace.getPacks().map(pack => <div key={pack.id} className="market-pack"><strong>{pack.name}</strong><span>{pack.creator} • {pack.category} • {pack.priceCoins} coins • {pack.downloads} dl</span><em>{pack.published ? 'Published ✅' : 'Draft'}</em></div>)}</div><div className="market-stats"><span>Packs: {marketplace.getStatus().packs}</span><span>Published: {marketplace.getStatus().publishedPacks}</span><span>Coins: {marketplace.getStatus().grossCoins}</span></div><div className="market-actions"><button onClick={() => { marketplace.publishDraft('New Adventure Map'); }} className="btn-secondary mini">Create Draft</button><button onClick={() => { marketplace.approveAll(); }} className="btn-primary mini">Approve All</button></div><button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button></div>
+                <div className="menu-settings-card pro marketplace-front">
+                  <strong>🛒 Marketplace</strong>
+                  <div className="market-categories">
+                    {categories.map(cat => (
+                      <button key={cat} className={`btn-secondary mini ${catFilter === cat ? 'selected' : ''}`} onClick={() => setCatFilter(cat)}>{cat}</button>
+                    ))}
+                  </div>
+                  <div className="marketplace-list">
+                    {filteredPacks.length === 0 && <div className="market-pack"><em>No packs in this category yet</em></div>}
+                    {filteredPacks.map(pack => (
+                      <div key={pack.id} className="market-pack">
+                        <strong>{pack.name}</strong>
+                        <span>{pack.creator} • {pack.category} • {pack.priceCoins} coins • {pack.downloads} dl</span>
+                        <em>{pack.published ? 'Published ✅' : 'Draft'}</em>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="market-stats"><span>Packs: {marketStatus.packs}</span><span>Published: {marketStatus.publishedPacks}</span><span>Coins: {marketStatus.grossCoins}</span></div>
+                  <div className="market-actions">
+                    <button onClick={() => { marketplace.publishDraft('New Adventure Map'); setMarketRevision(v => v + 1); }} className="btn-secondary mini">Create Draft</button>
+                    <button onClick={() => { marketplace.approveAll(); setMarketRevision(v => v + 1); }} className="btn-primary mini">Approve All</button>
+                  </div>
+                  <button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button>
+                </div>
               )}
               {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
               {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
