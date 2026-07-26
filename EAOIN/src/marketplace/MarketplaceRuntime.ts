@@ -58,3 +58,4 @@ export class MarketplaceRuntime {
     };
   }
 }
+export const MARKET_CATEGORIES = ['world', 'skin', 'shader', 'systems', 'texture', 'dlc', 'modpack', 'music'];

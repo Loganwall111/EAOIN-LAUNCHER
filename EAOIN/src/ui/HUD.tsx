@@ -212,7 +212,7 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
   const pagedCreative = creativeItems.slice(creativePage * CREATIVE_PER_PAGE, (creativePage + 1) * CREATIVE_PER_PAGE);
 
   return (
-    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`}>
+    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`} style={{ background: '#0a0a12' }}>
       {/* Survival panel */}
       <div className="survival-panel">
         <div className="stat-row"><span>Mode</span><strong>{gameMode === 'creative' ? '✏️ Creative' : gameMode === 'survival' ? '⚔ Survival' : gameMode}</strong></div>
@@ -658,6 +658,13 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
           <label className="setting-row"><span>Reduced motion</span><input type="checkbox" checked={settings.reducedMotion} onChange={(e) => updateSettings({ reducedMotion: e.target.checked })} /></label>
         </div>
       )}
+
+      {/* Marketplace at bottom */}
+      <div className="marketplace-bar"><h3>🛒 Marketplace</h3><p>Packs: Black Hole, Space Exploration, Skin Packs • Upload your own mod packs, worlds, skins, texture packs</p></div>
+
+      {/* Biome ambience */}
+      <audio src="/assets/ambience/forest.mp3" loop />
+      <audio src="/assets/ambience/nether.mp3" loop />
 
       {/* ===================== MULTIPLAYER ===================== */}
       <div className="hud-buttons">
