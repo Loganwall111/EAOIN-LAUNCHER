@@ -26,6 +26,14 @@ import { configureSceneLighting, SceneLightingHandles } from '../rendering/Scene
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
 import { GameSettings, qualityRenderDistance, clampSettings } from '../settings/GameSettings';
 import { TerrainGenerator } from '../world/TerrainGenerator';
+import AdvancedTerrainGenerator, { FLOATING_ISLANDS_CONFIG } from '../world/AdvancedTerrainGenerator';
+import { FloatingIslandsGenerator } from '../world/FloatingIslands';
+import { AdvancedPhysicsRuntime } from '../physics/AdvancedPhysics';
+import { DynamicSky, DEFAULT_SKY } from '../sky/DynamicSky';
+import { PortalSystem } from '../portals/PortalSystem';
+import { RealityRiftSystem } from '../world/RealityRifts';
+import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
+import { CinematicLighting, DEFAULT_CINEMATIC } from '../rendering/CinematicLighting';
 import { getWorldLayout } from '../world/WorldDistribution';
 import { RELEASE_NAME, GAME_VERSION } from '../version';
 import { WorldSaveManager } from '../world/WorldSave';
@@ -105,10 +113,22 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
       const saveManager = new WorldSaveManager(seed);
       const savedEdits = saveManager.load();
-      const terrain = new TerrainGenerator(seed, savedEdits);
+      // 1.0 advanced world generation. Falls back to legacy if the seed asks.
+      const useAdvancedWorld = !/classic|legacy/i.test(seed);
+      const isSkyWorld = /floating[-_ ]?islands|skylands|amplified/i.test(seed);
+      const advancedTerrain: AdvancedTerrainGenerator | null = useAdvancedWorld
+        ? new AdvancedTerrainGenerator({ ...(isSkyWorld ? FLOATING_ISLANDS_CONFIG : {}), seed })
+        : null;
+      const terrain: TerrainGenerator = useAdvancedWorld
+        ? (advancedTerrain as unknown as TerrainGenerator)
+        : new TerrainGenerator(seed, savedEdits);
+      const floatingIslands: FloatingIslandsGenerator | null = isSkyWorld ? new FloatingIslandsGenerator(seed) : null;
+      void floatingIslands; // reserved for future floating-island content injection
       const spawn = terrain.getSpawnPoint();
       const layout = getWorldLayout(seed, spawn);
-      setSaveStatus(savedEdits.length > 0 ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.rocket.z))}m • Clouds visible • F fly` : `Regular Minecraft-like world • clouds visible • F fly • 20min day`);
+      setSaveStatus(savedEdits.length > 0
+        ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.settlement.z))}m • 1.0 advanced world`
+        : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
 
       const camera = new UniversalCamera('player_camera', new Vector3(spawn.x, spawn.y, spawn.z), scene);
       camera.attachControl(canvas, true);
@@ -187,6 +207,28 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       }
       scene.environmentIntensity = 0.72;
       dimensionRuntime.applyCurrent();
+      // 1.0 — wire in the new cinematic lighting, dynamic sky, portals, rifts, physics, command blocks.
+      const cinematicLighting = new CinematicLighting(scene, DEFAULT_CINEMATIC);
+      if (optionalPostEffectsEnabled) cinematicLighting.buildPipeline();
+      const dynamicSky = new DynamicSky(scene, DEFAULT_SKY);
+      dynamicSky.attach();
+      const portalSystem = new PortalSystem(scene);
+      // spawn the "home" portal near spawn
+      const currentDim = dimensionRuntime.getState();
+      portalSystem.spawnForDimension(currentDim.id as RuntimeDimensionID, new Vector3(spawn.x - 4, spawn.y - 1, spawn.z - 4));
+      // spawn a couple of "destination" portals around the spawn for atmosphere
+      portalSystem.spawnForDimension('nether', new Vector3(spawn.x + 18, spawn.y - 1, spawn.z + 12));
+      portalSystem.spawnForDimension('crystal_realm', new Vector3(spawn.x - 22, spawn.y - 1, spawn.z + 18));
+      const realityRifts = new RealityRiftSystem(scene);
+      const physics = new AdvancedPhysicsRuntime();
+      physics.attach(scene);
+      const commandBlockSystem = new CommandBlockSystem();
+      commandBlockSystem.onLog = (m) => showActionMessage?.(`[script] ${m}`);
+      // Place a starter command block at the spawn for immediate scripting demo.
+      commandBlockSystem.placeBlock(spawn.x + 5, spawn.y, spawn.z, 'impulse', 'say Welcome to EAOIN 1.0 — type /help in chat', false, true);
+      commandBlockSystem.placeBlock(spawn.x + 6, spawn.y, spawn.z, 'chain', 'give @p 1 64', false, true);
+      commandBlockSystem.placeBlock(spawn.x + 7, spawn.y, spawn.z, 'chain', 'give @p 22 1', false, true);
+      commandBlockSystem.placeBlock(spawn.x + 8, spawn.y, spawn.z, 'repeating', 'time set day', false, true);
       const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
 
       // cracking overlay mesh — official block cracking like Minecraft
@@ -318,6 +360,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         cloudRuntime.update(deltaSeconds);
         nextGenRuntime.update(deltaSeconds, camera.position, settingsRef.current);
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
+        // 1.0 — dynamic sky drives scene color/fog/ambient per frame.
+        dynamicSky.update(deltaSeconds, camera.position);
+        cinematicLighting.setTimeOfDay(timeState.timeOfDay);
+        // 1.0 — wind from sky drives the advanced physics simulations.
+        physics.setWind(new Vector3(0.4 + 0.6 * Math.sin(dynamicSky.time * 0.1), 0, 0.3 + 0.4 * Math.cos(dynamicSky.time * 0.13)));
+        physics.update(deltaSeconds);
+        // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
+        portalSystem.update(deltaSeconds, camera.position);
+        realityRifts.update(deltaSeconds, camera.position, camera.position);
+        // 1.0 — tick command-block system (repeating/impulse/chain).
+        commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
         creatureManager.update(camera.position, deltaSeconds);
         const collectedDrops = itemDrops.update(camera.position, deltaSeconds);
@@ -409,7 +462,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           publishRenderStats();
         }
         positionFrame += 1;
-        if (positionFrame % 8 === 0) { setWorldTime(timeState); setPosition({ x: Number(camera.position.x.toFixed(1)), y: Number(camera.position.y.toFixed(1)), z: Number(camera.position.z.toFixed(1)) }); }
+        if (positionFrame % 8 === 0) {
+          // Sync the in-world clock with the dynamic sky.
+          const synced: WorldTimeState = { ...timeState, timeOfDay: dynamicSky.config.timeOfDay };
+          worldTimeRef.current = synced;
+          setWorldTime(synced);
+          setPosition({ x: Number(camera.position.x.toFixed(1)), y: Number(camera.position.y.toFixed(1)), z: Number(camera.position.z.toFixed(1)) });
+        }
         lastCameraPosition = camera.position.clone();
       });
 
@@ -533,7 +592,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
-        itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     })();
     return () => { disposed = true; cleanupScene?.(); };
@@ -602,7 +661,7 @@ function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeO
 }
 function toBlockCoordinate(point: Vector3): BlockCoordinate { return { x: Math.floor(point.x), y: Math.floor(point.y), z: Math.floor(point.z) }; }
 function toChunkCoordinate(worldX: number, worldZ: number): { cx: number; cz: number } { return { cx: Math.floor(worldX / 16), cz: Math.floor(worldZ / 16) }; }
-function hasNearbyBlock(terrain: TerrainGenerator, position: Vector3, blockId: BlockID, radius: number): boolean {
+function hasNearbyBlock(terrain: { getBlockAt(x: number, y: number, z: number): BlockID }, position: Vector3, blockId: BlockID, radius: number): boolean {
   const minX = Math.floor(position.x - radius); const maxX = Math.floor(position.x + radius); const minZ = Math.floor(position.z - radius); const maxZ = Math.floor(position.z + radius); const minY = Math.max(0, Math.floor(position.y - radius)); const maxY = Math.min(127, Math.floor(position.y + radius));
   for (let x = minX; x <= maxX; x++) for (let z = minZ; z <= maxZ; z++) for (let y = minY; y <= maxY; y++) if (terrain.getBlockAt(x, y, z) === blockId) return true;
   return false;
