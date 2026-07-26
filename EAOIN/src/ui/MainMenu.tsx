@@ -10,7 +10,7 @@ interface MainMenuProps {
   currentSeed: string;
 }
 
-type MenuPhase = 'BOOT' | 'STUDIO_INTRO' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
+type MenuPhase = 'BOOT' | 'STUDIO_INTRO' | 'ONBOARDING' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
 
 interface WorldEntry {
   id: string;
@@ -133,7 +133,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   // Cinematic studio ident: an intentional AAA-style opening, not a loading screen.
   useEffect(() => {
     if (phase !== 'STUDIO_INTRO') return;
-    const id = window.setTimeout(() => setPhase('MAIN'), 2800);
+    const id = window.setTimeout(() => setPhase('ONBOARDING'), 2800);
     return () => window.clearTimeout(id);
   }, [phase]);
 
@@ -212,6 +212,34 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
         <div className="studio-name">ONEBLOCKAWAY</div>
         <div className="studio-label">STUDIOS</div>
         <div className="studio-subline">PRESENTS</div>
+      </div>
+    );
+  }
+
+  // ===== FIRST-ENTRY ONBOARDING =====
+  if (phase === 'ONBOARDING') {
+    return (
+      <div className="first-entry-screen">
+        <button className="first-entry-close" aria-label="Back to main menu" onClick={() => setPhase('MAIN')}>×</button>
+        <div className="first-entry-content">
+          <div className="tutorial-card">
+            <span className="eyebrow">WELCOME TO EAOIN</span>
+            <h1>Learn the world before you enter it.</h1>
+            <p>Gather, craft, build, explore, and shape a world that belongs to you.</p>
+            <div className="tutorial-steps">
+              <div><b>WASD</b><span>Move</span></div><div><b>SPACE</b><span>Jump</span></div><div><b>LEFT CLICK</b><span>Mine</span></div><div><b>RIGHT CLICK</b><span>Place blocks</span></div><div><b>E</b><span>Inventory</span></div><div><b>T</b><span>Chat</span></div>
+            </div>
+            <p className="tutorial-note">Choose your look, then press Play to create your first world. You can revisit everything from the main menu.</p>
+            <button className="btn-primary first-entry-play" onClick={() => setPhase('MAIN')}>PLAY & CREATE YOUR FIRST WORLD →</button>
+          </div>
+          <div className="first-entry-creator">
+            <span className="eyebrow">YOUR CHARACTER</span><h2>Make it yours</h2>
+            <div className="onboarding-avatar" style={{ background: shirtColor, borderColor: skinTone }}><div style={{ background: skinTone }} /></div>
+            <label>Skin tone <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label>
+            <label>Outfit color <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label>
+            <small>Character Creator is available again from the main menu.</small>
+          </div>
+        </div>
       </div>
     );
   }
