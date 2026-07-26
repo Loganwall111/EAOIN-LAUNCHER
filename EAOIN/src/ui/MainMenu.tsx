@@ -25,6 +25,59 @@ interface WorldEntry {
   mods: boolean;
 }
 
+// ===== Enhanced Marketplace Types =====
+interface MarketplaceCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+}
+
+interface MarketplaceItem {
+  id: string;
+  name: string;
+  creator: string;
+  category: string;
+  priceCoins: number;
+  downloads: number;
+  rating: number;
+  image: string;
+  tags: string[];
+}
+
+const MARKETPLACE_CATEGORIES: MarketplaceCategory[] = [
+  { id: 'worlds', name: 'Worlds', icon: '🌍', color: '#6cc24a' },
+  { id: 'skins', name: 'Skin Packs', icon: '👤', color: '#5dd6ff' },
+  { id: 'textures', name: 'Texture Packs', icon: '🎨', color: '#a879ff' },
+  { id: 'shaders', name: 'Shaders', icon: '✨', color: '#ffd166' },
+  { id: 'mods', name: 'Mods', icon: '🧩', color: '#ff7ac1' },
+  { id: 'dlc', name: 'DLC', icon: '📦', color: '#ff6b6b' },
+];
+
+const MARKETPLACE_ITEMS: MarketplaceItem[] = [
+  // Worlds
+  { id: 'black-hole-singularity', name: 'Black Hole Singularity', creator: 'EAOIN Labs', category: 'worlds', priceCoins: 990, downloads: 1240, rating: 4.8, image: '🌑', tags: ['space', 'adventure'] },
+  { id: 'space-exploration', name: 'Space Exploration', creator: 'EAOIN Labs', category: 'worlds', priceCoins: 850, downloads: 980, rating: 4.6, image: '🚀', tags: ['space', 'exploration'] },
+  { id: 'floating-islands', name: 'Floating Islands', creator: 'Community', category: 'worlds', priceCoins: 0, downloads: 5420, rating: 4.9, image: '🏝️', tags: ['nature', 'building'] },
+  { id: 'medieval-kingdom', name: 'Medieval Kingdom', creator: 'Community', category: 'worlds', priceCoins: 450, downloads: 2100, rating: 4.7, image: '🏰', tags: ['medieval', 'quest'] },
+  // Skins
+  { id: 'skin-character-creator', name: 'Skin Packs + Creator', creator: 'EAOIN Labs', category: 'skins', priceCoins: 450, downloads: 2100, rating: 4.5, image: '👨‍👩‍👧', tags: ['character', 'customization'] },
+  { id: 'sci-fi-packs', name: 'Sci-Fi Character Pack', creator: 'Community', category: 'skins', priceCoins: 300, downloads: 890, rating: 4.4, image: '🧑‍🚀', tags: ['sci-fi', 'space'] },
+  { id: 'medieval-skins', name: 'Medieval Skins Pack', creator: 'Community', category: 'skins', priceCoins: 200, downloads: 1200, rating: 4.3, image: '⚔️', tags: ['medieval', 'fantasy'] },
+  // Textures
+  { id: 'hd-textures', name: 'HD Texture Pack', creator: 'Community', category: 'textures', priceCoins: 350, downloads: 3200, rating: 4.6, image: '🖼️', tags: ['hd', 'graphics'] },
+  { id: 'pixel-art-textures', name: 'Pixel Art Pack', creator: 'Community', category: 'textures', priceCoins: 0, downloads: 4800, rating: 4.8, image: '📷', tags: ['retro', 'pixel'] },
+  // Shaders
+  { id: 'rtx-shaders', name: 'RTX Ray Tracing', creator: 'EAOIN Labs', category: 'shaders', priceCoins: 750, downloads: 1500, rating: 4.9, image: '💎', tags: ['rtx', 'raytracing'] },
+  { id: 'cinematic-shaders', name: 'Cinematic Shader Pack', creator: 'Community', category: 'shaders', priceCoins: 400, downloads: 2200, rating: 4.7, image: '🎬', tags: ['cinematic', 'movie'] },
+  // Mods
+  { id: 'twilight-forest-mods', name: 'Twilight Forest', creator: 'EAOIN Labs', category: 'mods', priceCoins: 500, downloads: 890, rating: 4.8, image: '🌲', tags: ['adventure', 'biome'] },
+  { id: 'galacticraft-mods', name: 'Galacticraft', creator: 'EAOIN Labs', category: 'mods', priceCoins: 600, downloads: 760, rating: 4.6, image: '🪐', tags: ['space', 'travel'] },
+  // DLC
+  { id: 'creature-dlc', name: 'Creature Collection DLC', creator: 'EAOIN Labs', category: 'dlc', priceCoins: 400, downloads: 540, rating: 4.5, image: '🐉', tags: ['creatures', 'mobs'] },
+  { id: 'plant-dlc', name: 'Plant Life DLC', creator: 'EAOIN Labs', category: 'dlc', priceCoins: 250, downloads: 680, rating: 4.4, image: '🌺', tags: ['plants', 'nature'] },
+];
+
 const SPLASHES = [
   'Now with 26m clear spawn!', 'Settlement 58m away!', 'Rocket 110m in clearing!', 'SPACE to jump — fixed!',
   'Ray traced shadows!', 'SSAO + Bloom + Reflections!', 'O objectives U systems!', 'De-cluttered world grid!',
@@ -102,6 +155,12 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const marketplace = useMemo(() => new MarketplaceRuntime(), []);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // New: Marketplace bottom bar state
+  const [marketCategory, setMarketCategory] = useState<string>('worlds');
+  const [marketSearch, setMarketSearch] = useState('');
+  const [marketTab, setMarketTab] = useState<'browse' | 'create' | 'my-packs'>('browse');
+  const [selectedPack, setSelectedPack] = useState<MarketplaceItem | null>(null);
+
   // World selection state
   const [worlds, setWorlds] = useState<WorldEntry[]>(() => loadWorlds(currentSeed));
   const [selectedWorldId, setSelectedWorldId] = useState<string>('world_1');
@@ -113,29 +172,51 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   useEffect(() => saveWorlds(worlds), [worlds]);
   useEffect(() => { if (mode === 'survival' && creatorOpen) setCreatorOpen(false); }, [mode, creatorOpen]);
 
-  // Boot loading
+  // Boot loading - with safety fallback
   useEffect(() => {
     if (phase !== 'BOOT') return;
     let p = 0;
+    let mounted = true;
     const id = window.setInterval(() => {
+      if (!mounted) return;
       p += Math.random() * 14 + 5;
-      if (p >= 100) { p = 100; setBootProgress(100); window.setTimeout(() => setPhase('SPLASH_PLAY'), 350); window.clearInterval(id); }
+      if (p >= 100) { 
+        p = 100; 
+        setBootProgress(100); 
+        if (mounted) {
+          window.setTimeout(() => {
+            if (mounted) setPhase('SPLASH_PLAY');
+          }, 350);
+        }
+        window.clearInterval(id); 
+      }
       else setBootProgress(p);
     }, 90);
-    return () => window.clearInterval(id);
+    return () => { mounted = false; window.clearInterval(id); };
   }, [phase]);
 
   // Post-play loading
   useEffect(() => {
     if (phase !== 'POST_PLAY_LOADING') return;
     let p = 0;
-    const tipId = window.setInterval(() => setTipIndex(i => (i + 1) % POST_PLAY_TIPS.length), 260);
+    let mounted = true;
+    const tipId = window.setInterval(() => { if (mounted) setTipIndex(i => (i + 1) % POST_PLAY_TIPS.length); }, 260);
     const id = window.setInterval(() => {
+      if (!mounted) return;
       p += Math.random() * 9 + 4;
-      if (p >= 100) { setPostProgress(100); window.clearInterval(id); window.clearInterval(tipId); window.setTimeout(() => setPhase('MAIN'), 420); }
+      if (p >= 100) { 
+        setPostProgress(100); 
+        window.clearInterval(id); 
+        window.clearInterval(tipId); 
+        if (mounted) {
+          window.setTimeout(() => {
+            if (mounted) setPhase('MAIN');
+          }, 420);
+        }
+      }
       else setPostProgress(p);
     }, 85);
-    return () => { window.clearInterval(id); window.clearInterval(tipId); };
+    return () => { mounted = false; window.clearInterval(id); window.clearInterval(tipId); };
   }, [phase]);
 
   // Parallax
@@ -174,6 +255,18 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const handleDeleteWorld = (id: string) => {
     setWorlds(w => w.filter(x => x.id !== id));
   };
+
+  // Filter marketplace items
+  const filteredMarketItems = useMemo(() => {
+    return MARKETPLACE_ITEMS.filter(item => {
+      const matchesCategory = item.category === marketCategory;
+      const matchesSearch = marketSearch === '' || 
+        item.name.toLowerCase().includes(marketSearch.toLowerCase()) ||
+        item.creator.toLowerCase().includes(marketSearch.toLowerCase()) ||
+        item.tags.some(tag => tag.toLowerCase().includes(marketSearch.toLowerCase()));
+      return matchesCategory && matchesSearch;
+    });
+  }, [marketCategory, marketSearch]);
 
   // ===== BOOT =====
   if (phase === 'BOOT') {
@@ -305,7 +398,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
     if (!editWorld) return null;
     return (
       <div className="main-menu create-world-phase">
-        <div className="mc-skybox" style={{ background: MODE_BACKGROUNDS[editWorld.mode]?.gradient }} />
+        <div className="mc-skybox" style={{ background: MODE_BACKGROUNDS[editWorld.mode].gradient }} />
         <div className="create-world-container">
           <h2>✎ Edit World — {editWorld.name}</h2>
           <label>World Name <input value={editWorld.name} onChange={e => setEditWorld({ ...editWorld, name: e.target.value })} /></label>
@@ -350,9 +443,9 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
               <button onClick={() => beginWorld(seed, mode)} className="btn-primary minecraft-btn big"><span>Play {GAME_MODES.find(e => e.id === mode)?.label}</span><small>{seed ? `Seed ${seed.slice(0, 18)}` : 'Random'} • Spawn clear 26m • Clouds moving • Fog 100-1000</small></button>
               <button onClick={() => beginWorld(undefined, 'experimental')} className="btn-secondary minecraft-btn">Quick Experimental — Ray Traced Shadows + Clouds</button>
               <div className="quick-row">
-                <button className="menu-settings-link mc-link" onClick={() => setSettingsOpen(v => !v)}>⚙️ Settings (front-page)</button>
-                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace (fixed)</button>
-                {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Family / Character Creator</button>}
+                <button className="menu-settings-link mc-link" onClick={() => setSettingsOpen(v => !v)}>⚙️ Settings</button>
+                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace</button>
+                {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Character</button>}
               </div>
             </div>
             <div className="right-col">
@@ -374,12 +467,199 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                 <div className="menu-settings-card pro marketplace-front"><strong>🛒 Marketplace — Fixed</strong><div className="marketplace-list">{marketplace.getPacks().map(pack => <div key={pack.id} className="market-pack"><strong>{pack.name}</strong><span>{pack.creator} • {pack.category} • {pack.priceCoins} coins • {pack.downloads} dl</span><em>{pack.published ? 'Published ✅' : 'Draft'}</em></div>)}</div><div className="market-stats"><span>Packs: {marketplace.getStatus().packs}</span><span>Published: {marketplace.getStatus().publishedPacks}</span><span>Coins: {marketplace.getStatus().grossCoins}</span></div><div className="market-actions"><button onClick={() => { marketplace.publishDraft('New Adventure Map'); }} className="btn-secondary mini">Create Draft</button><button onClick={() => { marketplace.approveAll(); }} className="btn-primary mini">Approve All</button></div><button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button></div>
               )}
               {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
-              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
+              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What's new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
             </div>
           </div>
           <div className="menu-footer pro"><p>3.2 • Clouds visible • 16 chunks • Regular Minecraft-like worlds by default • Floating Islands preset seed • F fly button • 20min day • Inventory logos • Hand punch + cracking • Fog 100-1000 • T chat /day /time • World list centered</p></div>
         </div>
       </div>
+      
+      {/* ===== NEW: ENHANCED MARKETPLACE BAR AT BOTTOM ===== */}
+      <div className="marketplace-bottom-bar">
+        <div className="market-bar-header">
+          <h3>🛒 EAOIN Marketplace</h3>
+          <div className="market-tabs">
+            <button className={`market-tab ${marketTab === 'browse' ? 'active' : ''}`} onClick={() => setMarketTab('browse')}>
+              📦 Browse Packs
+            </button>
+            <button className={`market-tab ${marketTab === 'create' ? 'active' : ''}`} onClick={() => setMarketTab('create')}>
+              ✏️ Create Pack
+            </button>
+            <button className={`market-tab ${marketTab === 'my-packs' ? 'active' : ''}`} onClick={() => setMarketTab('my-packs')}>
+              📁 My Packs
+            </button>
+          </div>
+          <input 
+            type="text" 
+            className="market-search" 
+            placeholder="🔍 Search packs, creators, tags..." 
+            value={marketSearch}
+            onChange={e => setMarketSearch(e.target.value)}
+          />
+        </div>
+        
+        <div className="market-bar-content">
+          {marketTab === 'browse' && (
+            <>
+              <div className="market-categories">
+                {MARKETPLACE_CATEGORIES.map(cat => (
+                  <button 
+                    key={cat.id} 
+                    className={`market-cat-btn ${marketCategory === cat.id ? 'active' : ''}`}
+                    style={{ '--cat-color': cat.color } as React.CSSProperties}
+                    onClick={() => setMarketCategory(cat.id)}
+                  >
+                    <span className="cat-icon">{cat.icon}</span>
+                    <span className="cat-name">{cat.name}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="market-items-grid">
+                {filteredMarketItems.length > 0 ? (
+                  filteredMarketItems.map(item => (
+                    <div key={item.id} className="market-item-card" onClick={() => setSelectedPack(item)}>
+                      <div className="item-image">{item.image}</div>
+                      <div className="item-info">
+                        <strong>{item.name}</strong>
+                        <span className="item-creator">by {item.creator}</span>
+                        <div className="item-rating">{'⭐'.repeat(Math.round(item.rating))} {item.rating}</div>
+                        <div className="item-tags">
+                          {item.tags.slice(0, 2).map(tag => (
+                            <span key={tag} className="item-tag">{tag}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="item-price">
+                        {item.priceCoins === 0 ? (
+                          <span className="price-free">FREE</span>
+                        ) : (
+                          <span className="price-coins">💎 {item.priceCoins}</span>
+                        )}
+                        <span className="downloads">⬇ {item.downloads.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="market-empty">
+                    <p>No packs found. Try a different search or category!</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          
+          {marketTab === 'create' && (
+            <div className="market-create-section">
+              <div className="create-pack-form">
+                <h4>✨ Create Your Own Pack</h4>
+                <div className="form-row">
+                  <label>Pack Name:</label>
+                  <input type="text" placeholder="My Awesome Pack" />
+                </div>
+                <div className="form-row">
+                  <label>Pack Type:</label>
+                  <select>
+                    <option value="">Select type...</option>
+                    {MARKETPLACE_CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label>Description:</label>
+                  <textarea placeholder="Describe your pack..." rows={3}></textarea>
+                </div>
+                <div className="form-row">
+                  <label>Price (0 = Free):</label>
+                  <input type="number" min="0" placeholder="0" />
+                </div>
+                <div className="form-row">
+                  <label>Upload Files:</label>
+                  <button className="upload-btn">📁 Select Files...</button>
+                </div>
+                <div className="create-actions">
+                  <button className="btn-primary">🚀 Publish Pack</button>
+                  <button className="btn-secondary">💾 Save as Draft</button>
+                </div>
+              </div>
+              <div className="modding-preview">
+                <h4>🎨 Modding Capabilities</h4>
+                <ul>
+                  <li>✏️ Create custom skins & character models</li>
+                  <li>🖼️ Design texture packs with custom blocks & items</li>
+                  <li>🌍 Build custom worlds with unique biomes</li>
+                  <li>🧩 Develop mods with JavaScript scripting</li>
+                  <li>✨ Create custom shaders & visual effects</li>
+                  <li>🎵 Add custom music & sound effects</li>
+                  <li>📦 Bundle DLC content with new features</li>
+                </ul>
+                <p className="mod-note">All creations can be shared on the EAOIN Marketplace!</p>
+              </div>
+            </div>
+          )}
+          
+          {marketTab === 'my-packs' && (
+            <div className="market-my-packs">
+              <h4>📁 My Created Packs</h4>
+              <div className="my-packs-list">
+                <div className="my-pack-item">
+                  <span className="pack-icon">📦</span>
+                  <div className="pack-details">
+                    <strong>My Test World</strong>
+                    <span>World • Draft • 0 downloads</span>
+                  </div>
+                  <button className="btn-secondary mini">Edit</button>
+                </div>
+              </div>
+              <div className="my-stats">
+                <div className="stat-box">
+                  <strong>0</strong>
+                  <span>Published Packs</span>
+                </div>
+                <div className="stat-box">
+                  <strong>0</strong>
+                  <span>Total Downloads</span>
+                </div>
+                <div className="stat-box">
+                  <strong>0 💎</strong>
+                  <span>Total Earnings</span>
+                </div>
+              </div>
+              <button className="btn-primary" onClick={() => setMarketTab('create')}>➕ Create New Pack</button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Pack Detail Modal */}
+      {selectedPack && (
+        <div className="pack-detail-modal" onClick={() => setSelectedPack(null)}>
+          <div className="pack-detail-card" onClick={e => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setSelectedPack(null)}>✕</button>
+            <div className="detail-header">
+              <span className="detail-image">{selectedPack.image}</span>
+              <div className="detail-title">
+                <h2>{selectedPack.name}</h2>
+                <p>by {selectedPack.creator}</p>
+                <div className="detail-rating">{'⭐'.repeat(Math.round(selectedPack.rating))} {selectedPack.rating} ({selectedPack.downloads.toLocaleString()} downloads)</div>
+              </div>
+            </div>
+            <div className="detail-tags">
+              {selectedPack.tags.map(tag => (
+                <span key={tag} className="detail-tag">{tag}</span>
+              ))}
+            </div>
+            <div className="detail-actions">
+              {selectedPack.priceCoins === 0 ? (
+                <button className="btn-primary big">⬇️ Download Free</button>
+              ) : (
+                <button className="btn-primary big">💎 Buy for {selectedPack.priceCoins} Coins</button>
+              )}
+              <button className="btn-secondary">❤️ Add to Wishlist</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
