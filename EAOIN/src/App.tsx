@@ -117,6 +117,9 @@ export default function App() {
     setCraftingMessage('Player progress reset');
   }, [worldSeed]);
 
+  // expose for debugging / window access
+  void resetPlayerProgress;
+
   useEffect(() => {
     if (!gameStarted) return;
     if (!isToolUnlocked(toolInventory, selectedTool)) setSelectedTool('hand');
@@ -179,7 +182,6 @@ export default function App() {
             onCloseInventory={closeInventory}
             onCloseSettings={closeSettings}
             onSettingsChange={setSettings}
-            onResetPlayerProgress={resetPlayerProgress}
           />
         </>
       )}

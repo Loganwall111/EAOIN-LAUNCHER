@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
+import { useEffect, useMemo, useState } from 'react';
+import { BlockID, getBlock, ALL_BLOCK_IDS, CATEGORY_ORDER, CATEGORY_LABELS, BlockCategory, BlockDef } from '@shared/blocks/BlockRegistry';
 import { RecipeID, RECIPES, canCraft, recipeCostLabel, recipeOutputLabel } from '../crafting/RecipeBook';
 import { GameMode } from '../modes/GameMode';
 import { ObjectiveStatus } from '../objectives/ObjectiveTracker';
@@ -8,6 +8,16 @@ import { getStackCount, HOTBAR_BLOCKS, InventoryStacks } from '../player/Invento
 import { SurvivalStats } from '../player/SurvivalState';
 import { getTool, isToolUnlocked, TOOLBELT, ToolID, ToolInventory } from '../player/ToolState';
 import { GameSettings, clampSettings } from '../settings/GameSettings';
+import { RELEASE_LABEL, RELEASE_TAGLINE, RELEASE_FEATURES, GAME_VERSION } from '../version';
+import { ALL_SHADERS, ShaderID, ShaderDefinition } from '../rendering/ShaderRegistry';
+import { ModPackRegistry, ModDefinition, ALL_MODS, MOD_CATEGORY_LABELS, MOD_CATEGORIES } from '../modding/ModPackRegistry';
+import { ALL_SERVERS, ServerEntry, DEMO_FRIENDS, DEMO_GUILDS, DEMO_NATIONS } from '../networking/ServerBrowser';
+import { ALL_DIMENSIONS } from '../dimensions/DimensionRuntime';
+import { ALL_BOSSES, BOSS_TIER_LABELS } from '../creatures/BossRegistry';
+import { ALL_QUESTS, QUEST_TYPES, QUEST_TYPE_LABELS } from '../objectives/QuestRegistry';
+import { CIVILIZATIONS, RACE_NAMES, TECH_AGE_LABELS, TECH_AGE_ICONS } from '../civilization/CivilizationTech';
+import { ALL_STAR_SYSTEMS, ALL_PLANETS, ALL_ANOMALIES, GALAXY_LIST, STAR_CLASS_INFO } from '../nextgen/SpaceRegistry';
+import { ALL_BIOMES } from '../world/Biomes';
 
 interface HUDProps {
   gameMode: GameMode; selectedBlock: BlockID; selectedTool: ToolID; toolInventory: ToolInventory;
@@ -15,29 +25,131 @@ interface HUDProps {
   runtimeStatus: RuntimeStatus; objectives: ObjectiveStatus[]; objectivesVisible: boolean; systemsVisible: boolean;
   onToggleObjectives: () => void; onToggleSystems: () => void; craftingMessage: string;
   onCraftRecipe: (recipe: RecipeID) => void; onCloseInventory: () => void; onCloseSettings: () => void;
-  onSettingsChange: (s: GameSettings) => void; onResetPlayerProgress: () => void;
+  onSettingsChange: (s: GameSettings) => void;
 }
 
-const INVENTORY_BLOCKS: BlockID[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
-
-const BLOCK_COLORS: Record<number, string> = {
-  1: '#4f9d36', 2: '#8a5b38', 3: '#7b7f86', 4: '#d8c27a', 5: '#3175d8', 6: '#8b5a2b', 7: '#2f8f38', 8: '#303035', 9: '#77716a', 10: '#876f30', 11: '#587f89', 12: '#20152f', 13: '#3b0d0d', 14: '#5f1b16', 15: '#3b1d63', 16: '#63d7ff', 17: '#9b6b31', 18: '#b28655', 19: '#243b53', 20: '#7c4a21', 21: '#2f1b68', 22: '#d7dde8', 23: '#8e99a8',
-};
-
-function BlockLogo({ id, size = 28 }: { id: BlockID; size?: number }) {
-  const color = BLOCK_COLORS[id] ?? '#555';
-  const name = getBlock(id).name.slice(0, 2).toUpperCase();
-  return <div className="block-logo" style={{ width: size, height: size, background: color, border: '2px solid #000', display: 'grid', placeItems: 'center', font: '800 10px monospace', color: '#fff', textShadow: '1px 1px #000', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)' }}>{name}</div>;
+/* --------------------- Block logo — pixel-art canvas-rendered block icon --------------------- */
+function BlockLogo({ id, size = 28, pixelStyle = 'cube' }: { id: BlockID; size?: number; pixelStyle?: 'cube' | 'flat' | 'isometric' }) {
+  const block = getBlock(id);
+  const base = block.color;
+  const accent = block.accentColor ?? block.color;
+  // Render a proper pixel-art block icon with 3D beveled cube look
+  if (pixelStyle === 'flat') {
+    return (
+      <div className="block-logo flat" style={{ width: size, height: size, background: base, border: '2px solid #000', display: 'grid', placeItems: 'center', color: '#fff', textShadow: '1px 1px #000', font: '800 9px monospace', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)' }}>
+        {block.shortName}
+      </div>
+    );
+  }
+  if (pixelStyle === 'isometric') {
+    return (
+      <div className="block-logo iso" style={{ width: size, height: size, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${base} 0 40%, ${accent} 40% 70%, ${base} 70% 100%)`, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)', opacity: 0.6 }} />
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#fff', font: '800 8px monospace', textShadow: '1px 1px #000', zIndex: 2, paddingTop: size * 0.15 }}>{block.shortName}</div>
+      </div>
+    );
+  }
+  // Default cube with 3D beveled pixel look
+  return (
+    <div className="block-logo cube" style={{ width: size, height: size, position: 'relative', background: '#000' }}>
+      <div style={{ position: 'absolute', inset: '0 0 0 0', background: accent, clipPath: 'polygon(0 0, 60% 0, 100% 40%, 100% 100%, 40% 100%, 0 60%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(40% 0, 100% 0, 100% 40%, 60% 100%, 0 100%, 0 60%)' }} />
+      <div style={{ position: 'absolute', inset: '15% 15% 35% 35%', background: `linear-gradient(135deg, ${base} 0%, ${accent} 100%)`, display: 'grid', placeItems: 'center', color: '#fff', font: '800 8px monospace', textShadow: '1px 1px #000', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)' }}>{block.shortName}</div>
+    </div>
+  );
 }
 
-export default function HUD({ gameMode, selectedBlock, selectedTool, toolInventory, inventory, survivalStats, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onResetPlayerProgress }: HUDProps) {
+function SlotKey({ k }: { k: string | number }) {
+  return <span className="slot-key">{k}</span>;
+}
+
+function StackCount({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return <span className="stack-count">×{count}</span>;
+}
+
+interface SlotProps {
+  id: BlockID;
+  count: number;
+  selected?: boolean;
+  onClick?: () => void;
+  onDoubleClick?: () => void;
+  showKey?: string | number;
+  size?: number;
+  empty?: boolean;
+}
+
+function BlockSlot({ id, count, selected, onClick, onDoubleClick, showKey, size = 28, empty }: SlotProps) {
+  return (
+    <div
+      className={`inv-slot ${selected ? 'selected' : ''} ${empty || count === 0 ? 'empty' : ''}`}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      title={getBlock(id).name}
+    >
+      {showKey !== undefined && <SlotKey k={showKey} />}
+      <BlockLogo id={id} size={size} />
+      <StackCount count={count} />
+    </div>
+  );
+}
+
+/* --------------------- Main HUD --------------------- */
+export default function HUD({ gameMode, selectedBlock, selectedTool, toolInventory, inventory, survivalStats, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange }: HUDProps) {
   const updateSettings = (patch: Partial<GameSettings>) => onSettingsChange(clampSettings({ ...settings, ...patch }));
   const [craftMode, setCraftMode] = useState<2 | 3>(2);
   const [craftGrid, setCraftGrid] = useState<(BlockID | null)[]>([null, null, null, null]);
   const [craftGrid3, setCraftGrid3] = useState<(BlockID | null)[]>(Array(9).fill(null));
 
-  const activeGrid = craftMode === 2 ? craftGrid : craftGrid3;
+  /* ---- creative menu state ---- */
+  const [creativeCategory, setCreativeCategory] = useState<BlockCategory>('building');
+  const [creativeSearch, setCreativeSearch] = useState('');
+  const [creativePage, setCreativePage] = useState(0);
 
+  /* ---- shader menu ---- */
+  const [shaderMenuOpen, setShaderMenuOpen] = useState(false);
+  const [selectedShader, setSelectedShader] = useState<ShaderID>('pbr_plus');
+
+  /* ---- mod menu ---- */
+  const [modMenuOpen, setModMenuOpen] = useState(false);
+  const [modFilter, setModFilter] = useState<ModDefinition['category'] | 'all'>('all');
+  const [modRegistry] = useState(() => new ModPackRegistry());
+
+  /* ---- dimension menu ---- */
+  const [dimensionMenuOpen, setDimensionMenuOpen] = useState(false);
+
+  /* ---- server browser ---- */
+  const [serverMenuOpen, setServerMenuOpen] = useState(false);
+
+  /* ---- friends list ---- */
+  const [friendsOpen, setFriendsOpen] = useState(false);
+
+  /* ---- bosses ---- */
+  const [bossesOpen, setBossesOpen] = useState(false);
+
+  /* ---- quests ---- */
+  const [questsOpen, setQuestsOpen] = useState(false);
+
+  /* ---- civilizations ---- */
+  const [civsOpen, setCivsOpen] = useState(false);
+
+  /* ---- space menu ---- */
+  const [spaceOpen, setSpaceOpen] = useState(false);
+
+  /* ---- biomes menu ---- */
+  const [biomesOpen, setBiomesOpen] = useState(false);
+
+  /* ---- shader settings that actually change visuals ---- */
+  const applyShader = (sh: ShaderDefinition) => {
+    setSelectedShader(sh.id);
+    updateSettings({
+      experimentalShaders: sh.features.bloom,
+      postProcessEnabled: sh.features.bloom || sh.features.ssao || sh.features.ssr,
+    });
+  };
+
+  const activeGrid = craftMode === 2 ? craftGrid : craftGrid3;
   const gridCounts = useMemo(() => {
     const m = new Map<BlockID, number>();
     for (const id of activeGrid) if (id) m.set(id, (m.get(id) ?? 0) + 1);
@@ -45,12 +157,9 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
   }, [activeGrid]);
 
   const matchingRecipe = useMemo(() => {
-    // Find first recipe whose costs are subset of grid counts (simplified crafting above inventory like Minecraft)
     for (const r of RECIPES) {
       let ok = true;
-      for (const c of r.costs) {
-        if ((gridCounts.get(c.blockId) ?? 0) < c.amount) { ok = false; break; }
-      }
+      for (const c of r.costs) if ((gridCounts.get(c.blockId) ?? 0) < c.amount) { ok = false; break; }
       if (ok && r.costs.length > 0) return r;
     }
     return null;
@@ -58,139 +167,720 @@ export default function HUD({ gameMode, selectedBlock, selectedTool, toolInvento
 
   const placeIntoGrid = (blockId: BlockID) => {
     if (craftMode === 2) {
-      const idx = craftGrid.findIndex(v => v === null);
+      const idx = craftGrid.findIndex((v) => v === null);
       if (idx >= 0) { const g = [...craftGrid]; g[idx] = blockId; setCraftGrid(g); }
     } else {
-      const idx = craftGrid3.findIndex(v => v === null);
+      const idx = craftGrid3.findIndex((v) => v === null);
       if (idx >= 0) { const g = [...craftGrid3]; g[idx] = blockId; setCraftGrid3(g); }
     }
   };
-
   const clearGrid = () => { setCraftGrid([null, null, null, null]); setCraftGrid3(Array(9).fill(null)); };
-
   const craftFromGrid = () => {
     if (!matchingRecipe) return;
-    // consume grid
-    const remaining = new Map(gridCounts);
-    for (const c of matchingRecipe.costs) {
-      remaining.set(c.blockId, (remaining.get(c.blockId) ?? 0) - c.amount);
-    }
-    // rebuild grid emptied of consumed? For simplicity clear grid
     clearGrid();
     onCraftRecipe(matchingRecipe.id);
   };
 
+  /* ---- keybindings for the new menus ---- */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'o') onToggleObjectives();
       if (e.key.toLowerCase() === 'u') onToggleSystems();
+      if (e.key === 'F6') { e.preventDefault(); setShaderMenuOpen((v) => !v); setModMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setQuestsOpen(false); setCivsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F7') { e.preventDefault(); setModMenuOpen((v) => !v); setShaderMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setQuestsOpen(false); setCivsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F8') { e.preventDefault(); setDimensionMenuOpen((v) => !v); setShaderMenuOpen(false); setModMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setQuestsOpen(false); setCivsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F9') { e.preventDefault(); setBossesOpen((v) => !v); setShaderMenuOpen(false); setModMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setQuestsOpen(false); setCivsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F10') { e.preventDefault(); setQuestsOpen((v) => !v); setShaderMenuOpen(false); setModMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setCivsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F11') { e.preventDefault(); setCivsOpen((v) => !v); setShaderMenuOpen(false); setModMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setQuestsOpen(false); setSpaceOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
+      if (e.key === 'F12') { e.preventDefault(); setSpaceOpen((v) => !v); setShaderMenuOpen(false); setModMenuOpen(false); setDimensionMenuOpen(false); setServerMenuOpen(false); setBossesOpen(false); setQuestsOpen(false); setCivsOpen(false); setBiomesOpen(false); setFriendsOpen(false); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onToggleObjectives, onToggleSystems]);
 
-  return (
-    <div className="game-hud-overlay">
-      <div className="survival-panel"><div className="stat-row"><span>Mode</span><strong>{gameMode}</strong></div><div className="stat-row"><span>Health</span><meter min={0} max={100} value={survivalStats.health} /></div><div className="stat-row"><span>Food</span><meter min={0} max={100} value={survivalStats.food} /></div><div className="stat-row"><span>Stamina</span><meter min={0} max={100} value={survivalStats.stamina} /></div></div>
+  /* Creative inventory items for the current category */
+  const creativeItems = useMemo(() => {
+    const list = ALL_BLOCK_IDS
+      .map(getBlock)
+      .filter((b) => b.category === creativeCategory);
+    if (!creativeSearch) return list;
+    const q = creativeSearch.toLowerCase();
+    return list.filter((b) => b.name.toLowerCase().includes(q) || b.shortName.toLowerCase().includes(q));
+  }, [creativeCategory, creativeSearch]);
+  const CREATIVE_PER_PAGE = 36;
+  const creativePageCount = Math.max(1, Math.ceil(creativeItems.length / CREATIVE_PER_PAGE));
+  const pagedCreative = creativeItems.slice(creativePage * CREATIVE_PER_PAGE, (creativePage + 1) * CREATIVE_PER_PAGE);
 
-      {systemsVisible && <div className="systems-panel"><h3>Runtime Systems [U]</h3>
-        <div><span>Ver</span><strong>{runtimeStatus.nextGen.version}</strong></div>
-        <div><span>Clouds</span><strong>moving stunning far</strong></div>
-        <div><span>Render</span><strong>{runtimeStatus.nextGen.cityLengthKm}km • 16 chunks</strong></div>
-        <div><span>Fog</span><strong>{settings.fogEnabled ? '100-1000 on' : 'off'} • toggle</strong></div>
-        <div><span>Day/Night</span><strong>20min cycle</strong></div>
-        <div><span>Dimension</span><strong>{runtimeStatus.dimensionName}</strong></div>
-        <div><span>Settlement</span><strong>{runtimeStatus.settlementName}</strong></div>
-        <div><span>Doors</span><strong>{runtimeStatus.doors}/{runtimeStatus.dimensionalDoors}</strong></div>
-        <div><span>Rocket</span><strong>{runtimeStatus.rocketReady ? 'ready' : 'refuel'}</strong></div>
-        <div><span>Moon</span><strong>{runtimeStatus.moonVisits}</strong></div>
-        <div><span>Physics</span><strong>{runtimeStatus.nextGen.advancedPhysics.waveHeight} wave</strong></div>
-        <div><span>Market</span><strong>{runtimeStatus.nextGen.marketplace.publishedPacks}/{runtimeStatus.nextGen.marketplace.packs}</strong></div>
-      </div>}
+  return (
+    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`}>
+      {/* Survival panel */}
+      <div className="survival-panel">
+        <div className="stat-row"><span>Mode</span><strong>{gameMode === 'creative' ? '✏️ Creative' : gameMode === 'survival' ? '⚔ Survival' : gameMode}</strong></div>
+        <div className="stat-row"><span>❤️ HP</span><meter min={0} max={100} value={survivalStats.health} /></div>
+        <div className="stat-row"><span>🍗 Food</span><meter min={0} max={100} value={survivalStats.food} /></div>
+        <div className="stat-row"><span>⚡ Stm</span><meter min={0} max={100} value={survivalStats.stamina} /></div>
+        <div className="stat-row"><span>🌍 Dim</span><strong style={{ fontSize: 9 }}>{runtimeStatus.dimensionName}</strong></div>
+      </div>
+
+      {systemsVisible && (
+        <div className="systems-panel">
+          <h3>Runtime [U]</h3>
+          <div><span>Renderer</span><strong>{runtimeStatus.nextGen?.version ?? '1.0'}</strong></div>
+          <div><span>Clouds</span><strong>moving</strong></div>
+          <div><span>Render</span><strong>16 chunks</strong></div>
+          <div><span>Fog</span><strong>{settings.fogEnabled ? '100-1000' : 'off'}</strong></div>
+          <div><span>Day</span><strong>20 min cycle</strong></div>
+          <div><span>Mods</span><strong>{modRegistry.getTotalEnabled()} loaded</strong></div>
+          <div><span>Shader</span><strong>{ALL_SHADERS.find((s) => s.id === selectedShader)?.name ?? 'PBR+'}</strong></div>
+          <div><span>Settlement</span><strong>{runtimeStatus.settlementName?.slice(0, 14) ?? '?'}</strong></div>
+        </div>
+      )}
 
       {settings.showObjectives && objectivesVisible && (
-        <div className="objectives-panel"><h3>Objectives [O]</h3>{objectives.map(o => <div key={o.id} className={`objective ${o.complete ? 'complete' : ''}`}><span>{o.complete ? '✓' : '•'} {o.label}</span><strong>{o.progress}</strong></div>)}</div>
+        <div className="objectives-panel">
+          <h3>Objectives [O]</h3>
+          {objectives.slice(0, 6).map((o) => (
+            <div key={o.id} className={`objective ${o.complete ? 'complete' : ''}`}>
+              <span>{o.complete ? '✓' : '•'} {o.label}</span>
+              <strong>{o.progress}</strong>
+            </div>
+          ))}
+        </div>
       )}
 
-      <div className="toolbelt">{TOOLBELT.map((toolId, index) => { const unlocked = isToolUnlocked(toolInventory, toolId); return <div key={toolId} className={`tool-slot ${selectedTool === toolId ? 'selected' : ''} ${unlocked ? '' : 'locked'}`}><span className="slot-key">{index === 0 ? 'Q' : `Q+${index}`}</span><span className="item-label">{unlocked ? getTool(toolId).name : 'Locked'}</span></div>; })}</div>
+      {/* Toolbelt */}
+      <div className="toolbelt">
+        {TOOLBELT.map((toolId, index) => {
+          const unlocked = isToolUnlocked(toolInventory, toolId);
+          return (
+            <div key={toolId} className={`tool-slot ${selectedTool === toolId ? 'selected' : ''} ${unlocked ? '' : 'locked'}`}>
+              <span className="slot-key">{index === 0 ? 'Q' : `Q+${index}`}</span>
+              <span className="item-label">{unlocked ? getTool(toolId).name : '🔒'}</span>
+            </div>
+          );
+        })}
+      </div>
 
-      <div className="hotbar">{HOTBAR_BLOCKS.map((blockId, index) => { const count = getStackCount(inventory, blockId); return <div key={blockId} className={`slot ${selectedBlock === blockId ? 'selected' : ''} ${count === 0 ? 'empty' : ''}`}><span className="slot-key">{index + 1}</span><div style={{ marginTop: 12 }}><BlockLogo id={blockId} size={22} /></div><span className="item-label" style={{ fontSize: 8 }}>{getBlock(blockId).name.slice(0, 7)}</span><span className="stack-count">×{count}</span></div>; })}</div>
+      {/* Hotbar */}
+      <div className="hotbar">
+        {HOTBAR_BLOCKS.map((blockId, index) => {
+          const count = getStackCount(inventory, blockId);
+          return (
+            <div key={blockId} className={`slot ${selectedBlock === blockId ? 'selected' : ''} ${count === 0 ? 'empty' : ''}`} title={getBlock(blockId).name}>
+              <SlotKey k={index + 1} />
+              <div style={{ marginTop: 8 }}><BlockLogo id={blockId} size={26} /></div>
+              <span className="item-label" style={{ fontSize: 7 }}>{getBlock(blockId).name.slice(0, 8)}</span>
+              <StackCount count={count} />
+            </div>
+          );
+        })}
+      </div>
 
+      {/* Status bar */}
+      <div className="status-bar">
+        <span>WASD move • SPACE jump • F fly • Left click mine • Right place • T chat</span>
+        <span>Shaders [F6] • Mods [F7] • Dims [F8] • Bosses [F9] • Quests [F10] • Civs [F11] • Space [F12]</span>
+      </div>
+
+      {/* ===================== INVENTORY ===================== */}
       {inventoryOpen && (
         <div className="inventory-panel pro-inv">
-          <div className="inventory-header"><div><h2>Inventory — Block logos • Survival crafting table above • Hand punch when mining tree</h2><p>{craftingMessage} • Cracking overlay 1-10 when destroying • Fog {settings.fogEnabled ? '100-1000 on' : 'off'} • T chat /day /time /summon</p></div><button onClick={onCloseInventory}>Close [E]</button></div>
-
-          <div className="inv-top">
-            <div className="inv-player-area">
-              <h3 style={{ color: '#ffd166', fontSize: 11 }}>Player</h3>
-              <div className="inv-avatar-box"><div style={{ fontSize: 48 }}>🧍</div><small style={{ fontSize: 9, color: '#aaa' }}>Survival • 20min day</small></div>
-              <div style={{ fontSize: 9, color: '#bbb' }}>Hand punches toward tree when mining wood — arm goes forward (see GameCanvas)</div>
+          <div className="inventory-header">
+            <div>
+              <h2>Inventory {gameMode === 'creative' ? '— Creative' : '— Survival'}</h2>
+              <p>Mode: {gameMode} • Version {GAME_VERSION} • {craftingMessage}</p>
             </div>
-            <div className="inv-crafting">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><h3 style={{ color: '#7ef7a0', fontSize: 11 }}>Crafting Table {craftMode}x{craftMode} in inventory</h3><button className="btn-secondary mini" onClick={() => setCraftMode(c => c === 2 ? 3 : 2)}>Toggle {craftMode === 2 ? '3x3 Table' : '2x2'}</button><button className="btn-secondary mini" onClick={clearGrid}>Clear</button></div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <div className={`craft-grid ${craftMode === 2 ? 'c2' : 'c3'}`}>
-                  {activeGrid.map((bid, i) => (
-                    <div key={i} className="craft-slot" onClick={() => {
-                      if (craftMode === 2) { const g = [...craftGrid]; g[i] = null; setCraftGrid(g); } else { const g = [...craftGrid3]; g[i] = null; setCraftGrid3(g); }
-                    }}>{bid ? <BlockLogo id={bid} /> : <span style={{ opacity: 0.25, fontSize: 10 }}>·</span>}</div>
-                  ))}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setBiomesOpen(true)}>🌍 Biomes</button>
+              <button onClick={onCloseInventory}>Close [E]</button>
+            </div>
+          </div>
+
+          {gameMode === 'creative' ? (
+            <CreativeInventory
+              category={creativeCategory}
+              onCategoryChange={setCreativeCategory}
+              search={creativeSearch}
+              onSearchChange={setCreativeSearch}
+              page={creativePage}
+              pageCount={creativePageCount}
+              onPageChange={setCreativePage}
+              items={pagedCreative}
+            />
+          ) : (
+            <SurvivalInventory
+              inventory={inventory}
+              selectedBlock={selectedBlock}
+              craftMode={craftMode}
+              setCraftMode={setCraftMode}
+              activeGrid={activeGrid}
+              matchingRecipe={matchingRecipe}
+              placeIntoGrid={placeIntoGrid}
+              clearGrid={clearGrid}
+              craftFromGrid={craftFromGrid}
+              craftGrid={craftGrid}
+              craftGrid3={craftGrid3}
+              setCraftGrid={setCraftGrid}
+              setCraftGrid3={setCraftGrid3}
+              toolInventory={toolInventory}
+              onCraftRecipe={onCraftRecipe}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ===================== SHADER MENU ===================== */}
+      {shaderMenuOpen && (
+        <div className="menu-panel pro shader-panel">
+          <div className="inventory-header">
+            <div><h2>🎨 Shaders [F6]</h2><p>{ALL_SHADERS.length} official shaders • SSAO, SSR, Bloom, Volumetric, HDR, Ray Traced</p></div>
+            <button onClick={() => setShaderMenuOpen(false)}>Close</button>
+          </div>
+          <div className="shader-grid">
+            {ALL_SHADERS.map((sh) => (
+              <div key={sh.id} className={`shader-card ${selectedShader === sh.id ? 'selected' : ''}`} onClick={() => applyShader(sh)}>
+                <div className="shader-preview" style={{ background: `linear-gradient(135deg, ${sh.tint.r >= 0 ? `rgba(${Math.floor(sh.tint.r * 255)},${Math.floor(sh.tint.g * 255)},${Math.floor(sh.tint.b * 255)},1)` : 'rgba(20,20,20,1)'} 0%, rgba(10,10,10,1) 100%)` }}>
+                  <span style={{ fontSize: 22 }}>🎨</span>
                 </div>
-                <div className="craft-arrow">→</div>
-                <div className="craft-result" onClick={craftFromGrid} title={matchingRecipe ? `Craft ${matchingRecipe.name}` : 'Add blocks to grid to craft'}>
-                  {matchingRecipe ? <><BlockLogo id={matchingRecipe.output.type === 'block' ? matchingRecipe.output.blockId : 6} size={36} /><small style={{ fontSize: 8, color: '#ffd166' }}>{matchingRecipe.name}</small></> : <span style={{ opacity: 0.4, fontSize: 10 }}>Result</span>}
+                <strong>{sh.name}</strong>
+                <span style={{ fontSize: 9, color: '#aaa' }}>by {sh.author}</span>
+                <small style={{ fontSize: 8, color: '#888', minHeight: 24 }}>{sh.description}</small>
+                <div className="shader-features">
+                  {sh.features.bloom && <span className="badge">Bloom</span>}
+                  {sh.features.ssao && <span className="badge">SSAO</span>}
+                  {sh.features.ssr && <span className="badge">SSR</span>}
+                  {sh.features.hdr && <span className="badge">HDR</span>}
+                  {sh.features.rayTraced && <span className="badge">RTX</span>}
+                  {sh.features.volumetricLighting && <span className="badge">Vol.Light</span>}
+                  {sh.features.volumetricClouds && <span className="badge">Vol.Cloud</span>}
+                  {sh.features.atmosphericScattering && <span className="badge">Atmos</span>}
+                  {sh.features.depthOfField && <span className="badge">DoF</span>}
                 </div>
               </div>
-              <small style={{ fontSize: 9, color: '#aaa' }}>Click inventory blocks with logos to place into crafting grid above — actually crafts. Hand punches tree, cracking overlay 1-10 appears on ground when destroying.</small>
-            </div>
+            ))}
           </div>
+        </div>
+      )}
 
-          <h3 style={{ color: '#ffd166', fontSize: 11, margin: '8px 0' }}>Materials — block logos like Minecraft inventory (colored logos)</h3>
-          <div className="inventory-grid-pro">
-            {INVENTORY_BLOCKS.map(blockId => {
-              const count = getStackCount(inventory, blockId);
+      {/* ===================== MODS MENU ===================== */}
+      {modMenuOpen && (
+        <div className="menu-panel pro mod-panel">
+          <div className="inventory-header">
+            <div><h2>🧩 Mods [F7] — {modRegistry.getTotalEnabled()} enabled</h2><p>EAOIN Modding API v3.0 — install any of the {ALL_MODS.length} official packs</p></div>
+            <button onClick={() => setModMenuOpen(false)}>Close</button>
+          </div>
+          <div className="mod-filters">
+            <button className={modFilter === 'all' ? 'active' : ''} onClick={() => setModFilter('all')}>All ({ALL_MODS.length})</button>
+            {MOD_CATEGORIES.map((c) => (
+              <button key={c} className={modFilter === c ? 'active' : ''} onClick={() => setModFilter(c)}>
+                {MOD_CATEGORY_LABELS[c]} ({ALL_MODS.filter((m) => m.category === c).length})
+              </button>
+            ))}
+          </div>
+          <div className="mod-grid">
+            {ALL_MODS.filter((m) => modFilter === 'all' || m.category === modFilter).map((m) => {
+              const enabled = modRegistry.isEnabled(m.id);
               return (
-                <div key={blockId} className="inv-slot" onClick={() => { if (count > 0) placeIntoGrid(blockId); }} title={`${getBlock(blockId).name} — click to place into crafting table above`}>
-                  <BlockLogo id={blockId} size={28} />
-                  <span className="stack-count">×{count}</span>
+                <div key={m.id} className={`mod-card ${enabled ? 'enabled' : ''}`}>
+                  <div className="mod-icon">{m.icon}</div>
+                  <strong>{m.name}</strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{m.author} • v{m.version}</span>
+                  <small style={{ fontSize: 9, color: '#888' }}>{m.description}</small>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                    <span style={{ fontSize: 8, color: '#888' }}>{(m.downloads / 1_000_000).toFixed(1)}M dl</span>
+                    <button className={enabled ? 'btn-secondary' : 'btn-primary'} onClick={() => modRegistry.toggle(m.id)}>
+                      {enabled ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
+        </div>
+      )}
 
-          <h3 style={{ color: '#7ef7a0', fontSize: 11, margin: '10px 0 6px' }}>Crafting Recipes — with block logos</h3>
-          <div className="recipe-list" style={{ maxHeight: 160 }}>
-            {RECIPES.map(recipe => {
-              const ready = canCraft(recipe, inventory, toolInventory);
-              return (
-                <button key={recipe.id} className={`recipe-card ${ready ? 'ready' : ''}`} onClick={() => onCraftRecipe(recipe.id)} disabled={!ready}>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>{recipe.output.type === 'block' ? <BlockLogo id={recipe.output.blockId} size={20} /> : <span>🛠️</span>}<span className="recipe-name">{recipe.name}</span></div>
-                  <span>Cost: {recipeCostLabel(recipe)}</span><span>Output: {recipeOutputLabel(recipe)}</span><small>{recipe.description}</small>
-                </button>
-              );
-            })}
+      {/* ===================== DIMENSIONS MENU ===================== */}
+      {dimensionMenuOpen && (
+        <div className="menu-panel pro dim-panel">
+          <div className="inventory-header">
+            <div><h2>🌌 Dimensions [F8] — {ALL_DIMENSIONS.length} total</h2><p>Current: {runtimeStatus.dimensionName} • Each has unique gravity, mobs, ores, music, boss</p></div>
+            <button onClick={() => setDimensionMenuOpen(false)}>Close</button>
           </div>
-
-          <div className="inventory-footer"><span>Keys: I/E toggle • 1-9 blocks • Q tools • T chat /day /time /summon • Left click punch with hand toward tree • Cracking overlay • Fog toggle in settings 100-1000</span><button className="danger-lite" onClick={onResetPlayerProgress}>Reset</button></div>
+          <div className="dim-grid">
+            {ALL_DIMENSIONS.map((d) => (
+              <div key={d.id} className={`dim-card ${runtimeStatus.dimensionId === d.id ? 'current' : ''}`}>
+                <div className="dim-emoji">{d.emoji}</div>
+                <strong>{d.name}</strong>
+                <small>{d.description}</small>
+                <div className="dim-stats">
+                  <span>👑 {d.boss}</span>
+                  <span>🎵 {d.music.slice(0, 24)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {runtimeStatus.nextGen.creditsActive && <div className="credits-cinematic"><div className="credits-stars" /><div className="credits-card"><p>After years...</p><h1>THE END</h1><span>EAOIN {runtimeStatus.nextGen.version}</span><small>Press K to skip</small></div><div className="credits-roll"><p>Clouds stunning far away • Mountains bigger • Caves bigger • Cliffs + flats volumetric square • 20min day</p><p>Inventory block logos • Crafting table above • Hand punch • Cracking 1-10 • Fog 100-1000 • T chat</p></div></div>}
+      {/* ===================== BOSSES MENU ===================== */}
+      {bossesOpen && (
+        <div className="menu-panel pro boss-panel">
+          <div className="inventory-header">
+            <div><h2>👑 Bosses [F9] — {ALL_BOSSES.length} total</h2><p>Defeat them all to unlock the new endings</p></div>
+            <button onClick={() => setBossesOpen(false)}>Close</button>
+          </div>
+          <div className="boss-grid">
+            {ALL_BOSSES.map((b) => (
+              <div key={b.id} className="boss-card">
+                <div className="boss-emoji" style={{ background: b.color }}>{b.emoji}</div>
+                <strong>{b.name}</strong>
+                <span style={{ fontSize: 9, color: '#aaa' }}>{b.dimension} • {BOSS_TIER_LABELS[b.tier]}</span>
+                <small style={{ fontSize: 9 }}>{b.description}</small>
+                <div className="boss-stats">
+                  <span>❤️ {b.health}</span>
+                  <span>⚔ {b.damage}</span>
+                  <span>📜 {b.phases} phase{b.phases > 1 ? 's' : ''}</span>
+                </div>
+                <div className="boss-abilities">
+                  {b.abilities.map((a) => <span key={a} className="ability-tag">{a}</span>)}
+                </div>
+                <small style={{ fontSize: 8, fontStyle: 'italic', color: '#7ef7a0' }}>{b.lore}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
+      {/* ===================== QUESTS MENU ===================== */}
+      {questsOpen && (
+        <div className="menu-panel pro quest-panel">
+          <div className="inventory-header">
+            <div><h2>📜 Quests [F10] — {ALL_QUESTS.length} total</h2><p>Tutorial, Main, Side, Daily, Weekly, Civilization, Boss</p></div>
+            <button onClick={() => setQuestsOpen(false)}>Close</button>
+          </div>
+          <div className="quest-filters">
+            {QUEST_TYPES.map((t) => (
+              <button key={t} className="quest-filter">{QUEST_TYPE_LABELS[t]} ({ALL_QUESTS.filter((q) => q.type === t).length})</button>
+            ))}
+          </div>
+          <div className="quest-list">
+            {ALL_QUESTS.map((q) => (
+              <div key={q.id} className="quest-card">
+                <div className="quest-icon">{q.emoji}</div>
+                <div className="quest-body">
+                  <strong>{q.name} <span className="quest-type">{QUEST_TYPE_LABELS[q.type]}</span></strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{q.giver} • Lvl {q.level} • {q.dimension}</span>
+                  <p style={{ fontSize: 9, color: '#888' }}>{q.description}</p>
+                  <div className="quest-steps">
+                    {q.steps.map((s, i) => (
+                      <div key={i} className="quest-step">
+                        <span className="step-bullet">{i + 1}</span>
+                        {s.description} <span style={{ color: '#7ef7a0' }}>{s.progress}/{s.amount}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="quest-rewards">
+                    <span>⭐ {q.rewards.xp} XP</span>
+                    <span>💰 {q.rewards.coins}</span>
+                    {q.rewards.items?.map((it) => <span key={it}>🎁 {it}</span>)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== CIVILIZATIONS MENU ===================== */}
+      {civsOpen && (
+        <div className="menu-panel pro civ-panel">
+          <div className="inventory-header">
+            <div><h2>🏛 Civilizations [F11] — {CIVILIZATIONS.length} active</h2><p>They build, expand, wage war, research, colonize planets</p></div>
+            <button onClick={() => setCivsOpen(false)}>Close</button>
+          </div>
+          <div className="civ-list">
+            {CIVILIZATIONS.map((c) => (
+              <div key={c.id} className="civ-card" style={{ borderLeft: `4px solid ${c.color}` }}>
+                <div className="civ-emoji">{c.emoji}</div>
+                <div className="civ-body">
+                  <strong>{c.name}</strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{RACE_NAMES[c.race]} • {TECH_AGE_LABELS[c.age]} • Led by {c.leader}</span>
+                  <div className="civ-stats">
+                    <span>👥 {c.population.toLocaleString()}</span>
+                    <span>🏘 {c.settlements}</span>
+                    <span>⚔ {c.military.toLocaleString()}</span>
+                    <span>💰 {c.wealth.toLocaleString()}</span>
+                    <span>😊 {(c.happiness * 100).toFixed(0)}%</span>
+                    <span>🔬 {(c.research * 100).toFixed(0)}%</span>
+                  </div>
+                  {c.war.atWar && <div className="civ-war">⚔ At war with {c.war.withWhom}</div>}
+                  {c.alliances.length > 0 && <div className="civ-alliances">🤝 Allied with {c.alliances.join(', ')}</div>}
+                  <small style={{ fontSize: 9, color: '#7ef7a0' }}>Religion: {c.religion}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="civ-tech-tree">
+            <h3>Tech Age Progression</h3>
+            <div className="tech-tree">
+              {['stone', 'bronze', 'iron', 'steel', 'industrial', 'modern', 'futuristic', 'space', 'interstellar', 'multiversal'].map((age) => (
+                <div key={age} className="tech-node">
+                  <span style={{ fontSize: 18 }}>{TECH_AGE_ICONS[age as keyof typeof TECH_AGE_ICONS]}</span>
+                  <strong>{TECH_AGE_LABELS[age as keyof typeof TECH_AGE_LABELS]}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== SPACE MENU ===================== */}
+      {spaceOpen && (
+        <div className="menu-panel pro space-panel">
+          <div className="inventory-header">
+            <div><h2>🚀 Space [F12] — Universe</h2><p>{ALL_STAR_SYSTEMS.length} star systems • {GALAXY_LIST.length} galaxies • procedural planets per seed</p></div>
+            <button onClick={() => setSpaceOpen(false)}>Close</button>
+          </div>
+          <div className="space-section">
+            <h3>Galaxies</h3>
+            <div className="galaxy-list">
+              {GALAXY_LIST.map((g) => (
+                <div key={g.id} className="galaxy-card">
+                  <strong>🌌 {g.name}</strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{g.type} • {g.stars} stars</span>
+                  <small style={{ fontSize: 8, color: '#888' }}>{g.description}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-section">
+            <h3>Star Systems</h3>
+            <div className="system-list">
+              {ALL_STAR_SYSTEMS.map((s) => (
+                <div key={s.id} className="system-card">
+                  <strong>⭐ {s.name}</strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{STAR_CLASS_INFO[s.starClass].color !== '#000000' ? '🌟' : '🕳'} {s.starClass} class • {s.planetCount} planets • {s.distance} ly</span>
+                  <small style={{ fontSize: 8 }}>{s.specialFeatures.join(', ')}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-section">
+            <h3>Planets</h3>
+            <div className="planet-list">
+              {ALL_PLANETS.map((p) => (
+                <div key={p.id} className="planet-card">
+                  <strong>🪐 {p.name}</strong>
+                  <span style={{ fontSize: 9 }}>{p.type} • {p.size} Earth radii • {p.temperature}K</span>
+                  <span style={{ fontSize: 8 }}>Habitability: {(p.habitability * 100).toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-section">
+            <h3>Space Anomalies</h3>
+            <div className="anomaly-list">
+              {ALL_ANOMALIES.map((a) => (
+                <div key={a.id} className="anomaly-card">
+                  <strong>🛸 {a.name}</strong>
+                  <span style={{ fontSize: 9, color: '#aaa' }}>{a.type}</span>
+                  <small style={{ fontSize: 8 }}>{a.desc}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== BIOMES MENU ===================== */}
+      {biomesOpen && (
+        <div className="menu-panel pro biomes-panel">
+          <div className="inventory-header">
+            <div><h2>🌍 Biomes — {ALL_BIOMES.length} total</h2><p>150+ biomes across forest, desert, snow, ocean, cave, nether, end, alien, mystic...</p></div>
+            <button onClick={() => setBiomesOpen(false)}>Close</button>
+          </div>
+          <div className="biomes-grid">
+            {ALL_BIOMES.map((b) => (
+              <div key={b.id} className="biome-card">
+                <div className="biome-emoji">{b.emoji}</div>
+                <strong>{b.name}</strong>
+                <span style={{ fontSize: 8, color: '#aaa' }}>{b.temperature} • {b.humidity}</span>
+                <small style={{ fontSize: 8 }}>{b.description}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== SETTINGS MENU ===================== */}
       {settingsOpen && (
-        <div className="settings-panel"><div className="inventory-header"><div><h2>Settings — Fog reduced 100-1000 toggle • Clouds moving</h2><p>Day/night 20min • Render distance up to 16 • Inventory logos</p></div><button onClick={onCloseSettings}>Close</button></div>
-          <label className="setting-row"><span>Muted</span><input type="checkbox" checked={settings.muted} onChange={e => updateSettings({ muted: e.target.checked })} /></label>
-          <label className="setting-row"><span>Volume {Math.round(settings.volume * 100)}%</span><input type="range" min={0} max={1} step={0.05} value={settings.volume} onChange={e => updateSettings({ volume: Number(e.target.value) })} /></label>
-          <label className="setting-row"><span>Quality (render distance {settings.qualityPreset === 'performance' ? 6 : settings.qualityPreset === 'quality' ? 12 : settings.qualityPreset === 'cinematic' ? 16 : 8})</span><select value={settings.qualityPreset} onChange={e => updateSettings({ qualityPreset: e.target.value as GameSettings['qualityPreset'] })}><option value="performance">Performance (6)</option><option value="balanced">Balanced (8)</option><option value="quality">Quality (12)</option><option value="cinematic">Cinematic (16)</option></select></label>
-          <label className="setting-row"><span>Fog enabled (reduced to 100-1000)</span><input type="checkbox" checked={settings.fogEnabled} onChange={e => updateSettings({ fogEnabled: e.target.checked })} /></label>
-          <label className="setting-row"><span>Render scale {Math.round(settings.renderScale * 100)}%</span><input type="range" min={0.5} max={1.5} step={0.05} value={settings.renderScale} onChange={e => updateSettings({ renderScale: Number(e.target.value) })} /></label>
-          <label className="setting-row"><span>Realistic + clouds moving</span><input type="checkbox" checked={settings.realisticLighting} onChange={e => updateSettings({ realisticLighting: e.target.checked })} /></label>
-          <label className="setting-row"><span>Particles + clouds</span><input type="checkbox" checked={settings.particlesEnabled} onChange={e => updateSettings({ particlesEnabled: e.target.checked })} /></label>
-          <label className="setting-row"><span>Show stats</span><input type="checkbox" checked={settings.showStats} onChange={e => updateSettings({ showStats: e.target.checked })} /></label>
+        <div className="settings-panel">
+          <div className="inventory-header">
+            <div>
+              <h2>Settings</h2>
+              <p>EAOIN {GAME_VERSION} • {RELEASE_TAGLINE}</p>
+            </div>
+            <button onClick={onCloseSettings}>Close</button>
+          </div>
+          <div style={{ background: 'rgba(0,0,0,0.4)', padding: 10, border: '2px solid #5dd6ff', borderRadius: 4, margin: '8px 0' }}>
+            <h3 style={{ color: '#5dd6ff', fontSize: 12, marginBottom: 6 }}>✨ {RELEASE_LABEL}</h3>
+            <ul style={{ fontSize: 9, color: '#d6d6d6', paddingLeft: 18, lineHeight: 1.5 }}>
+              {RELEASE_FEATURES.map((f) => <li key={f}>{f}</li>)}
+            </ul>
+          </div>
+          <label className="setting-row"><span>Muted</span><input type="checkbox" checked={settings.muted} onChange={(e) => updateSettings({ muted: e.target.checked })} /></label>
+          <label className="setting-row"><span>Volume {Math.round(settings.volume * 100)}%</span><input type="range" min={0} max={1} step={0.05} value={settings.volume} onChange={(e) => updateSettings({ volume: Number(e.target.value) })} /></label>
+          <label className="setting-row">
+            <span>Quality (render distance)</span>
+            <select value={settings.qualityPreset} onChange={(e) => updateSettings({ qualityPreset: e.target.value as GameSettings['qualityPreset'] })}>
+              <option value="performance">Performance (6)</option>
+              <option value="balanced">Balanced (8)</option>
+              <option value="quality">Quality (12)</option>
+              <option value="cinematic">Cinematic (16)</option>
+            </select>
+          </label>
+          <label className="setting-row">
+            <span>Renderer</span>
+            <select value={settings.rendererPreference} onChange={(e) => updateSettings({ rendererPreference: e.target.value as GameSettings['rendererPreference'] })}>
+              <option value="auto">Auto: WebGPU first</option>
+              <option value="webgpu">Prefer WebGPU</option>
+              <option value="webgl">Force WebGL</option>
+            </select>
+          </label>
+          <label className="setting-row"><span>Fog 100-1000</span><input type="checkbox" checked={settings.fogEnabled} onChange={(e) => updateSettings({ fogEnabled: e.target.checked })} /></label>
+          <label className="setting-row"><span>Realistic lighting</span><input type="checkbox" checked={settings.realisticLighting} onChange={(e) => updateSettings({ realisticLighting: e.target.checked })} /></label>
+          <label className="setting-row"><span>Particles</span><input type="checkbox" checked={settings.particlesEnabled} onChange={(e) => updateSettings({ particlesEnabled: e.target.checked })} /></label>
+          <label className="setting-row"><span>Post-processing</span><input type="checkbox" checked={settings.postProcessEnabled} onChange={(e) => updateSettings({ postProcessEnabled: e.target.checked })} /></label>
+          <label className="setting-row"><span>Experimental shaders</span><input type="checkbox" checked={settings.experimentalShaders} onChange={(e) => updateSettings({ experimentalShaders: e.target.checked })} /></label>
+          <label className="setting-row"><span>Command blocks</span><input type="checkbox" checked={settings.commandBlocksEnabled} onChange={(e) => updateSettings({ commandBlocksEnabled: e.target.checked })} /></label>
+          <label className="setting-row"><span>Show stats</span><input type="checkbox" checked={settings.showStats} onChange={(e) => updateSettings({ showStats: e.target.checked })} /></label>
+          <label className="setting-row"><span>High contrast</span><input type="checkbox" checked={settings.highContrast} onChange={(e) => updateSettings({ highContrast: e.target.checked })} /></label>
+          <label className="setting-row"><span>Reduced motion</span><input type="checkbox" checked={settings.reducedMotion} onChange={(e) => updateSettings({ reducedMotion: e.target.checked })} /></label>
         </div>
       )}
 
-      <div className="status-bar"><span>Left: punch tree (hand goes) + cracking 1-10</span><span>T chat • /day /time /summon • Q tools</span><span>Fog 100-1000 toggle • Clouds moving stunning far • 20min day</span></div>
+      {/* ===================== MULTIPLAYER ===================== */}
+      <div className="hud-buttons">
+        <button onClick={() => setShaderMenuOpen((v) => !v)} className="hud-btn shaders" title="Shaders (F6)">🎨 Shaders</button>
+        <button onClick={() => setModMenuOpen((v) => !v)} className="hud-btn mods" title="Mods (F7)">🧩 Mods</button>
+        <button onClick={() => setDimensionMenuOpen((v) => !v)} className="hud-btn dims" title="Dimensions (F8)">🌌 Dims</button>
+        <button onClick={() => setBossesOpen((v) => !v)} className="hud-btn bosses" title="Bosses (F9)">👑 Bosses</button>
+        <button onClick={() => setQuestsOpen((v) => !v)} className="hud-btn quests" title="Quests (F10)">📜 Quests</button>
+        <button onClick={() => setCivsOpen((v) => !v)} className="hud-btn civs" title="Civilizations (F11)">🏛 Civs</button>
+        <button onClick={() => setSpaceOpen((v) => !v)} className="hud-btn space" title="Space (F12)">🚀 Space</button>
+        <button onClick={() => setServerMenuOpen((v) => !v)} className="hud-btn servers" title="Servers">🖥 Servers</button>
+        <button onClick={() => setFriendsOpen((v) => !v)} className="hud-btn friends" title="Friends">👥 Friends</button>
+      </div>
+
+      {serverMenuOpen && (
+        <div className="menu-panel pro server-panel">
+          <div className="inventory-header">
+            <div><h2>🖥 Multiplayer Server Browser</h2><p>{ALL_SERVERS.length} official servers + create your own dedicated server</p></div>
+            <button onClick={() => setServerMenuOpen(false)}>Close</button>
+          </div>
+          <div className="server-list">
+            {ALL_SERVERS.map((s) => <ServerCard key={s.id} server={s} />)}
+          </div>
+        </div>
+      )}
+
+      {friendsOpen && (
+        <div className="menu-panel pro friends-panel">
+          <div className="inventory-header">
+            <div><h2>👥 Friends & Social</h2><p>{DEMO_FRIENDS.length} friends • {DEMO_GUILDS.length} guilds • {DEMO_NATIONS.length} nations</p></div>
+            <button onClick={() => setFriendsOpen(false)}>Close</button>
+          </div>
+          <h3 style={{ color: '#7ef7a0', fontSize: 11, margin: '6px 0' }}>Online Friends</h3>
+          <div className="friend-list">
+            {DEMO_FRIENDS.map((f) => (
+              <div key={f.id} className={`friend-card status-${f.status}`}>
+                <div className="friend-avatar">{f.avatar}</div>
+                <strong>{f.name}</strong>
+                <span style={{ fontSize: 9, color: '#aaa' }}>Lvl {f.level} • {f.status.replace('_', ' ')}</span>
+                <span style={{ fontSize: 8, color: '#888' }}>{f.lastSeen}</span>
+              </div>
+            ))}
+          </div>
+          <h3 style={{ color: '#ffd166', fontSize: 11, margin: '6px 0' }}>Guilds</h3>
+          <div className="guild-list">
+            {DEMO_GUILDS.map((g) => (
+              <div key={g.id} className="guild-card">
+                <strong>[{g.tag}] {g.name}</strong>
+                <span style={{ fontSize: 9, color: '#aaa' }}>{g.members} members • Lvl {g.level}</span>
+                <small style={{ fontSize: 8 }}>{g.motd}</small>
+              </div>
+            ))}
+          </div>
+          <h3 style={{ color: '#a879ff', fontSize: 11, margin: '6px 0' }}>Nations</h3>
+          <div className="nation-list">
+            {DEMO_NATIONS.map((n) => (
+              <div key={n.id} className="nation-card">
+                <strong>{n.emoji} {n.name}</strong>
+                <span style={{ fontSize: 9, color: '#aaa' }}>Led by {n.leader} • {n.population.toLocaleString()} people</span>
+                <span style={{ fontSize: 8 }}>Economy: {n.economy.toLocaleString()} coins</span>
+                <span style={{ fontSize: 8, color: '#7ef7a0' }}>Allies: {n.allies.join(', ') || 'None'}</span>
+                <span style={{ fontSize: 8, color: '#c84a4a' }}>Enemies: {n.enemies.join(', ') || 'None'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --------------------- Creative Inventory --------------------- */
+function CreativeInventory({ category, onCategoryChange, search, onSearchChange, page, pageCount, onPageChange, items }: {
+  category: BlockCategory;
+  onCategoryChange: (c: BlockCategory) => void;
+  search: string;
+  onSearchChange: (s: string) => void;
+  page: number;
+  pageCount: number;
+  onPageChange: (p: number) => void;
+  items: BlockDef[];
+}) {
+  return (
+    <div className="creative-inventory">
+      <div className="creative-tabs">
+        {CATEGORY_ORDER.map((cat) => (
+          <button key={cat} className={`creative-tab ${category === cat ? 'active' : ''}`} onClick={() => onCategoryChange(cat)}>
+            {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+          </button>
+        ))}
+      </div>
+      <div className="creative-controls">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="🔍 Search blocks..."
+          className="creative-search"
+        />
+        <div className="creative-pager">
+          <button onClick={() => onPageChange(Math.max(0, page - 1))} disabled={page === 0}>◀</button>
+          <span>Page {page + 1} / {pageCount}</span>
+          <button onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))} disabled={page >= pageCount - 1}>▶</button>
+        </div>
+        <small className="creative-count">{items.length} blocks</small>
+      </div>
+      <div className="creative-grid">
+        {items.map((b) => (
+          <div key={b.id} className="creative-slot" title={`${b.name} (${b.id}) — ${b.category}`}>
+            <BlockLogo id={b.id} size={36} />
+            <span className="creative-name">{b.name}</span>
+            <span className="creative-id">#{b.id}</span>
+          </div>
+        ))}
+      </div>
+      <div className="creative-tip">
+        💡 Creative tip: Every block in this menu is available without limits. Scroll with the page buttons or use the search bar to find what you need. Pick a block with 1-9 keys (or scroll the hotbar).
+      </div>
+    </div>
+  );
+}
+
+const CATEGORY_ICONS: Record<BlockCategory, string> = {
+  building: '🧱', decoration: '🎨', functional: '⚙', redstone: '🔌', plant: '🌱',
+  food: '🍗', tool: '🛠', weapon: '⚔', armor: '🛡', ore: '⛏', fluid: '💧',
+  nature: '🌳', nether: '🔥', end: '🌌', space: '🚀', creative: '✨', spawn_egg: '🥚', misc: '📦',
+};
+
+/* --------------------- Survival Inventory --------------------- */
+function SurvivalInventory({ inventory, selectedBlock, craftMode, setCraftMode, activeGrid, matchingRecipe, placeIntoGrid, clearGrid, craftFromGrid, craftGrid, craftGrid3, setCraftGrid, setCraftGrid3, toolInventory, onCraftRecipe }: any) {
+  return (
+    <div className="survival-inventory">
+      <div className="inv-top">
+        <div className="inv-player-area">
+          <h3 style={{ color: '#ffd166', fontSize: 11 }}>Player</h3>
+          <div className="inv-avatar-box">
+            <div style={{ fontSize: 48 }}>🧍</div>
+            <small style={{ fontSize: 9, color: '#aaa' }}>Survival • 20min day</small>
+          </div>
+          <div style={{ fontSize: 9, color: '#bbb' }}>Hand punches toward tree when mining wood — arm goes forward (see GameCanvas)</div>
+        </div>
+        <div className="inv-crafting">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ color: '#7ef7a0', fontSize: 11 }}>Crafting {craftMode}×{craftMode}</h3>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button className="btn-secondary mini" onClick={() => setCraftMode(craftMode === 2 ? 3 : 2)}>Toggle {craftMode === 2 ? '3×3' : '2×2'}</button>
+              <button className="btn-secondary mini" onClick={clearGrid}>Clear</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div className={`craft-grid c${craftMode}`}>
+              {activeGrid.map((bid: BlockID | null, i: number) => (
+                <div key={i} className="craft-slot" onClick={() => {
+                  if (craftMode === 2) { const g = [...craftGrid]; g[i] = null; setCraftGrid(g); }
+                  else { const g = [...craftGrid3]; g[i] = null; setCraftGrid3(g); }
+                }}>{bid ? <BlockLogo id={bid} /> : <span style={{ opacity: 0.25, fontSize: 10 }}>·</span>}</div>
+              ))}
+            </div>
+            <div className="craft-arrow">→</div>
+            <div className="craft-result" onClick={craftFromGrid} title={matchingRecipe ? `Craft ${matchingRecipe.name}` : 'Add blocks to grid to craft'}>
+              {matchingRecipe ? <><BlockLogo id={matchingRecipe.output.type === 'block' ? matchingRecipe.output.blockId : 6} size={36} /><small style={{ fontSize: 8, color: '#ffd166' }}>{matchingRecipe.name}</small></> : <span style={{ opacity: 0.4, fontSize: 10 }}>Result</span>}
+            </div>
+          </div>
+          <small style={{ fontSize: 9, color: '#aaa' }}>Click inventory blocks to place into the crafting grid above. Hand punches tree, cracking overlay 1-10 when destroying.</small>
+        </div>
+      </div>
+      <h3 style={{ color: '#ffd166', fontSize: 11, margin: '8px 0' }}>Materials — block logos like Minecraft inventory</h3>
+      <div className="inventory-grid-pro">
+        {ALL_BLOCK_IDS.filter((id) => getStackCount(inventory, id) > 0 || id <= 23).slice(0, 81).map((blockId) => {
+          const count = getStackCount(inventory, blockId);
+          return (
+            <BlockSlot
+              key={blockId}
+              id={blockId}
+              count={count}
+              selected={selectedBlock === blockId}
+              onClick={() => { if (count > 0) placeIntoGrid(blockId); }}
+              size={32}
+            />
+          );
+        })}
+      </div>
+      <h3 style={{ color: '#7ef7a0', fontSize: 11, margin: '10px 0 6px' }}>Recipes</h3>
+      <div className="recipe-list" style={{ maxHeight: 160 }}>
+        {RECIPES.map((recipe: any) => {
+          const ready = canCraft(recipe, inventory, toolInventory);
+          return (
+            <button key={recipe.id} className={`recipe-card ${ready ? 'ready' : ''}`} onClick={() => onCraftRecipe(recipe.id)} disabled={!ready}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {recipe.output.type === 'block' ? <BlockLogo id={recipe.output.blockId} size={20} /> : <span>🛠️</span>}
+                <span className="recipe-name">{recipe.name}</span>
+              </div>
+              <span>Cost: {recipeCostLabel(recipe)}</span>
+              <span>Output: {recipeOutputLabel(recipe)}</span>
+              <small>{recipe.description}</small>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ServerCard({ server }: { server: ServerEntry }) {
+  return (
+    <div className="server-card">
+      <div className="server-icon" style={{ background: server.type === 'mmo' ? 'linear-gradient(180deg,#5dd6ff,#246f9a)' : server.type === 'creative' ? 'linear-gradient(180deg,#7ef7a0,#3aa83a)' : server.type === 'skyblock' ? 'linear-gradient(180deg,#aac8e0,#3a86d0)' : 'linear-gradient(180deg,#a879ff,#5a3a99)' }}>{server.emoji}</div>
+      <div className="server-body">
+        <strong>{server.name}</strong>
+        <span style={{ fontSize: 9, color: '#aaa' }}>{server.ip}:{server.port} • {server.region} • {server.players.toLocaleString()}/{server.maxPlayers.toLocaleString()} players • {server.ping}ms</span>
+        <small style={{ fontSize: 8, color: '#888' }}>{server.description}</small>
+        <div className="server-features">
+          {server.hasGuilds && <span className="badge">Guilds</span>}
+          {server.hasEconomy && <span className="badge">Economy</span>}
+          {server.hasNations && <span className="badge">Nations</span>}
+          {server.hasVoiceChat && <span className="badge">Voice</span>}
+          {server.hasCrossPlay && <span className="badge">Cross-Play</span>}
+          {server.hasAntiCheat && <span className="badge">Anti-Cheat</span>}
+          {server.hasLandClaim && <span className="badge">Claims</span>}
+          {server.hasDiplomacy && <span className="badge">Diplomacy</span>}
+        </div>
+      </div>
+      <button className="btn-primary">Join</button>
     </div>
   );
 }
