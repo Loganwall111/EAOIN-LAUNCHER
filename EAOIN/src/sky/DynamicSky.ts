@@ -37,6 +37,18 @@ export interface SkyConfig {
   eclipseColor: Color3;
 }
 
+/**
+ * Clearance (in world units) held between the camera and each overhead sky
+ * layer. These must stay comfortably larger than the player's build reach and
+ * well beyond `camera.minZ` so a layer can never clip into the near plane and
+ * produce the full-screen "border" artifact.
+ */
+export const CLOUD_LAYER_ALTITUDE = 120;
+export const CLOUD_BIG_LAYER_ALTITUDE = 180;
+export const STAR_LAYER_ALTITUDE = 260;
+/** Hard ceiling on cloud opacity so the sky is never fully occluded. */
+export const CLOUD_LAYER_MAX_ALPHA = 0.55;
+
 export const DEFAULT_SKY: SkyConfig = {
   timeOfDay: 12,
   dayLengthSeconds: 1200, // 20 minutes
@@ -123,8 +135,7 @@ export class DynamicSky {
     mat.disableLighting = true;
     mat.backFaceCulling = false;
     stars.material = mat;
-    stars.isPickable = false;
-    stars.infiniteDistance = true;
+    this.configureSkyLayer(stars, STAR_LAYER_ALTITUDE);
     this.starField = stars;
   }
 
@@ -165,9 +176,10 @@ export class DynamicSky {
     mat.emissiveColor = new Color3(0.85, 0.88, 0.95);
     mat.disableLighting = true;
     mat.backFaceCulling = false;
+    // Clamp opacity so an overhead layer can never fully occlude the sky.
+    mat.alpha = CLOUD_LAYER_MAX_ALPHA;
     cloud.material = mat;
-    cloud.isPickable = false;
-    cloud.infiniteDistance = true;
+    this.configureSkyLayer(cloud, CLOUD_LAYER_ALTITUDE);
     this.cloudLayer = cloud;
 
     const cloud2 = MeshBuilder.CreatePlane('sky_clouds_big', { size: 2400 }, this.scene);
@@ -176,11 +188,49 @@ export class DynamicSky {
     m2.opacityTexture = this.makeCloudTexture();
     m2.disableLighting = true;
     m2.backFaceCulling = false;
+    m2.alpha = CLOUD_LAYER_MAX_ALPHA * 0.75;
     cloud2.material = m2;
-    cloud2.isPickable = false;
-    cloud2.infiniteDistance = true;
-    cloud2.position.y = 90;
+    this.configureSkyLayer(cloud2, CLOUD_BIG_LAYER_ALTITUDE);
     this.cloudBigLayer = cloud2;
+  }
+
+  /**
+   * Shared setup for every large camera-following sky layer.
+   *
+   * BUGFIX: these layers used to be created as raw `CreatePlane` meshes with
+   * `infiniteDistance = true` *and* a per-frame `position.copyFrom(camera)`.
+   * `CreatePlane` produces a plane in the XY plane facing +Z — i.e. a vertical
+   * *wall*, not an overhead ceiling. Pinned to the camera and 1200-2400 units
+   * wide with back-face culling off, it rendered as an inescapable blue/white
+   * border across the player's view.
+   *
+   * Two things are enforced here:
+   *  1. The layer is rotated flat so it is a true horizontal ceiling.
+   *  2. `infiniteDistance` is left OFF, because we reposition these manually.
+   *     Setting both double-applies the camera offset and drags the mesh into
+   *     the near clip plane.
+   */
+  private configureSkyLayer(layer: Mesh, altitude: number): void {
+    layer.rotation.x = Math.PI / 2; // flat overhead, not a vertical wall
+    layer.position.y = altitude;
+    layer.infiniteDistance = false; // mutually exclusive with manual placement
+    layer.isPickable = false;
+    layer.checkCollisions = false;
+    layer.renderingGroupId = 0; // always behind world geometry
+    layer.applyFog = false;
+    layer.alwaysSelectAsActiveMesh = true;
+    layer.metadata = { ...(layer.metadata ?? {}), skyLayer: true, altitude };
+  }
+
+  /**
+   * Re-base a sky layer over the camera in X/Z only, holding it at a fixed
+   * clearance above the player so it can never intersect the view.
+   */
+  private followCamera(layer: Mesh | null, camera: Vector3, altitude: number): void {
+    if (!layer) return;
+    layer.position.x = camera.x;
+    layer.position.z = camera.z;
+    layer.position.y = camera.y + altitude;
   }
 
   private makeCloudTexture(): Texture {
@@ -258,25 +308,25 @@ export class DynamicSky {
     if (this.moonDisk) {
       this.moonDisk.position.set(-Math.cos(sunAngle) * sunRadius, -Math.sin(sunAngle) * sunRadius, -80);
     }
-    // Star field follows camera and is brightest at night.
+    // Star field follows camera in X/Z and is brightest at night. Held high
+    // above the player — never re-centred onto the camera's own Y.
     if (this.starField) {
-      this.starField.position.copyFrom(camera);
+      this.followCamera(this.starField, camera, STAR_LAYER_ALTITUDE);
       const nightFactor = Math.max(0, Math.sin(((t - 6) / 24) * Math.PI * 2 + Math.PI) * 0.5 + 0.5);
       const starMat = this.starField.material as StandardMaterial;
       if (starMat) {
-        starMat.alpha = 0.95 * nightFactor;
-        if (this.config.starsEnabled) starMat.alpha *= 1.0;
+        starMat.alpha = this.config.starsEnabled ? 0.95 * nightFactor : 0;
       }
+      this.starField.isVisible = this.config.starsEnabled && nightFactor > 0.02;
     }
-    // Clouds slowly drift.
+    // Clouds slowly drift overhead. `rotation.y` spins them about the vertical
+    // axis; `rotation.x` stays at PI/2 so they remain flat ceilings.
     if (this.cloudLayer) {
-      this.cloudLayer.position.copyFrom(camera);
-      this.cloudLayer.position.y = 60;
+      this.followCamera(this.cloudLayer, camera, CLOUD_LAYER_ALTITUDE);
       this.cloudLayer.rotation.y = this.time * 0.01;
     }
     if (this.cloudBigLayer) {
-      this.cloudBigLayer.position.copyFrom(camera);
-      this.cloudBigLayer.position.y = 90;
+      this.followCamera(this.cloudBigLayer, camera, CLOUD_BIG_LAYER_ALTITUDE);
       this.cloudBigLayer.rotation.y = -this.time * 0.005;
     }
     // Aurora visible at high latitudes or polar dimensions.

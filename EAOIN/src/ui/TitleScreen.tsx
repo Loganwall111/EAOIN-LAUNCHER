@@ -24,6 +24,11 @@ export interface TitleScreenProps {
   onSingleplayer: () => void;
   onMultiplayer: () => void;
   onMods: () => void;
+  onMarketplace: () => void;
+  onEditorMode: () => void;
+  /** Live coin balance shown in the economy pill. */
+  coinBalance: number;
+  onOpenCoinStore: () => void;
   onOptions: () => void;
   onQuit: () => void;
   onEditCharacter: () => void;
@@ -34,7 +39,8 @@ export interface TitleScreenProps {
 }
 
 export default function TitleScreen({
-  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onMods, onOptions, onQuit,
+  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onMods,
+  onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
   const [splash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
@@ -68,6 +74,18 @@ export default function TitleScreen({
           transform: `scale(1.06) translate(${parallax.x * -14}px, ${parallax.y * -9}px)`,
         }}
       />
+
+      {/* ---- economy: coin balance, top of screen ---- */}
+      <button
+        className="title-coin-pill"
+        onClick={onOpenCoinStore}
+        title="Your coins — click to get more"
+        aria-label={`${coinBalance} coins. Open the coin store.`}
+      >
+        <span className="title-coin-glyph">🪙</span>
+        <span className="title-coin-amount">{coinBalance.toLocaleString()}</span>
+        <span className="title-coin-plus">+</span>
+      </button>
 
       {/* ---- top-right icon rail ---- */}
       <div className="title-icon-rail">
@@ -117,6 +135,16 @@ export default function TitleScreen({
         <button className="menu-btn" onClick={onOptions}>
           Options<span className="btn-icon">⚙</span>
         </button>
+
+        {/* ---- marketplace section ---- */}
+        <div className="menu-section-divider"><span>STORE &amp; CREATION</span></div>
+        <button className="menu-btn is-marketplace" onClick={onMarketplace}>
+          Marketplace<span className="btn-icon">🏬</span>
+        </button>
+        <button className="menu-btn is-editor" onClick={onEditorMode}>
+          Editor Mode<span className="btn-icon">🛠</span>
+        </button>
+
         <button className="menu-btn" onClick={onQuit}>
           Quit Game<span className="btn-icon">❌</span>
         </button>

@@ -23,6 +23,12 @@ import { GameSettings } from './settings/GameSettings';
 import { loadSettings, saveSettings } from './settings/SettingsSave';
 import CinematicBoot from './ui/CinematicBoot';
 import SignInScreen, { SignedInUser } from './ui/SignInScreen';
+import MarketplaceScreen from './ui/MarketplaceScreen';
+import EditorScreen from './ui/EditorScreen';
+import { CoinWallet } from './economy/CoinEconomy';
+import { createPaymentProvider } from './economy/PaymentProvider';
+import { StoreService } from './economy/StoreService';
+import { MarketplaceLibrary } from './marketplace/MarketplaceCatalog';
 
 export default function App() {
   const [gameStarted, setGameStarted] = useState(false);
@@ -43,7 +49,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options';
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options' | 'marketplace' | 'editor';
   const [appPhase, setAppPhase] = useState<AppPhase>('signin');
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
 
@@ -63,6 +69,16 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('eaoin-ability', { detail: { key } }));
   }, []);
   const modRegistry = useMemo(() => new ModPackRegistry(), []);
+
+  /* ---- Economy: one wallet, one library, one store for the whole app ---- */
+  const wallet = useMemo(() => new CoinWallet(), []);
+  const marketLibrary = useMemo(() => new MarketplaceLibrary(), []);
+  const store = useMemo(
+    () => new StoreService(wallet, marketLibrary, createPaymentProvider()),
+    [wallet, marketLibrary]
+  );
+  const [coinBalance, setCoinBalance] = useState(() => wallet.getBalance());
+  useEffect(() => wallet.subscribe((snapshot) => setCoinBalance(snapshot.balance)), [wallet]);
   const [modRevision, setModRevision] = useState(0);
   const toggleMod = useCallback((id: Parameters<ModPackRegistry['toggle']>[0]) => {
     modRegistry.toggle(id);
@@ -212,7 +228,7 @@ export default function App() {
   if (appPhase === 'boot' && !gameStarted) {
     return (
       <div className={shellClass}>
-        <CinematicBoot onComplete={handleBootComplete} />
+        <CinematicBoot onComplete={handleBootComplete} reducedMotion={settings.reducedMotion} />
       </div>
     );
   }
@@ -229,6 +245,10 @@ export default function App() {
             onSingleplayer={() => setAppPhase('worlds')}
             onMultiplayer={() => setAppPhase('multiplayer')}
             onMods={() => setAppPhase('mods')}
+            onMarketplace={() => setAppPhase('marketplace')}
+            onEditorMode={() => setAppPhase('editor')}
+            coinBalance={coinBalance}
+            onOpenCoinStore={() => setAppPhase('marketplace')}
             onOptions={() => setAppPhase('options')}
             onQuit={() => window.close()}
             onEditCharacter={() => setAppPhase('creator')}
@@ -280,6 +300,32 @@ export default function App() {
             settings={settings}
             onChange={setSettings}
             onBack={() => setAppPhase('title')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'marketplace') {
+      return (
+        <div className={shellClass}>
+          <MarketplaceScreen
+            wallet={wallet}
+            library={marketLibrary}
+            store={store}
+            onBack={() => setAppPhase('title')}
+            onOpenEditor={() => setAppPhase('editor')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'editor') {
+      return (
+        <div className={shellClass}>
+          <EditorScreen
+            store={store}
+            library={marketLibrary}
+            authorName={signedInUser?.name ?? appearance.name}
+            onBack={() => setAppPhase('title')}
+            onOpenMarketplace={() => setAppPhase('marketplace')}
           />
         </div>
       );
