@@ -15,6 +15,26 @@ const CUE_FREQUENCIES: Record<AudioCue, [number, number]> = {
 
 export class GameAudio {
   private context: AudioContext | null = null;
+  private musicTimer: number | null = null;
+  private musicStep = 0;
+
+  /** Lightweight procedural Minecraft-like music bed; starts only after user input. */
+  startMusic(settings: GameSettings, mood: 'menu' | 'overworld' | 'nether' = 'overworld'): void {
+    if (settings.muted || this.musicTimer !== null) return;
+    const context = this.getContext(); if (!context) return;
+    void context.resume();
+    const notes = mood === 'nether' ? [110, 130, 146, 98] : mood === 'menu' ? [220, 277, 330, 440, 330, 277] : [196, 247, 294, 370, 294, 247];
+    const play = () => {
+      if (settings.muted || settings.volume <= 0) return;
+      const osc = context.createOscillator(); const gain = context.createGain(); const now = context.currentTime;
+      osc.type = 'sine'; osc.frequency.value = notes[this.musicStep++ % notes.length];
+      gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.035 * settings.volume, now + .08); gain.gain.exponentialRampToValueAtTime(.0001, now + 2.4);
+      osc.connect(gain); gain.connect(context.destination); osc.start(now); osc.stop(now + 2.5);
+    };
+    play(); this.musicTimer = window.setInterval(play, 2600);
+  }
+
+  stopMusic(): void { if (this.musicTimer !== null) { window.clearInterval(this.musicTimer); this.musicTimer = null; } }
 
   play(cue: AudioCue, settings: GameSettings): void {
     if (settings.muted || settings.volume <= 0) return;

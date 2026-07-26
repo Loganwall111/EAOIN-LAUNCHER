@@ -4,6 +4,7 @@ import { RELEASE_LABEL } from '../version';
 import { MarketplaceRuntime } from '../marketplace/MarketplaceRuntime';
 import { GameSettings } from '../settings/GameSettings';
 import { loadSettings, saveSettings } from '../settings/SettingsSave';
+import { GameAudio } from '../audio/GameAudio';
 
 interface MainMenuProps {
   onStart: (seed?: string, mode?: GameMode) => void;
@@ -107,6 +108,12 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [catFilter, setCatFilter] = useState('All');
   const [marketRevision, setMarketRevision] = useState(0);
   const marketplace = useMemo(() => new MarketplaceRuntime(), []);
+  const menuAudio = useMemo(() => new GameAudio(), []);
+  useEffect(() => {
+    const start = () => menuAudio.startMusic(settings, 'menu');
+    window.addEventListener('pointerdown', start, { once: true });
+    return () => { window.removeEventListener('pointerdown', start); menuAudio.stopMusic(); };
+  }, [menuAudio, settings]);
   const marketStatus = useMemo(() => {
     void marketRevision;
     return marketplace.getStatus();
