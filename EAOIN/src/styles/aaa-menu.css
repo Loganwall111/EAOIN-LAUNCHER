@@ -1,0 +1,7 @@
+/* AAA Main Menu Revamp */
+.main-menu { background: linear-gradient(135deg,#0f0f23 0%,#1a1a3a 60%,#2a1a3a 100%); }
+.menu-background { background: rgba(20,10,30,0.75); border: 2px solid rgba(255,255,255,0.15); border-radius: 12px; box-shadow: 0 0 60px rgba(138,121,255,0.35); backdrop-filter: blur(14px); }
+.title-front { background: linear-gradient(90deg,#ffd166,#a879ff,#5dd6ff); text-shadow: 0 0 30px rgba(255,209,102,0.6); }
+.btn-primary { background: linear-gradient(180deg,#7ef7a0,#2e5a2e); box-shadow: 0 8px 30px rgba(93,214,95,0.45); border-radius: 8px; }
+.mode-card { border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: transform 0.2s ease; }
+.mode-card:hover { transform: translateY(-4px); filter: brightness(1.18); }
