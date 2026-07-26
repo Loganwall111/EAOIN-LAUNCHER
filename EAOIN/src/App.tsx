@@ -5,6 +5,10 @@ import MainMenu from './ui/MainMenu';
 import TitleScreen from './ui/TitleScreen';
 import CharacterCreator from './ui/CharacterCreator';
 import HudFrame from './ui/HudFrame';
+import MultiplayerScreen from './ui/MultiplayerScreen';
+import ModsScreen from './ui/ModsScreen';
+import OptionsScreen from './ui/OptionsScreen';
+import { ModPackRegistry } from './modding/ModPackRegistry';
 import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
 import GameCanvas, { HudTelemetry } from './engine/GameCanvas';
 import { GameMode } from './modes/GameMode';
@@ -37,7 +41,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- concept-art shell: title screen -> (creator) -> world ---- */
-  type Screen = 'title' | 'creator' | 'worlds';
+  type Screen = 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options';
   const [screen, setScreen] = useState<Screen>('title');
   const [appearance, setAppearance] = useState<CharacterAppearance>(() => {
     try {
@@ -47,8 +51,19 @@ export default function App() {
     return DEFAULT_APPEARANCE;
   });
   const [telemetry, setTelemetry] = useState<HudTelemetry>({
-    position: { x: 0, y: 0, z: 0 }, yaw: 0, timeOfDay: 12, day: 1, biome: 'Meadows',
+    position: { x: 0, y: 0, z: 0 }, yaw: 0, timeOfDay: 12, day: 1, biome: 'Meadows', flightEnabled: false,
   });
+
+  /** Ability buttons re-use the engine's real keyboard handlers. */
+  const fireAbility = useCallback((key: string) => {
+    window.dispatchEvent(new CustomEvent('eaoin-ability', { detail: { key } }));
+  }, []);
+  const modRegistry = useMemo(() => new ModPackRegistry(), []);
+  const [modRevision, setModRevision] = useState(0);
+  const toggleMod = useCallback((id: Parameters<ModPackRegistry['toggle']>[0]) => {
+    modRegistry.toggle(id);
+    setModRevision((v) => v + 1);
+  }, [modRegistry]);
 
   useEffect(() => {
     try { localStorage.setItem('eaoin_appearance', JSON.stringify(appearance)); } catch { /* storage disabled */ }
@@ -167,15 +182,48 @@ export default function App() {
           <TitleScreen
             appearance={appearance}
             onSingleplayer={() => setScreen('worlds')}
-            onMultiplayer={() => setScreen('worlds')}
-            onMods={() => setScreen('worlds')}
-            onOptions={() => setScreen('worlds')}
+            onMultiplayer={() => setScreen('multiplayer')}
+            onMods={() => setScreen('mods')}
+            onOptions={() => setScreen('options')}
             onQuit={() => window.close()}
             onEditCharacter={() => setScreen('creator')}
             onOpenNews={() => setScreen('worlds')}
             onOpenGuide={() => setScreen('worlds')}
-            onOpenStats={() => setScreen('worlds')}
-            onOpenFriends={() => setScreen('worlds')}
+            onOpenStats={() => setScreen('options')}
+            onOpenFriends={() => setScreen('multiplayer')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'multiplayer') {
+      return (
+        <div className={shellClass}>
+          <MultiplayerScreen
+            onBack={() => setScreen('title')}
+            onJoin={() => setScreen('worlds')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'mods') {
+      return (
+        <div className={shellClass}>
+          <ModsScreen
+            registry={modRegistry}
+            revision={modRevision}
+            onToggle={toggleMod}
+            onBack={() => setScreen('title')}
+          />
+        </div>
+      );
+    }
+    if (screen === 'options') {
+      return (
+        <div className={shellClass}>
+          <OptionsScreen
+            settings={settings}
+            onChange={setSettings}
+            onBack={() => setScreen('title')}
           />
         </div>
       );
@@ -243,6 +291,8 @@ export default function App() {
             biome={telemetry.biome}
             runtimeStatus={runtimeStatus}
             objectives={objectives}
+            flightEnabled={telemetry.flightEnabled}
+            onAbility={fireAbility}
             onOpenInventory={toggleInventory}
             onOpenGuide={toggleInventory}
             onOpenFriends={toggleSettings}

@@ -166,6 +166,44 @@ describe('HudFrame', () => {
     expect(onSelectBlock).toHaveBeenCalledTimes(1);
   });
 
+  it('derives status effects from live state instead of a fixed list', () => {
+    // Fully-topped-up player in the overworld at midday: buffs, no hazards.
+    // (Starter food is 92, just under the buff threshold, so set it explicitly.)
+    const { container, rerender } = render(
+      <HudFrame {...baseProps} survivalStats={{ health: 100, food: 100, stamina: 100 }} />
+    );
+    expect(container.textContent).toContain('Regeneration');
+    expect(container.textContent).not.toContain('Wounded');
+
+    // Drop health and enter the nether: hazards must appear.
+    rerender(<HudFrame
+      {...baseProps}
+      survivalStats={{ health: 12, food: 90, stamina: 90 }}
+      runtimeStatus={{ ...baseProps.runtimeStatus, dimensionId: 'nether' }}
+    />);
+    expect(container.textContent).toContain('Wounded');
+    expect(container.textContent).toContain('Scorching Heat');
+    expect(container.textContent).not.toContain('Regeneration');
+  });
+
+  it('fires the real key handler when an ability is clicked', () => {
+    const onAbility = vi.fn();
+    const { container } = render(<HudFrame {...baseProps} onAbility={onAbility} />);
+    const abilities = container.querySelectorAll('.ability-btn');
+    fireEvent.click(abilities[0]);
+    expect(onAbility).toHaveBeenCalledWith('F');
+    fireEvent.click(abilities[1]);
+    expect(onAbility).toHaveBeenCalledWith('P');
+  });
+
+  it('highlights the flight ability while flying', () => {
+    const { container, rerender } = render(<HudFrame {...baseProps} flightEnabled={false} />);
+    expect(container.querySelector('.ability-btn.active')).toBeNull();
+    rerender(<HudFrame {...baseProps} flightEnabled />);
+    expect(container.querySelector('.ability-btn.active')).not.toBeNull();
+    expect(container.textContent).toContain('Creative Flight');
+  });
+
   it('appends a chat message and switches channel tabs', () => {
     const { container } = render(<HudFrame {...baseProps} />);
     const input = container.querySelector('.chat-entry input') as HTMLInputElement;

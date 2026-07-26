@@ -15,8 +15,9 @@ import { ObjectiveStatus } from '../objectives/ObjectiveTracker';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
 import {
   CHAT_CHANNELS, ChatChannel, ChatEntry, CharacterAppearance,
-  compassTicks, DEMO_CHAT, DEMO_EFFECTS, HUD_ABILITIES,
+  compassTicks, DEMO_CHAT, HUD_ABILITIES,
 } from './theme';
+import { deriveStatusEffects } from '../player/StatusEffects';
 import { AvatarPortrait } from './VoxelAvatar';
 
 export interface HudFrameProps {
@@ -35,6 +36,10 @@ export interface HudFrameProps {
   runtimeStatus: RuntimeStatus;
   objectives: ObjectiveStatus[];
   toast?: string;
+  /** Live flight state, mirrored from the engine. */
+  flightEnabled?: boolean;
+  /** Fires the real keyboard handler behind an ability button. */
+  onAbility?: (key: string) => void;
   onOpenInventory: () => void;
   onOpenGuide: () => void;
   onOpenFriends: () => void;
@@ -69,6 +74,7 @@ function PipRow({ icon, value, max, count = 10 }: { icon: string; value: number;
 export default function HudFrame({
   appearance, survivalStats, inventory, selectedBlock, selectedTool, onSelectBlock,
   position, yaw, timeOfDay, day, biome, runtimeStatus, objectives, toast,
+  flightEnabled = false, onAbility,
   onOpenInventory, onOpenGuide, onOpenFriends, onOpenSettings, onOpenQuests,
 }: HudFrameProps) {
   const [chatChannel, setChatChannel] = useState<ChatChannel>('GLOBAL');
@@ -77,6 +83,16 @@ export default function HudFrame({
   const minimapRef = useRef<HTMLCanvasElement>(null);
 
   const ticks = useMemo(() => compassTicks(), []);
+
+  // Effects are a pure function of live world state rather than a fixed list.
+  const effects = useMemo(() => deriveStatusEffects({
+    survivalStats,
+    dimensionId: runtimeStatus.dimensionId ?? 'overworld',
+    timeOfDay,
+    flightEnabled,
+    nearPortal: Boolean(runtimeStatus.nearbyPortalCore),
+    depthBelowSurface: Math.max(0, 64 - position.y),
+  }), [survivalStats, runtimeStatus.dimensionId, runtimeStatus.nearbyPortalCore, timeOfDay, flightEnabled, position.y]);
   const headingDeg = ((yaw * 180) / Math.PI % 360 + 360) % 360;
 
   // Sun/moon glyph tracks the world clock.
@@ -156,12 +172,12 @@ export default function HudFrame({
 
       {/* -------------------------------- effects --------------------------------- */}
       <div className="hud-effects ui-panel">
-        {DEMO_EFFECTS.map((effect) => (
-          <div key={effect.id} className="effect-row">
+        {effects.map((effect) => (
+          <div key={effect.id} className={`effect-row tone-${effect.tone}`}>
             <span className="fx-icon">{effect.icon}</span>
             <span>
               <span className="fx-name">{effect.name}</span><br />
-              <span className="fx-time">{effect.time}</span>
+              <span className="fx-time">{effect.detail}</span>
             </span>
           </div>
         ))}
@@ -289,7 +305,12 @@ export default function HudFrame({
 
       <div className="hud-abilities">
         {HUD_ABILITIES.map((ability) => (
-          <button key={ability.id} className="ability-btn" title={ability.name}>
+          <button
+            key={ability.id}
+            className={`ability-btn ${ability.id === 'flight' && flightEnabled ? 'active' : ''}`}
+            title={`${ability.hint} [${ability.key}]`}
+            onClick={() => onAbility?.(ability.key)}
+          >
             <span className="ab-key">{ability.key}</span>
             <span className="ab-icon">{ability.icon}</span>
             <span className="ab-name">{ability.name}</span>

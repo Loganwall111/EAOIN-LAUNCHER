@@ -12,6 +12,9 @@ export const UI_ASSETS = {
   newsCivilizations: '/assets/ui/news-civilizations.jpg',
   newsDimensions: '/assets/ui/news-dimensions.jpg',
   newsSpace: '/assets/ui/news-space.jpg',
+  bgMultiplayer: '/assets/ui/bg-multiplayer.jpg',
+  bgMods: '/assets/ui/bg-mods.jpg',
+  bgOptions: '/assets/ui/bg-options.jpg',
 } as const;
 
 export interface NewsEntry {
@@ -99,32 +102,26 @@ export const CREATOR_BACKGROUNDS = [
 
 /* ------------------------------------------------------------- HUD helpers */
 
-export interface HudEffect {
+/**
+ * Ability rail. Each entry maps to a real keyboard handler already implemented
+ * in GameCanvas, so clicking a button and pressing the key do the same thing.
+ */
+export interface AbilityDef {
   id: string;
+  key: string;
   icon: string;
   name: string;
-  time: string;
+  hint: string;
 }
 
-export const DEMO_EFFECTS: HudEffect[] = [
-  { id: 'strength', icon: '⚔️', name: 'Strength II', time: '0:16' },
-  { id: 'resistance', icon: '🛡️', name: 'Resistance', time: '2:18' },
-  { id: 'fireres', icon: '🔥', name: 'Fire Resistance', time: '2:18' },
-  { id: 'nightvision', icon: '👁️', name: 'Night Vision', time: '∞' },
-  { id: 'haste', icon: '⛏️', name: 'Haste II', time: '0:16' },
-  { id: 'regen', icon: '❤️', name: 'Regeneration', time: '0:16' },
-  { id: 'jump', icon: '🦵', name: 'Jump Boost II', time: '0:16' },
-  { id: 'speed', icon: '👟', name: 'Speed II', time: '0:16' },
+export const HUD_ABILITIES: AbilityDef[] = [
+  { id: 'flight', key: 'F', icon: '🕊️', name: 'Flight', hint: 'Toggle creative flight' },
+  { id: 'portal', key: 'P', icon: '🌀', name: 'Portal', hint: 'Cycle dimension at a portal' },
+  { id: 'rocket', key: 'R', icon: '🚀', name: 'Rocket', hint: 'Launch to the moon' },
+  { id: 'door', key: 'G', icon: '🚪', name: 'Door', hint: 'Use a nearby door' },
+  { id: 'supplies', key: 'V', icon: '📦', name: 'Supply', hint: 'Deliver supplies to the settlement' },
+  { id: 'boss', key: 'N', icon: '👑', name: 'Boss', hint: 'Strike the final boss' },
 ];
-
-export const HUD_ABILITIES = [
-  { id: 'grapple', key: 'R', icon: '🪝', name: 'Grapple' },
-  { id: 'ability1', key: 'F', icon: '💠', name: 'Ability 1' },
-  { id: 'ability2', key: 'C', icon: '🔥', name: 'Ability 2' },
-  { id: 'ability3', key: 'V', icon: '⚡', name: 'Ability 3' },
-  { id: 'builders', key: 'B', icon: '🔨', name: 'Builders' },
-  { id: 'map', key: 'N', icon: '🗺️', name: 'Map' },
-] as const;
 
 export const CHAT_CHANNELS = ['GLOBAL', 'LOCAL', 'FACTION', 'SYSTEM'] as const;
 export type ChatChannel = (typeof CHAT_CHANNELS)[number];

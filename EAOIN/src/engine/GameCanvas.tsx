@@ -45,6 +45,7 @@ export interface HudTelemetry {
   timeOfDay: number;
   day: number;
   biome: string;
+  flightEnabled: boolean;
 }
 
 interface GameCanvasProps {
@@ -516,6 +517,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               timeOfDay: synced.timeOfDay,
               day: worldDay,
               biome: biomeName,
+              flightEnabled: flightEnabledRef.current,
             });
           }
         }
@@ -623,6 +625,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleContextMenu = (e: MouseEvent): void => { e.preventDefault(); };
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
+      const handleAbilityEvent = (event: Event): void => {
+        const key = (event as CustomEvent<{ key: string }>).detail?.key;
+        if (!key) return;
+        handleKeyDown(new KeyboardEvent('keydown', { key, bubbles: false }));
+      };
+      window.addEventListener('eaoin-ability', handleAbilityEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       let recoveredFromRenderError = false;
       engine.runRenderLoop(() => {
@@ -643,6 +651,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       cleanupScene = () => {
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
+        window.removeEventListener('eaoin-ability', handleAbilityEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
         audio.stopMusic(); itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
