@@ -9,6 +9,12 @@ import { GameAudio } from '../audio/GameAudio';
 interface MainMenuProps {
   onStart: (seed?: string, mode?: GameMode) => void;
   currentSeed: string;
+  /**
+   * Where to open. TitleScreen is now the game's boot experience, so the
+   * default lands straight on the world/browse UI instead of replaying a
+   * studio ident and onboarding the player has already seen.
+   */
+  initialPhase?: MenuPhase;
 }
 
 type MenuPhase = 'BOOT' | 'STUDIO_INTRO' | 'ONBOARDING' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
@@ -84,12 +90,13 @@ function saveWorlds(worlds: WorldEntry[]): void {
   try { localStorage.setItem('eaoin_worlds', JSON.stringify(worlds)); } catch {}
 }
 
-export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
+export default function MainMenu({ onStart, currentSeed, initialPhase = 'MAIN' }: MainMenuProps) {
   const [seed, setSeed] = useState(currentSeed);
   const [mode, setMode] = useState<GameMode>('survival');
   const [hoverMode, setHoverMode] = useState<GameMode | null>(null);
-  // Enter the title screen immediately. The old boot spinner made the game feel like a browser demo.
-  const [phase, setPhase] = useState<MenuPhase>('STUDIO_INTRO');
+  // Enter the requested phase immediately. The old boot spinner made the game
+  // feel like a browser demo, and the studio ident now lives on TitleScreen.
+  const [phase, setPhase] = useState<MenuPhase>(initialPhase);
   const [bootProgress, setBootProgress] = useState(0);
   const [postProgress, setPostProgress] = useState(0);
   const [pendingWorld, setPendingWorld] = useState<{ seed: string; mode: GameMode } | null>(null);
