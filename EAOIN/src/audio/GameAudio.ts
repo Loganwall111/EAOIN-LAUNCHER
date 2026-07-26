@@ -57,8 +57,6 @@ export class GameAudio {
 
   stopMusic(): void { if (this.musicTimer !== null) { window.clearInterval(this.musicTimer); this.musicTimer = null; } if (this.ambienceTimer !== null) { window.clearInterval(this.ambienceTimer); this.ambienceTimer = null; } }
 
-  private getContext(): AudioContext | null {
-
   play(cue: AudioCue, settings: GameSettings): void {
     if (settings.muted || settings.volume <= 0) return;
     const context = this.getContext();
