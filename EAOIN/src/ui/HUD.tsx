@@ -37,7 +37,7 @@ function BlockLogo({ id, size = 28, pixelStyle = 'cube' }: { id: BlockID; size?:
   if (pixelStyle === 'flat') {
     return (
       <div className="block-logo flat" style={{ width: size, height: size, background: base, border: '2px solid #000', display: 'grid', placeItems: 'center', color: '#fff', textShadow: '1px 1px #000', font: '800 9px monospace', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)' }}>
-        {block.shortName}
+
       </div>
     );
   }
@@ -46,7 +46,7 @@ function BlockLogo({ id, size = 28, pixelStyle = 'cube' }: { id: BlockID; size?:
       <div className="block-logo iso" style={{ width: size, height: size, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' }} />
         <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${base} 0 40%, ${accent} 40% 70%, ${base} 70% 100%)`, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)', opacity: 0.6 }} />
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#fff', font: '800 8px monospace', textShadow: '1px 1px #000', zIndex: 2, paddingTop: size * 0.15 }}>{block.shortName}</div>
+        <div className="block-logo-highlight" />
       </div>
     );
   }
@@ -55,7 +55,7 @@ function BlockLogo({ id, size = 28, pixelStyle = 'cube' }: { id: BlockID; size?:
     <div className="block-logo cube" style={{ width: size, height: size, position: 'relative', background: '#000' }}>
       <div style={{ position: 'absolute', inset: '0 0 0 0', background: accent, clipPath: 'polygon(0 0, 60% 0, 100% 40%, 100% 100%, 40% 100%, 0 60%)' }} />
       <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(40% 0, 100% 0, 100% 40%, 60% 100%, 0 100%, 0 60%)' }} />
-      <div style={{ position: 'absolute', inset: '15% 15% 35% 35%', background: `linear-gradient(135deg, ${base} 0%, ${accent} 100%)`, display: 'grid', placeItems: 'center', color: '#fff', font: '800 8px monospace', textShadow: '1px 1px #000', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)' }}>{block.shortName}</div>
+      <div className="block-logo-highlight" />
     </div>
   );
 }

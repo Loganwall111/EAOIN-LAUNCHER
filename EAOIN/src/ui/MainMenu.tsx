@@ -87,7 +87,8 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [seed, setSeed] = useState(currentSeed);
   const [mode, setMode] = useState<GameMode>('survival');
   const [hoverMode, setHoverMode] = useState<GameMode | null>(null);
-  const [phase, setPhase] = useState<MenuPhase>('BOOT');
+  // Enter the title screen immediately. The old boot spinner made the game feel like a browser demo.
+  const [phase, setPhase] = useState<MenuPhase>('MAIN');
   const [bootProgress, setBootProgress] = useState(0);
   const [postProgress, setPostProgress] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);

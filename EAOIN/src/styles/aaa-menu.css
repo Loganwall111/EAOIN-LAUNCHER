@@ -1,7 +1,18 @@
-/* AAA Main Menu Revamp */
-.main-menu { background: linear-gradient(135deg,#0f0f23 0%,#1a1a3a 60%,#2a1a3a 100%); }
-.menu-background { background: rgba(20,10,30,0.75); border: 2px solid rgba(255,255,255,0.15); border-radius: 12px; box-shadow: 0 0 60px rgba(138,121,255,0.35); backdrop-filter: blur(14px); }
-.title-front { background: linear-gradient(90deg,#ffd166,#a879ff,#5dd6ff); text-shadow: 0 0 30px rgba(255,209,102,0.6); }
-.btn-primary { background: linear-gradient(180deg,#7ef7a0,#2e5a2e); box-shadow: 0 8px 30px rgba(93,214,95,0.45); border-radius: 8px; }
-.mode-card { border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); transition: transform 0.2s ease; }
-.mode-card:hover { transform: translateY(-4px); filter: brightness(1.18); }
+/* Premium title-screen and HUD overrides. These replace the flat browser-game treatment. */
+.main-menu.main-phase { background:#080c12; color:#f5f7fa; }
+.main-menu.main-phase .mc-skybox { filter:saturate(.9) contrast(1.08); }
+.main-menu.main-phase .main-layout { align-items:center; }
+.main-menu.main-phase .menu-background { background:linear-gradient(135deg,rgba(10,16,24,.94),rgba(18,24,33,.86)); border:1px solid rgba(255,255,255,.18); border-radius:18px; box-shadow:0 32px 100px rgba(0,0,0,.62),inset 0 1px rgba(255,255,255,.12); backdrop-filter:blur(18px); }
+.main-menu.main-phase .menu-title-3d { text-align:left; }
+.main-menu.main-phase .title-warped { letter-spacing:.12em; filter:drop-shadow(0 8px 0 rgba(0,0,0,.3)); }
+.main-menu.main-phase .title-front { background:linear-gradient(180deg,#fff,#9bdcff 55%,#4b8bb8); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.main-menu.main-phase .btn-primary,.main-menu.main-phase .btn-secondary,.main-menu.main-phase .minecraft-btn { border-radius:10px; border:1px solid rgba(255,255,255,.22); box-shadow:0 8px 20px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.14); transition:transform .16s,filter .16s; }
+.main-menu.main-phase button:hover { transform:translateY(-2px); filter:brightness(1.16); }
+.main-menu.main-phase .mode-card { border:1px solid rgba(255,255,255,.14); border-radius:12px; background:rgba(255,255,255,.06); }
+.main-menu.main-phase .mode-card.selected { border-color:#64d8ff; box-shadow:0 0 0 2px rgba(100,216,255,.18),0 10px 25px rgba(0,0,0,.25); }
+.main-menu.main-phase .menu-footer { opacity:.72; }
+.block-logo-highlight { position:absolute; inset:16%; background:linear-gradient(135deg,rgba(255,255,255,.34),transparent 42%); clip-path:polygon(0 0,100% 0,72% 100%,0 100%); pointer-events:none; }
+.hotbar .block-logo { image-rendering:pixelated; filter:drop-shadow(0 3px 2px rgba(0,0,0,.7)); }
+.hotbar .item-label { display:none; }
+.hotbar .slot { background:linear-gradient(145deg,rgba(48,57,66,.96),rgba(14,18,23,.96)); border:1px solid rgba(255,255,255,.2); border-radius:5px; }
+.hotbar .slot.selected { border-color:#ffd166; box-shadow:0 0 0 2px #ffd166,0 0 18px rgba(255,209,102,.38); }
