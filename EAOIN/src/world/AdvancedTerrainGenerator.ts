@@ -165,6 +165,9 @@ const BLOCK = {
 
 const BEDROCK_MIX: BlockID[] = [12, 12, 12, 12, 3]; // Mostly obsidian-ish "bedrock" stand-in
 
+/** Max columns kept in the height caches (~a few MB at most). */
+const HEIGHT_CACHE_LIMIT = 262144;
+
 export class AdvancedTerrainGenerator {
   private readonly chunks = new Map<string, Chunk>();
   private readonly editOverrides = new Map<string, WorldBlockEdit>();
@@ -175,6 +178,8 @@ export class AdvancedTerrainGenerator {
   private readonly riverNoise: AdvancedNoise;
   private readonly biomeNoise: AdvancedNoise;
   private readonly oreNoise: AdvancedNoise;
+  private readonly heightCache = new Map<string, number>();
+  private readonly rawHeightCache = new Map<string, number>();
   public readonly config: WorldGenConfig;
 
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
@@ -240,28 +245,67 @@ export class AdvancedTerrainGenerator {
 
   /** Final terrain height in voxels, used everywhere. */
   getTerrainHeight(worldX: number, worldZ: number): number {
-    if (this.config.floatingIslands || this.config.skyIslands) return this.getFloatingIslandHeight(worldX, worldZ);
-    if (Math.hypot(worldX, worldZ) < SPAWN_PROTECTED_RADIUS + 2) return this.config.seaLevel - 6;
+    const x = Math.floor(worldX), z = Math.floor(worldZ);
+    const key = `${x}:${z}`;
+    const cached = this.heightCache.get(key);
+    if (cached !== undefined) return cached;
 
-    const continent = this.getBaseHeight(worldX, worldZ);
-    const mountain = this.getMountainHeight(worldX, worldZ);
+    const h = Math.max(
+      this.config.bedrockThickness,
+      Math.min(this.config.worldDepth - 8, Math.round(this.computeTerrainHeight(x, z)))
+    );
+    this.rememberHeight(this.heightCache, key, h);
+    return h;
+  }
+
+  /** Height before erosion smoothing. Never calls getTerrainHeight (no recursion). */
+  private getRawTerrainHeight(worldX: number, worldZ: number): number {
+    const x = Math.floor(worldX), z = Math.floor(worldZ);
+    const key = `${x}:${z}`;
+    const cached = this.rawHeightCache.get(key);
+    if (cached !== undefined) return cached;
+
+    const continent = this.getBaseHeight(x, z);
+    const mountain = this.getMountainHeight(x, z);
 
     // Mountain mask — where on the continent mountains appear.
-    const mountainMask = Math.max(0, this.noise.fbm2D(worldX * 0.0011, worldZ * 0.0011, 4, 2.0, 0.5, 8) - 0.55) * 4;
+    const mountainMask = Math.max(0, this.noise.fbm2D(x * 0.0011, z * 0.0011, 4, 2.0, 0.5, 8) - 0.55) * 4;
 
     // Continental baseline (0..1) → block height (0..90).
     const baseHeight = this.config.seaLevel - 8 + continent * 22;
     const mountainContribution = mountain * mountainMask * 64 * this.config.mountainIntensity;
-    const valleySmoothing = this.getValleyHeight(worldX, worldZ);
 
-    const detail = this.detailNoise.fbm2D(worldX * this.config.detailScale, worldZ * this.config.detailScale, 4, 2.0, 0.5, 11) * 2.6;
-    const beach = this.getBeachHeight(worldX, worldZ);
+    const detail = this.detailNoise.fbm2D(x * this.config.detailScale, z * this.config.detailScale, 4, 2.0, 0.5, 11) * 2.6;
+    const beach = this.getBeachHeight(x, z);
 
-    let h = baseHeight + mountainContribution + detail + beach;
-    h = this.applyHydraulicErosion(h, worldX, worldZ, 1);
-    h -= valleySmoothing;
+    const raw = baseHeight + mountainContribution + detail + beach;
+    this.rememberHeight(this.rawHeightCache, key, raw);
+    return raw;
+  }
 
-    return Math.max(this.config.bedrockThickness, Math.min(this.config.worldDepth - 8, Math.round(h)));
+  /** Composes the raw heightmap, erosion and valley smoothing for one column. */
+  private computeTerrainHeight(worldX: number, worldZ: number): number {
+    if (this.config.floatingIslands || this.config.skyIslands) return this.getFloatingIslandHeight(worldX, worldZ);
+    if (Math.hypot(worldX, worldZ) < SPAWN_PROTECTED_RADIUS + 2) return this.config.seaLevel - 6;
+
+    let h = this.getRawTerrainHeight(worldX, worldZ);
+    h = this.applyHydraulicErosion(h, worldX, worldZ);
+    h -= this.getValleyHeight(worldX, worldZ);
+    return h;
+  }
+
+  /** Small bounded LRU-ish cache so streaming does not recompute noise endlessly. */
+  private rememberHeight(cache: Map<string, number>, key: string, value: number): void {
+    if (cache.size >= HEIGHT_CACHE_LIMIT) {
+      // Drop the oldest quarter of the cache instead of clearing everything,
+      // so the chunk currently being meshed keeps its hot entries.
+      let toDrop = Math.floor(HEIGHT_CACHE_LIMIT / 4);
+      for (const k of cache.keys()) {
+        cache.delete(k);
+        if (--toDrop <= 0) break;
+      }
+    }
+    cache.set(key, value);
   }
 
   getFloatingIslandHeight(worldX: number, worldZ: number): number {
@@ -287,22 +331,29 @@ export class AdvancedTerrainGenerator {
     return (0.55 - h) * 4;
   }
 
-  /** Hydraulic + thermal erosion approximation in 1D. */
-  private applyHydraulicErosion(h: number, worldX: number, worldZ: number, iter: number): number {
-    if (iter >= this.config.erosionIterations) return h;
+  /**
+   * Hydraulic + thermal erosion approximation in 1D.
+   *
+   * Neighbour samples deliberately use the *raw* heightmap. Sampling the eroded
+   * height here would make getTerrainHeight call itself for four neighbours,
+   * which recursed forever and blew the stack (black screen on world load).
+   */
+  private applyHydraulicErosion(h: number, worldX: number, worldZ: number): number {
+    if (this.config.erosionIterations <= 0) return h;
     // Slightly lower peaks and lift valleys using a smoothed sample.
-    const dx = 1.4, dz = 1.4;
-    const a = this.getTerrainHeight(worldX + dx, worldZ);
-    const b = this.getTerrainHeight(worldX - dx, worldZ);
-    const c = this.getTerrainHeight(worldX, worldZ + dz);
-    const d = this.getTerrainHeight(worldX, worldZ - dz);
-    const mean = (a + b + c + d) / 4;
-    const diff = h - mean;
-    // Thermal erosion: take a bit off the top if it is much higher than its
-    // neighbors. Hydraulic erosion: take a bit off too if neighbors are lower
-    // by more than a threshold (we always nudge down a touch).
-    const erosion = Math.min(2, Math.max(0, diff) * 0.4);
-    return Math.max(this.config.bedrockThickness, h - erosion);
+    const step = 1.4;
+    let eroded = h;
+    for (let iter = 0; iter < this.config.erosionIterations; iter++) {
+      const spread = step * (iter + 1);
+      const a = this.getRawTerrainHeight(worldX + spread, worldZ);
+      const b = this.getRawTerrainHeight(worldX - spread, worldZ);
+      const c = this.getRawTerrainHeight(worldX, worldZ + spread);
+      const d = this.getRawTerrainHeight(worldX, worldZ - spread);
+      const mean = (a + b + c + d) / 4;
+      const diff = eroded - mean;
+      eroded = Math.max(this.config.bedrockThickness, eroded - Math.min(2, Math.max(0, diff) * 0.4));
+    }
+    return eroded;
   }
 
   /* ============= FILL PASSES ============= */

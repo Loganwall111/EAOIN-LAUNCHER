@@ -58,6 +58,10 @@ const BLOCK_REACH = 7;
 const GRAVITY_BASE = -20;
 const JUMP_VELOCITY_BASE = 7.5;
 const TERMINAL_VELOCITY = -28;
+/** Chunks meshed synchronously before the first frame is presented. */
+const INITIAL_CHUNK_RADIUS = 2;
+/** Chunks generated + meshed per frame while streaming the render radius in. */
+const CHUNKS_PER_FRAME = 2;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
 
 export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange }: GameCanvasProps) {
@@ -185,7 +189,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const settlementRuntime = new SettlementRuntime(scene, terrain, seed);
       const authorityRuntime = new LocalAuthorityRuntime(seed);
       let streamCenter = toChunkCoordinate(spawn.x, spawn.z);
-      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, renderRadius, (cx, cz) => terrain.generateChunk(cx, cz));
+      // Load only the chunks directly around spawn synchronously so the first
+      // frame has ground in it. The rest of the render radius is streamed in a
+      // few chunks per frame below, which keeps the canvas from sitting on a
+      // black screen while thousands of chunks are meshed.
+      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => terrain.generateChunk(cx, cz));
       const lighting = configureSceneLighting(scene, spawn);
       const cloudRuntime = new CloudRuntime(scene, spawn.y, seed);
 
@@ -442,15 +450,28 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const moving = horiz > 0.01;
         let nextSurvival = updateSurvivalLoop(survivalStatsRef.current, deltaSeconds, moving);
         survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
-        streamFrame += 1;
-        if (streamFrame % 12 === 0) {
-          const nextCenter = toChunkCoordinate(camera.position.x, camera.position.z);
-          if (nextCenter.cx !== streamCenter.cx || nextCenter.cz !== streamCenter.cz) {
-            streamCenter = nextCenter;
-            const result = renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, renderRadius, (cx, cz) => terrain.generateChunk(cx, cz));
-            showActionMessage(`Streaming +${result.loaded}/-${result.unloaded} • Clouds moving • Fog ${settingsRef.current.fogEnabled ? '100-1000' : 'off'}`);
+        // Incremental world streaming — a small budget every frame so the world
+        // keeps filling in without ever blocking the render loop.
+        const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);
+        const centerChanged = movedChunk.cx !== streamCenter.cx || movedChunk.cz !== streamCenter.cz;
+        if (centerChanged) streamCenter = movedChunk;
+        if (centerChanged || renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
+          const result = renderer.updateVisibleChunks(
+            streamCenter.cx, streamCenter.cz, renderRadius,
+            (cx, cz) => terrain.generateChunk(cx, cz),
+            { budget: CHUNKS_PER_FRAME }
+          );
+          if (result.loaded > 0 || result.unloaded > 0) {
             try { const sg = lighting.shadowGenerator; for (const m of scene.meshes) if (m.name.startsWith('voxel_world_')) { sg.addShadowCaster(m as Mesh, true); (m as Mesh).receiveShadows = true; } } catch {}
           }
+          if (result.pending > 0 && streamFrame % 30 === 0) {
+            showActionMessage(`Loading world — ${result.pending} chunks remaining`);
+          } else if (result.pending === 0 && result.loaded > 0) {
+            showActionMessage(`World loaded • render distance ${renderRadius} chunks`);
+          }
+        }
+        streamFrame += 1;
+        if (streamFrame % 12 === 0) {
           logicRuntime.scanPlacedNetwork(camera.position); publishRuntimeStatus();
           const targetPick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH));
           const creatureId = targetPick?.pickedMesh?.metadata?.creatureId as string | undefined;
