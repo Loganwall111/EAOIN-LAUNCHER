@@ -4,13 +4,14 @@ import { RELEASE_LABEL } from '../version';
 import { MarketplaceRuntime } from '../marketplace/MarketplaceRuntime';
 import { GameSettings } from '../settings/GameSettings';
 import { loadSettings, saveSettings } from '../settings/SettingsSave';
+import { GameAudio } from '../audio/GameAudio';
 
 interface MainMenuProps {
   onStart: (seed?: string, mode?: GameMode) => void;
   currentSeed: string;
 }
 
-type MenuPhase = 'BOOT' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
+type MenuPhase = 'BOOT' | 'STUDIO_INTRO' | 'ONBOARDING' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
 
 interface WorldEntry {
   id: string;
@@ -87,13 +88,17 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [seed, setSeed] = useState(currentSeed);
   const [mode, setMode] = useState<GameMode>('survival');
   const [hoverMode, setHoverMode] = useState<GameMode | null>(null);
-  const [phase, setPhase] = useState<MenuPhase>('BOOT');
+  // Enter the title screen immediately. The old boot spinner made the game feel like a browser demo.
+  const [phase, setPhase] = useState<MenuPhase>('STUDIO_INTRO');
   const [bootProgress, setBootProgress] = useState(0);
   const [postProgress, setPostProgress] = useState(0);
+  const [pendingWorld, setPendingWorld] = useState<{ seed: string; mode: GameMode } | null>(null);
   const [tipIndex, setTipIndex] = useState(0);
   const [splash, setSplash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
+  const [multiplayerOpen, setMultiplayerOpen] = useState(false);
+  const [modsOpen, setModsOpen] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [skinTone, setSkinTone] = useState('#b86f48');
   const [shirtColor, setShirtColor] = useState('#2467c7');
@@ -103,6 +108,12 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [catFilter, setCatFilter] = useState('All');
   const [marketRevision, setMarketRevision] = useState(0);
   const marketplace = useMemo(() => new MarketplaceRuntime(), []);
+  const menuAudio = useMemo(() => new GameAudio(), []);
+  useEffect(() => {
+    const start = () => menuAudio.startMusic(settings, 'menu');
+    window.addEventListener('pointerdown', start, { once: true });
+    return () => { window.removeEventListener('pointerdown', start); menuAudio.stopMusic(); };
+  }, [menuAudio, settings]);
   const marketStatus = useMemo(() => {
     void marketRevision;
     return marketplace.getStatus();
@@ -124,7 +135,14 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const selectedWorld = worlds.find(w => w.id === selectedWorldId) ?? worlds[0];
 
   useEffect(() => saveWorlds(worlds), [worlds]);
-  useEffect(() => { if (mode === 'survival' && creatorOpen) setCreatorOpen(false); }, [mode, creatorOpen]);
+  // Character Creator is available from the main menu for every game mode.
+
+  // Cinematic studio ident: an intentional AAA-style opening, not a loading screen.
+  useEffect(() => {
+    if (phase !== 'STUDIO_INTRO') return;
+    const id = window.setTimeout(() => setPhase('ONBOARDING'), 2800);
+    return () => window.clearTimeout(id);
+  }, [phase]);
 
   // Boot loading
   useEffect(() => {
@@ -145,11 +163,11 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
     const tipId = window.setInterval(() => setTipIndex(i => (i + 1) % POST_PLAY_TIPS.length), 260);
     const id = window.setInterval(() => {
       p += Math.random() * 9 + 4;
-      if (p >= 100) { setPostProgress(100); window.clearInterval(id); window.clearInterval(tipId); window.setTimeout(() => setPhase('MAIN'), 420); }
+      if (p >= 100) { setPostProgress(100); window.clearInterval(id); window.clearInterval(tipId); window.setTimeout(() => { if (pendingWorld) onStart(pendingWorld.seed, pendingWorld.mode); else setPhase('MAIN'); }, 420); }
       else setPostProgress(p);
     }, 85);
     return () => { window.clearInterval(id); window.clearInterval(tipId); };
-  }, [phase]);
+  }, [phase, pendingWorld, onStart]);
 
   // Parallax
   useEffect(() => {
@@ -159,8 +177,13 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   }, []);
 
   const effectiveBackground = (hoverMode ?? mode) ? MODE_BACKGROUNDS[hoverMode ?? mode] : MODE_BACKGROUNDS.survival;
-  const beginPlayClick = () => { if (phase === 'SPLASH_PLAY') { setPhase('POST_PLAY_LOADING'); setPostProgress(0); setTipIndex(0); } };
-  const beginWorld = (s?: string, m?: GameMode) => onStart(s ?? seed, m ?? mode);
+  const beginPlayClick = () => { if (phase === 'SPLASH_PLAY') { setPendingWorld(null); setPhase('POST_PLAY_LOADING'); setPostProgress(0); setTipIndex(0); } };
+  const beginWorld = (s?: string, m?: GameMode) => {
+    setPendingWorld({ seed: s ?? seed, mode: m ?? mode });
+    setPostProgress(0);
+    setTipIndex(0);
+    setPhase('POST_PLAY_LOADING');
+  };
   const reshuffleSplash = () => setSplash(SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const saveSettingsPatch = (patch: Partial<GameSettings>) => { const next = { ...settings, ...patch }; setSettings(next); saveSettings(next); };
 
@@ -187,6 +210,46 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const handleDeleteWorld = (id: string) => {
     setWorlds(w => w.filter(x => x.id !== id));
   };
+
+  // ===== STUDIO IDENT =====
+  if (phase === 'STUDIO_INTRO') {
+    return (
+      <div className="studio-ident" role="status" aria-label="ONEBLOCKAWAY Studios">
+        <div className="studio-orbit"><span /><span /><span /></div>
+        <div className="studio-name">ONEBLOCKAWAY</div>
+        <div className="studio-label">STUDIOS</div>
+        <div className="studio-subline">PRESENTS</div>
+      </div>
+    );
+  }
+
+  // ===== FIRST-ENTRY ONBOARDING =====
+  if (phase === 'ONBOARDING') {
+    return (
+      <div className="first-entry-screen">
+        <button className="first-entry-close" aria-label="Back to main menu" onClick={() => setPhase('MAIN')}>×</button>
+        <div className="first-entry-content">
+          <div className="tutorial-card">
+            <span className="eyebrow">WELCOME TO EAOIN</span>
+            <h1>Learn the world before you enter it.</h1>
+            <p>Gather, craft, build, explore, and shape a world that belongs to you.</p>
+            <div className="tutorial-steps">
+              <div><b>WASD</b><span>Move</span></div><div><b>SPACE</b><span>Jump</span></div><div><b>LEFT CLICK</b><span>Mine</span></div><div><b>RIGHT CLICK</b><span>Place blocks</span></div><div><b>E</b><span>Inventory</span></div><div><b>T</b><span>Chat</span></div>
+            </div>
+            <p className="tutorial-note">Choose your look, then press Play to create your first world. You can revisit everything from the main menu.</p>
+            <button className="btn-primary first-entry-play" onClick={() => setPhase('MAIN')}>PLAY & CREATE YOUR FIRST WORLD →</button>
+          </div>
+          <div className="first-entry-creator">
+            <span className="eyebrow">YOUR CHARACTER</span><h2>Make it yours</h2>
+            <div className="onboarding-avatar" style={{ background: shirtColor, borderColor: skinTone }}><div style={{ background: skinTone }} /></div>
+            <label>Skin tone <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label>
+            <label>Outfit color <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label>
+            <small>Character Creator is available again from the main menu.</small>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ===== BOOT =====
   if (phase === 'BOOT') {
@@ -364,8 +427,10 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
               <button onClick={() => beginWorld(undefined, 'experimental')} className="btn-secondary minecraft-btn">Quick Experimental — Ray Traced Shadows + Clouds</button>
               <div className="quick-row">
                 <button className="menu-settings-link mc-link" onClick={() => setSettingsOpen(v => !v)}>⚙️ Settings (front-page)</button>
-                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace (fixed)</button>
-                {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Family / Character Creator</button>}
+                <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace</button>
+                <button className="menu-settings-link mc-link" onClick={() => setMultiplayerOpen(v => !v)}>🌐 Multiplayer</button>
+                <button className="menu-settings-link mc-link" onClick={() => setModsOpen(v => !v)}>🧩 Mods & Packs</button>
+                <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>🧍 Character Creator</button>
               </div>
             </div>
             <div className="right-col">
@@ -409,8 +474,27 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                   <button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button>
                 </div>
               )}
-              {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
-              {!settingsOpen && !marketOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
+              {creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
+              {multiplayerOpen && (
+                <div className="menu-settings-card pro multiplayer-front">
+                  <strong>🌐 Multiplayer</strong>
+                  <p>Join friends and discover community worlds.</p>
+                  <div className="market-pack"><strong>EAOIN Official Realms</strong><span>Online • 128 players • Survival / Creative</span><button className="btn-primary mini">Join</button></div>
+                  <div className="market-pack"><strong>Community Adventure Hub</strong><span>Online • Cross-play • Quests and worlds</span><button className="btn-secondary mini">View</button></div>
+                  <button onClick={() => setMultiplayerOpen(false)} className="btn-secondary mini">Close</button>
+                </div>
+              )}
+              {modsOpen && (
+                <div className="menu-settings-card pro mods-front">
+                  <strong>🧩 Mods & Packs</strong>
+                  <p>Manage your installed content before entering a world.</p>
+                  <div className="market-pack"><strong>World & Gameplay Packs</strong><span>12 installed • 4 enabled</span><button className="btn-primary mini">Manage</button></div>
+                  <div className="market-pack"><strong>Texture Packs</strong><span>HD voxel materials • shaders • UI themes</span><button className="btn-secondary mini">Browse</button></div>
+                  <div className="market-pack"><strong>Upload Pack</strong><span>Worlds, skins, textures, mods and DLC</span><button className="btn-secondary mini">Upload</button></div>
+                  <button onClick={() => setModsOpen(false)} className="btn-secondary mini">Close</button>
+                </div>
+              )}
+              {!settingsOpen && !marketOpen && !multiplayerOpen && !modsOpen && !creatorOpen && <div className="menu-info-card pro"><h4>✨ What’s new 3.2</h4><ul><li>☁️ Cloud map — Minecraft clouds stunning far, moving</li><li>🏔️ Default worlds now use regular Minecraft-like solid terrain; floating islands are a preset seed</li><li>📋 Create world screen with growth on side like Minecraft — name, seed, mode, cheats/sheets, mods</li><li>✎ Edit world with pencil button, centered layout, not square menu 123 on sides</li><li>🌗 Day/night 20 min cycle</li><li>🎒 Inventory block logos, survival 2x2 + 3x3 table crafting above</li><li>👊 Hand punching — arm goes towards tree</li><li>💥 Block cracking overlay — official cracking, not just bar</li><li>🌫️ Fog reduced to 100-1000 toggle</li><li>💬 T chat + /day /time /summon entity commands</li></ul></div>}
             </div>
           </div>
           <div className="menu-footer pro"><p>3.2 • Clouds visible • 16 chunks • Regular Minecraft-like worlds by default • Floating Islands preset seed • F fly button • 20min day • Inventory logos • Hand punch + cracking • Fog 100-1000 • T chat /day /time • World list centered</p></div>

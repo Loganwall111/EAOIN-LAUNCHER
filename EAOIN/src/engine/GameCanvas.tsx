@@ -519,6 +519,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       const handleMouseUp = (event: MouseEvent): void => { if (event.button !== 0 || !miningSession) return; showActionMessage('Mining canceled'); clearMining(); };
       const handleKeyDown = (event: KeyboardEvent): void => {
+        const ambienceProfile = dimensionRuntime.getState().id === 'nether' ? 'nether' : (dimensionRuntime.getState().id === 'end' ? 'end' : 'forest');
+        audio.startMusic(settingsRef.current, ambienceProfile === 'nether' ? 'nether' : 'overworld');
+        audio.startAmbience(settingsRef.current, ambienceProfile);
         pressedKeys.add(event.code);
         if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (!flightEnabledRef.current && grounded) jumpRequested = true; return; }
         if (event.key === 'F5') {
@@ -592,7 +595,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
-        itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     })();
     return () => { disposed = true; cleanupScene?.(); };

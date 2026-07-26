@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/global.css';
+import './styles/aaa-menu.css';
 
 console.log('EAOIN Ultimate Sandbox Engine v0.01 — Boot Sequence Initiated');
 console.log('Engine Architecture: ECS + Chunk Streaming + Deferred Rendering');
