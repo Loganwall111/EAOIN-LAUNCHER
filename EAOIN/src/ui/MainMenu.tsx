@@ -91,6 +91,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [phase, setPhase] = useState<MenuPhase>('MAIN');
   const [bootProgress, setBootProgress] = useState(0);
   const [postProgress, setPostProgress] = useState(0);
+  const [pendingWorld, setPendingWorld] = useState<{ seed: string; mode: GameMode } | null>(null);
   const [tipIndex, setTipIndex] = useState(0);
   const [splash, setSplash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -146,11 +147,11 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
     const tipId = window.setInterval(() => setTipIndex(i => (i + 1) % POST_PLAY_TIPS.length), 260);
     const id = window.setInterval(() => {
       p += Math.random() * 9 + 4;
-      if (p >= 100) { setPostProgress(100); window.clearInterval(id); window.clearInterval(tipId); window.setTimeout(() => setPhase('MAIN'), 420); }
+      if (p >= 100) { setPostProgress(100); window.clearInterval(id); window.clearInterval(tipId); window.setTimeout(() => { if (pendingWorld) onStart(pendingWorld.seed, pendingWorld.mode); else setPhase('MAIN'); }, 420); }
       else setPostProgress(p);
     }, 85);
     return () => { window.clearInterval(id); window.clearInterval(tipId); };
-  }, [phase]);
+  }, [phase, pendingWorld, onStart]);
 
   // Parallax
   useEffect(() => {
@@ -160,8 +161,13 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   }, []);
 
   const effectiveBackground = (hoverMode ?? mode) ? MODE_BACKGROUNDS[hoverMode ?? mode] : MODE_BACKGROUNDS.survival;
-  const beginPlayClick = () => { if (phase === 'SPLASH_PLAY') { setPhase('POST_PLAY_LOADING'); setPostProgress(0); setTipIndex(0); } };
-  const beginWorld = (s?: string, m?: GameMode) => onStart(s ?? seed, m ?? mode);
+  const beginPlayClick = () => { if (phase === 'SPLASH_PLAY') { setPendingWorld(null); setPhase('POST_PLAY_LOADING'); setPostProgress(0); setTipIndex(0); } };
+  const beginWorld = (s?: string, m?: GameMode) => {
+    setPendingWorld({ seed: s ?? seed, mode: m ?? mode });
+    setPostProgress(0);
+    setTipIndex(0);
+    setPhase('POST_PLAY_LOADING');
+  };
   const reshuffleSplash = () => setSplash(SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const saveSettingsPatch = (patch: Partial<GameSettings>) => { const next = { ...settings, ...patch }; setSettings(next); saveSettings(next); };
 
