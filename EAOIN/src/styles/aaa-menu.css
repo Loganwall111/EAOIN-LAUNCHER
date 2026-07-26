@@ -1,4 +1,4 @@
-/* Premium title-screen and HUD overrides. These replace the flat browser-game treatment. */
+/* Premium title-screen and HUD overrides. */
 .main-menu.main-phase { background:#080c12; color:#f5f7fa; }
 .main-menu.main-phase .mc-skybox { filter:saturate(.9) contrast(1.08); }
 .main-menu.main-phase .main-layout { align-items:center; }
@@ -10,9 +10,16 @@
 .main-menu.main-phase button:hover { transform:translateY(-2px); filter:brightness(1.16); }
 .main-menu.main-phase .mode-card { border:1px solid rgba(255,255,255,.14); border-radius:12px; background:rgba(255,255,255,.06); }
 .main-menu.main-phase .mode-card.selected { border-color:#64d8ff; box-shadow:0 0 0 2px rgba(100,216,255,.18),0 10px 25px rgba(0,0,0,.25); }
-.main-menu.main-phase .menu-footer { opacity:.72; }
 .block-logo-highlight { position:absolute; inset:16%; background:linear-gradient(135deg,rgba(255,255,255,.34),transparent 42%); clip-path:polygon(0 0,100% 0,72% 100%,0 100%); pointer-events:none; }
 .hotbar .block-logo { image-rendering:pixelated; filter:drop-shadow(0 3px 2px rgba(0,0,0,.7)); }
 .hotbar .item-label { display:none; }
 .hotbar .slot { background:linear-gradient(145deg,rgba(48,57,66,.96),rgba(14,18,23,.96)); border:1px solid rgba(255,255,255,.2); border-radius:5px; }
 .hotbar .slot.selected { border-color:#ffd166; box-shadow:0 0 0 2px #ffd166,0 0 18px rgba(255,209,102,.38); }
+.studio-ident { position:fixed; inset:0; display:grid; place-content:center; justify-items:center; background:radial-gradient(circle at 50% 42%,#172b3b 0,#070b11 48%,#020305 100%); color:#f4f8fb; z-index:100; overflow:hidden; animation:studioFade 2.8s ease both; }
+.studio-name { font:700 clamp(24px,5vw,64px)/1 'Arial Narrow',Arial,sans-serif; letter-spacing:.28em; margin-left:.28em; animation:studioRise 1.4s ease both; }
+.studio-label { font:600 12px/1 Arial,sans-serif; letter-spacing:.75em; margin:.7rem 0 2.6rem .75em; color:#80d8ff; animation:studioRise 1.6s .15s ease both; }
+.studio-subline { font:11px Arial,sans-serif; letter-spacing:.5em; margin-left:.5em; color:#9aa9b6; animation:studioRise 1.6s .3s ease both; }
+.studio-orbit { position:absolute; width:min(60vw,500px); aspect-ratio:1; border:1px solid rgba(107,215,255,.18); border-radius:50%; transform:rotate(-24deg); animation:orbitSpin 3s linear infinite; }
+.studio-orbit span { position:absolute; width:7px; height:7px; border-radius:50%; background:#8ce6ff; box-shadow:0 0 18px #55cfff; top:50%; left:-4px; }
+.studio-orbit span:nth-child(2){left:auto;right:18%;top:8%;}.studio-orbit span:nth-child(3){left:42%;top:auto;bottom:-4px;}
+@keyframes studioFade{0%,100%{opacity:0}12%,88%{opacity:1}} @keyframes studioRise{from{opacity:0;transform:translateY(14px);letter-spacing:.5em}to{opacity:1;transform:none}} @keyframes orbitSpin{to{transform:rotate(336deg)}}

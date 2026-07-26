@@ -10,7 +10,7 @@ interface MainMenuProps {
   currentSeed: string;
 }
 
-type MenuPhase = 'BOOT' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
+type MenuPhase = 'BOOT' | 'STUDIO_INTRO' | 'SPLASH_PLAY' | 'POST_PLAY_LOADING' | 'MAIN' | 'WORLD_LIST' | 'CREATE_WORLD' | 'EDIT_WORLD';
 
 interface WorldEntry {
   id: string;
@@ -88,7 +88,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const [mode, setMode] = useState<GameMode>('survival');
   const [hoverMode, setHoverMode] = useState<GameMode | null>(null);
   // Enter the title screen immediately. The old boot spinner made the game feel like a browser demo.
-  const [phase, setPhase] = useState<MenuPhase>('MAIN');
+  const [phase, setPhase] = useState<MenuPhase>('STUDIO_INTRO');
   const [bootProgress, setBootProgress] = useState(0);
   const [postProgress, setPostProgress] = useState(0);
   const [pendingWorld, setPendingWorld] = useState<{ seed: string; mode: GameMode } | null>(null);
@@ -128,7 +128,14 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const selectedWorld = worlds.find(w => w.id === selectedWorldId) ?? worlds[0];
 
   useEffect(() => saveWorlds(worlds), [worlds]);
-  useEffect(() => { if (mode === 'survival' && creatorOpen) setCreatorOpen(false); }, [mode, creatorOpen]);
+  // Character Creator is available from the main menu for every game mode.
+
+  // Cinematic studio ident: an intentional AAA-style opening, not a loading screen.
+  useEffect(() => {
+    if (phase !== 'STUDIO_INTRO') return;
+    const id = window.setTimeout(() => setPhase('MAIN'), 2800);
+    return () => window.clearTimeout(id);
+  }, [phase]);
 
   // Boot loading
   useEffect(() => {
@@ -196,6 +203,18 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
   const handleDeleteWorld = (id: string) => {
     setWorlds(w => w.filter(x => x.id !== id));
   };
+
+  // ===== STUDIO IDENT =====
+  if (phase === 'STUDIO_INTRO') {
+    return (
+      <div className="studio-ident" role="status" aria-label="ONEBLOCKAWAY Studios">
+        <div className="studio-orbit"><span /><span /><span /></div>
+        <div className="studio-name">ONEBLOCKAWAY</div>
+        <div className="studio-label">STUDIOS</div>
+        <div className="studio-subline">PRESENTS</div>
+      </div>
+    );
+  }
 
   // ===== BOOT =====
   if (phase === 'BOOT') {
@@ -376,7 +395,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                 <button className="menu-settings-link mc-link" onClick={() => setMarketOpen(v => !v)}>🛒 Marketplace</button>
                 <button className="menu-settings-link mc-link" onClick={() => setMultiplayerOpen(v => !v)}>🌐 Multiplayer</button>
                 <button className="menu-settings-link mc-link" onClick={() => setModsOpen(v => !v)}>🧩 Mods & Packs</button>
-                {mode !== 'survival' && <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>👨‍👩‍👧 Family / Character Creator</button>}
+                <button className="menu-settings-link mc-link" onClick={() => setCreatorOpen(v => !v)}>🧍 Character Creator</button>
               </div>
             </div>
             <div className="right-col">
@@ -420,7 +439,7 @@ export default function MainMenu({ onStart, currentSeed }: MainMenuProps) {
                   <button onClick={() => setMarketOpen(false)} className="btn-secondary mini">Close</button>
                 </div>
               )}
-              {mode !== 'survival' && creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
+              {creatorOpen && <div className="menu-settings-card character-creator pro"><strong>👨‍👩‍👧 Family / Character Creator</strong><label>Skin <input type="color" value={skinTone} onChange={e => setSkinTone(e.target.value)} /></label><label>Shirt <input type="color" value={shirtColor} onChange={e => setShirtColor(e.target.value)} /></label><div className="avatar-preview pro" style={{ background: shirtColor, borderColor: skinTone }}><div className="preview-head" style={{ background: skinTone }} /></div><button onClick={() => setCreatorOpen(false)} className="btn-secondary mini">Save</button></div>}
               {multiplayerOpen && (
                 <div className="menu-settings-card pro multiplayer-front">
                   <strong>🌐 Multiplayer</strong>
