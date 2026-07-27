@@ -2147,7 +2147,7 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .menu-panel.pro { max-width: 96vw; margin: 0 auto; left: 0; right: 0; width: auto; }
 
 /* ---- Creative tabbed inventory ---- */
-.creative-inventory { display: grid; grid-template-rows: auto auto 1fr auto; height: calc(100% - 80px); gap: 10px; }
+.creative-inventory { display: grid; grid-template-rows: auto auto 1fr auto auto; height: calc(100% - 80px); gap: 10px; }
 .creative-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -2230,6 +2230,74 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .creative-name { font: 800 8px var(--eaoin-pixel-font); color: #fff; text-shadow: 1px 1px #000; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .creative-id { font: 8px var(--eaoin-pixel-font); color: #888; }
 .creative-tip { padding: 8px; background: rgba(93,214,255,0.12); border: 1px solid rgba(93,214,255,0.3); color: #bfeaff; font: 10px var(--eaoin-pixel-font); border-radius: 3px; text-align: center; }
+
+/* Empty-search state so the grid never just looks broken. */
+.creative-empty {
+  grid-column: 1 / -1;
+  padding: 28px 12px;
+  text-align: center;
+  color: #9fb2ce;
+  font: 11px var(--eaoin-pixel-font);
+}
+
+/* ---- Creative hotbar strip (Minecraft-style bottom row) ---- */
+.creative-hotbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  background: rgba(0,0,0,0.45);
+  border: 2px solid #555;
+  border-radius: 4px;
+}
+.creative-hotbar-label {
+  font: 800 10px var(--eaoin-pixel-font);
+  color: #ffd166;
+  text-shadow: 1px 1px #000;
+  letter-spacing: 0.5px;
+}
+.creative-hotbar { display: flex; gap: 4px; flex-wrap: wrap; }
+.creative-hotbar-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  background: #585858;
+  border-top: 3px solid #b5b5b5;
+  border-left: 3px solid #b5b5b5;
+  border-right: 3px solid #1c1c1c;
+  border-bottom: 3px solid #1c1c1c;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: transform 60ms ease, filter 60ms ease;
+}
+.creative-hotbar-slot:hover { filter: brightness(1.2); transform: translateY(-2px); }
+.creative-hotbar-slot.selected {
+  border-top-color: #7ef7a0;
+  border-left-color: #7ef7a0;
+  box-shadow: 0 0 0 2px rgba(126,247,160,0.45);
+}
+/* An armed slot is waiting for the player to click a block to assign. */
+.creative-hotbar-slot.armed {
+  border-top-color: #ffd166;
+  border-left-color: #ffd166;
+  box-shadow: 0 0 0 2px rgba(255,209,102,0.6), 0 0 12px rgba(255,209,102,0.4);
+  animation: creative-slot-pulse 900ms ease-in-out infinite;
+}
+@keyframes creative-slot-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+.creative-hotbar-slot .slot-key {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font: 800 8px var(--eaoin-pixel-font);
+  color: #ffd166;
+  text-shadow: 1px 1px #000;
+}
+.reduced-motion .creative-hotbar-slot.armed { animation: none; }
 
 /* ---- HUD buttons (F6-F12 etc) ---- */
 .hud-buttons {
@@ -2556,4 +2624,66 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 @media (max-width: 760px) {
   .hud-buttons { flex-wrap: wrap; }
   .creative-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---- World type picker (create-world screen) ---- */
+.sp-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.sp-type-card {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.42);
+  border: 2px solid #3a4658;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+.sp-type-card:hover { border-color: #7aa2cc; transform: translateY(-2px); }
+.sp-type-card.selected {
+  border-color: #7ef7a0;
+  box-shadow: 0 0 0 2px rgba(126, 247, 160, 0.34);
+}
+/* Each card previews its own terrain palette. */
+.sp-type-preview {
+  display: block;
+  height: 42px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+.sp-type-card strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 800 10px var(--eaoin-pixel-font, monospace);
+  color: #f0f4ff;
+}
+.sp-type-card small {
+  font: 9px/1.4 var(--eaoin-pixel-font, monospace);
+  color: #9fb2ce;
+}
+/* Badge for the deliberately strange world types. */
+.sp-type-exotic {
+  padding: 1px 5px;
+  background: linear-gradient(90deg, #a855f7, #ec4899);
+  color: #fff;
+  font: 800 7px var(--eaoin-pixel-font, monospace);
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+.sp-type-detail {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: rgba(93, 214, 255, 0.10);
+  border-left: 3px solid rgba(93, 214, 255, 0.5);
+  font: 9px/1.6 var(--eaoin-pixel-font, monospace);
+  color: #bfeaff;
 }

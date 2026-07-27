@@ -1,0 +1,168 @@
+/* ==========================================================================
+   WorldLoadingScreen — Minecraft-style world creation loading.
+   This is the ONLY loading bar in the game; boot has none.
+   ========================================================================== */
+
+.world-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #05070b;
+}
+
+/* The selected world type's own gradient, slowly drifting. */
+.wl-scene {
+  position: absolute;
+  inset: -12%;
+  filter: saturate(1.05) blur(2px);
+  animation: wl-drift 26s ease-in-out infinite alternate;
+}
+@keyframes wl-drift {
+  from { transform: scale(1.04) translate3d(-1.5%, -1%, 0); }
+  to   { transform: scale(1.12) translate3d(1.5%, 1%, 0); }
+}
+
+/* Tiled dirt-block texture, drawn in CSS so there is no asset to load. */
+.wl-dirt {
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-color: #6b4a2a;
+  background-image:
+    linear-gradient(45deg, rgba(0,0,0,0.22) 25%, transparent 25% 75%, rgba(0,0,0,0.22) 75%),
+    linear-gradient(45deg, rgba(0,0,0,0.22) 25%, transparent 25% 75%, rgba(0,0,0,0.22) 75%),
+    linear-gradient(0deg, rgba(255,255,255,0.05), rgba(0,0,0,0.16));
+  background-size: 16px 16px, 16px 16px, 100% 100%;
+  background-position: 0 0, 8px 8px, 0 0;
+  mix-blend-mode: multiply;
+}
+
+.wl-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, transparent 22%, rgba(0,0,0,0.88) 92%);
+}
+
+.wl-content {
+  position: relative;
+  width: min(720px, 90vw);
+  display: grid;
+  gap: 22px;
+  padding: 30px 34px;
+  background: rgba(8, 10, 14, 0.82);
+  border: 3px solid #2b3240;
+  border-top-color: #59636f;
+  border-left-color: #59636f;
+  border-radius: 4px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.7);
+}
+
+.wl-header { display: grid; gap: 9px; text-align: center; }
+
+.wl-world-name {
+  font: 900 clamp(20px, 3.4vw, 34px) var(--eaoin-pixel-font, monospace);
+  color: #f4f7ff;
+  text-shadow: 0 3px 0 #1a1f28, 0 6px 20px rgba(0,0,0,0.7);
+  letter-spacing: 0.04em;
+}
+
+.wl-world-meta {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.wl-type-badge {
+  padding: 4px 11px;
+  background: linear-gradient(180deg, #5a7a9a, #2c3e58);
+  border: 2px solid #92aec8;
+  border-right-color: #1a1f2a;
+  border-bottom-color: #1a1f2a;
+  font: 800 10px var(--eaoin-pixel-font, monospace);
+  color: #fff;
+  letter-spacing: 0.06em;
+}
+
+.wl-seed {
+  font: 10px var(--eaoin-pixel-font, monospace);
+  color: #8fa2ba;
+}
+
+.wl-type-detail {
+  margin: 0;
+  text-align: center;
+  font: 11px/1.65 var(--eaoin-pixel-font, monospace);
+  color: #b9c7db;
+}
+
+/* ------------------------------ the bar --------------------------------- */
+
+.wl-bar-block { display: grid; gap: 9px; }
+
+.wl-bar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font: 11px var(--eaoin-pixel-font, monospace);
+}
+.wl-stage { color: #d8e4f4; }
+.wl-pct { color: #7ef7a0; font-weight: 800; }
+
+.wl-bar-track {
+  position: relative;
+  height: 22px;
+  background: #12161d;
+  border: 3px solid #000;
+  box-shadow: inset 0 0 0 2px #2b3240;
+  overflow: hidden;
+}
+
+.wl-bar-fill {
+  height: 100%;
+  background: linear-gradient(180deg, #8fe86a 0%, #5bc23a 48%, #3f8f26 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.34), inset 0 -3px 0 rgba(0,0,0,0.3);
+  transition: width 90ms linear;
+}
+
+/* Segment dividers give the bar its blocky Minecraft read. */
+.wl-bar-segments {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  pointer-events: none;
+}
+.wl-bar-segments span { border-right: 2px solid rgba(0, 0, 0, 0.38); }
+.wl-bar-segments span:last-child { border-right: none; }
+
+/* ------------------------------- the tip -------------------------------- */
+
+.wl-tip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(93, 214, 255, 0.10);
+  border: 1px solid rgba(93, 214, 255, 0.28);
+  border-radius: 3px;
+}
+.wl-tip-label {
+  flex: none;
+  padding: 3px 8px;
+  background: #5dd6ff;
+  color: #04121c;
+  font: 800 9px var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.08em;
+}
+.wl-tip-text {
+  font: 10px/1.5 var(--eaoin-pixel-font, monospace);
+  color: #bfeaff;
+}
+
+.reduced-motion .wl-scene { animation: none; }
+.reduced-motion .wl-bar-fill { transition: none; }

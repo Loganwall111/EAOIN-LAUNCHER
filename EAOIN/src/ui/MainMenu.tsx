@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GAME_MODES, GameMode } from '../modes/GameMode';
 import { GameAudio } from '../audio/GameAudio';
+import { AmbienceEngine } from '../audio/AmbienceEngine';
+import { seedForWorldType, WORLD_TYPES, WorldTypeID } from '../world/WorldTypes';
 
 interface MainMenuProps {
   onStart: (seed?: string, mode?: GameMode) => void;
@@ -26,6 +28,8 @@ interface WorldEntry {
   icon: string;
   cheats: boolean;
   mods: boolean;
+  /** Terrain preset — default, flat, skylands, far lands… */
+  worldType?: WorldTypeID;
 }
 
 const MODE_BACKGROUNDS: Record<GameMode, { label: string; gradient: string; emoji: string; description: string }> = {
@@ -55,11 +59,32 @@ function saveWorlds(worlds: WorldEntry[]): void {
 export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps) {
   const menuAudio = useMemo(() => new GameAudio(), []);
 
+  // Menu music plus the dedicated menu ambience bed.
+  const menuAmbience = useMemo(() => new AmbienceEngine(), []);
   useEffect(() => {
-    const start = () => menuAudio.startMusic({ muted: false, volume: 0.8 } as any, 'menu');
+    const start = () => {
+      menuAudio.startMusic({ muted: false, volume: 0.8 } as any, 'menu');
+      menuAmbience.setVolume(0.5, false);
+      menuAmbience.play('menu');
+    };
+    // Browsers block audio until a gesture, so arm on the first interaction.
     window.addEventListener('pointerdown', start, { once: true });
-    return () => { window.removeEventListener('pointerdown', start); menuAudio.stopMusic(); };
-  }, [menuAudio]);
+    let raf = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      menuAmbience.update((now - last) / 1000);
+      last = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('pointerdown', start);
+      cancelAnimationFrame(raf);
+      menuAudio.stopMusic();
+      menuAmbience.dispose();
+    };
+  }, [menuAudio, menuAmbience]);
 
   // World selection state
   const [worlds, setWorlds] = useState<WorldEntry[]>(() => loadWorlds(currentSeed));
@@ -67,7 +92,7 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
   const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
   const [createForm, setCreateForm] = useState<WorldEntry>({
     id: '', name: 'New World', seed: currentSeed, mode: 'survival', lastPlayed: 'Now',
-    size: '0 MB', growth: '0 chunks', icon: '🌍', cheats: false, mods: false,
+    size: '0 MB', growth: '0 chunks', icon: '🌍', cheats: false, mods: false, worldType: 'default',
   });
   const [editWorld, setEditWorld] = useState<WorldEntry | null>(null);
 
@@ -76,8 +101,12 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
   useEffect(() => saveWorlds(worlds), [worlds]);
 
   const handleCreateWorld = () => {
+    // The terrain generators read the world preset off the seed string, so tag
+    // it here rather than threading a new parameter through the whole engine.
+    const taggedSeed = seedForWorldType(createForm.seed, createForm.worldType ?? 'default');
     const newWorld: WorldEntry = {
       ...createForm,
+      seed: taggedSeed,
       id: 'world_' + Date.now(),
       lastPlayed: new Date().toLocaleString(),
       size: Math.floor(Math.random() * 60 + 10) + ' MB',
@@ -225,6 +254,33 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                 </div>
               </label>
 
+              {/* World type picker — flat, amplified, skylands, Far Lands… */}
+              <div className="sp-mode-select">
+                <span className="sp-field-label">World Type</span>
+                <div className="sp-type-grid">
+                  {WORLD_TYPES.map(type => (
+                    <button
+                      key={type.id}
+                      className={`sp-type-card ${createForm.worldType === type.id ? 'selected' : ''}`}
+                      onClick={() => setCreateForm({ ...createForm, worldType: type.id })}
+                      title={type.detail}
+                    >
+                      <span className="sp-type-preview" style={{ background: type.preview }} />
+                      <strong>
+                        {type.name}
+                        {type.exotic && <span className="sp-type-exotic">EXOTIC</span>}
+                      </strong>
+                      <small>{type.description}</small>
+                    </button>
+                  ))}
+                </div>
+                {createForm.worldType && (
+                  <p className="sp-type-detail">
+                    {WORLD_TYPES.find(t => t.id === createForm.worldType)?.detail}
+                  </p>
+                )}
+              </div>
+
               <div className="sp-mode-select">
                 <span className="sp-field-label">Game Mode</span>
                 <div className="sp-mode-grid">
@@ -276,6 +332,33 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                   <button className="sp-seed-random" onClick={() => setEditWorld({ ...editWorld, seed: Math.random().toString(36).slice(2, 10) })}>🎲 New Seed</button>
                 </div>
               </label>
+
+              {/* World type picker — flat, amplified, skylands, Far Lands… */}
+              <div className="sp-mode-select">
+                <span className="sp-field-label">World Type</span>
+                <div className="sp-type-grid">
+                  {WORLD_TYPES.map(type => (
+                    <button
+                      key={type.id}
+                      className={`sp-type-card ${createForm.worldType === type.id ? 'selected' : ''}`}
+                      onClick={() => setCreateForm({ ...createForm, worldType: type.id })}
+                      title={type.detail}
+                    >
+                      <span className="sp-type-preview" style={{ background: type.preview }} />
+                      <strong>
+                        {type.name}
+                        {type.exotic && <span className="sp-type-exotic">EXOTIC</span>}
+                      </strong>
+                      <small>{type.description}</small>
+                    </button>
+                  ))}
+                </div>
+                {createForm.worldType && (
+                  <p className="sp-type-detail">
+                    {WORLD_TYPES.find(t => t.id === createForm.worldType)?.detail}
+                  </p>
+                )}
+              </div>
 
               <div className="sp-mode-select">
                 <span className="sp-field-label">Game Mode</span>

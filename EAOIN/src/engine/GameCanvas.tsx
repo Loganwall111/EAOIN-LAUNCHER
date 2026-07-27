@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Color3, Color4, DefaultRenderingPipeline, DynamicTexture, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Texture, TransformNode, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
+import { AmbienceEngine, ambienceForBiome } from '../audio/AmbienceEngine';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
-import { CloudRuntime } from '../effects/CloudRuntime';
 import { runCommand, WorldTimeState } from '../commands/CommandRuntime';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { addToInventory, canConsumeBlock, getStackCount, HOTBAR_BLOCKS, InventoryStacks, removeFromInventory } from '../player/InventoryState';
 import { applyDamage, SurvivalStats, updateSurvivalLoop } from '../player/SurvivalState';
+import { climateForBiome, createStarterHydration, drink, HydrationState, updateHydration } from '../player/Hydration';
 import { estimateMining, getTool, nextTool, ToolID, ToolInventory } from '../player/ToolState';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
 import DimensionRuntime, { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
-import { AmbientParticleRuntime } from '../effects/AmbientParticleRuntime';
 import { WorldInteractionRuntime } from '../effects/WorldInteractionRuntime';
 import { ItemDropManager } from '../items/ItemDropManager';
 import { LocalAuthorityRuntime } from '../networking/LocalAuthorityRuntime';
@@ -29,7 +29,8 @@ import { TerrainGenerator } from '../world/TerrainGenerator';
 import AdvancedTerrainGenerator, { FLOATING_ISLANDS_CONFIG } from '../world/AdvancedTerrainGenerator';
 import { FloatingIslandsGenerator } from '../world/FloatingIslands';
 import { AdvancedPhysicsRuntime } from '../physics/AdvancedPhysics';
-import { DynamicSky, DEFAULT_SKY } from '../sky/DynamicSky';
+import { AtmosphereSystem, AtmosphereFrame } from '../sky/AtmosphereSystem';
+import { getWorldType, worldTypeFromSeed, WorldTypeConfig } from '../world/WorldTypes';
 import { PortalSystem } from '../portals/PortalSystem';
 import { RealityRiftSystem } from '../world/RealityRifts';
 import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
@@ -46,6 +47,14 @@ export interface HudTelemetry {
   day: number;
   biome: string;
   flightEnabled: boolean;
+  /** 0-100 thirst bar. Drains fast in deserts. */
+  hydration: number;
+  /** Human-readable climate band, e.g. "Scorching". */
+  climate: string;
+  /** Active weather effect, e.g. "sandstorm". */
+  weather: string;
+  /** Name of the active sky/atmosphere profile. */
+  skyProfile: string;
 }
 
 interface GameCanvasProps {
@@ -59,6 +68,8 @@ interface GameCanvasProps {
   onGameplayEvent: (e: GameplayCounterKey, amount?: number) => void;
   onRuntimeStatusChange: (s: RuntimeStatus) => void;
   onTelemetry?: (t: HudTelemetry) => void;
+  /** Live game-mode switching, so `/gamemode creative` works mid-world. */
+  onGameModeChange?: (mode: GameMode) => void;
 }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
@@ -74,24 +85,18 @@ const INITIAL_CHUNK_RADIUS = 2;
 const CHUNKS_PER_FRAME = 2;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
 
-/**
- * The new sky is deliberately cinematic without the white-out.  Midday is a
- * saturated blue instead of pure HDR cyan, sunrise/sunset are warmer, and rare
- * events stay rare so they read as ambience rather than screen-filling flashes.
- */
-const SKY_OVERHAUL_CONFIG = {
-  ...DEFAULT_SKY,
-  noonColor: new Color3(0.30, 0.50, 0.76),
-  sunriseColor: new Color3(0.95, 0.56, 0.34),
-  sunsetColor: new Color3(0.92, 0.38, 0.26),
-  midnightColor: new Color3(0.025, 0.035, 0.105),
-  eclipseColor: new Color3(0.18, 0.18, 0.30),
-  meteorShowerChance: 0.012,
-  eclipseChance: 0.003,
-  dayLengthSeconds: 1200,
-};
+/** Full day/night cycle length in real seconds — 20 minutes, like Minecraft. */
+const DAY_LENGTH_SECONDS = 1200;
 
-export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry }: GameCanvasProps) {
+/** Particle emit-rate multiplier per quality preset. */
+function particleQualityFor(preset: GameSettings['qualityPreset']): number {
+  if (preset === 'performance') return 0.45;
+  if (preset === 'quality') return 1.15;
+  if (preset === 'cinematic') return 1.4;
+  return 1;
+}
+
+export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onGameModeChange }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -99,6 +104,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const inventoryRef = useRef<InventoryStacks>(inventory);
   const survivalStatsRef = useRef<SurvivalStats>(survivalStats);
   const settingsRef = useRef<GameSettings>(settings);
+  // Game mode is read inside the render loop and inside event handlers. Keeping
+  // it in a ref means switching modes never tears down and rebuilds the scene.
+  const gameModeRef = useRef<GameMode>(gameMode);
+  const gameModeChangeRef = useRef(onGameModeChange);
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
@@ -124,6 +133,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   useEffect(() => { inventoryRef.current = inventory; }, [inventory]);
   useEffect(() => { survivalStatsRef.current = survivalStats; }, [survivalStats]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
+  useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
   useEffect(() => { worldTimeRef.current = worldTime; }, [worldTime]);
 
   useEffect(() => {
@@ -146,9 +157,18 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const savedEdits = saveManager.load();
       // 1.0 advanced world generation. Falls back to legacy if the seed asks.
       const useAdvancedWorld = !/classic|legacy/i.test(seed);
-      const isSkyWorld = /floating[-_ ]?islands|skylands|amplified/i.test(seed);
+      // 2.0 — the world-creation screen tags the seed with the chosen preset,
+      // e.g. "skylands__mySeed". Decode it into real generator settings.
+      const worldTypeId = worldTypeFromSeed(seed);
+      const worldTypeConfig = getWorldType(worldTypeId).config;
+      const isSkyWorld = Boolean(worldTypeConfig.floatingIslands)
+        || /floating[-_ ]?islands|skylands|amplified/i.test(seed);
       const advancedTerrain: AdvancedTerrainGenerator | null = useAdvancedWorld
-        ? new AdvancedTerrainGenerator({ ...(isSkyWorld ? FLOATING_ISLANDS_CONFIG : {}), seed })
+        ? new AdvancedTerrainGenerator({
+            ...(isSkyWorld ? FLOATING_ISLANDS_CONFIG : {}),
+            ...worldTypeOverrides(worldTypeConfig),
+            seed,
+          })
         : null;
       const terrain: TerrainGenerator = useAdvancedWorld
         ? (advancedTerrain as unknown as TerrainGenerator)
@@ -219,11 +239,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
       const materials = createBlockMaterials(scene, settingsRef.current.texturePack);
       const audio = new GameAudio();
+      // 2.0 — layered procedural soundscapes per biome/dimension.
+      const ambience = new AmbienceEngine();
+      ambience.setVolume(settingsRef.current.volume, settingsRef.current.muted);
       const renderer = new ChunkRenderManager(scene, materials);
       const itemDrops = new ItemDropManager(scene, materials);
       const renderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
-      const ambientParticles = new AmbientParticleRuntime(scene, spawn);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
       const moddingRuntime = new ModdingRuntime(); moddingRuntime.registerMockPack();
       const nextGenRuntime = new NextGenRuntime(scene, terrain, seed, gameMode, spawn);
@@ -237,7 +259,6 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // black screen while thousands of chunks are meshed.
       renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => terrain.generateChunk(cx, cz));
       const lighting = configureSceneLighting(scene, spawn);
-      const cloudRuntime = new CloudRuntime(scene, spawn.y, seed);
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
       glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.22 : 0.08;
@@ -274,8 +295,21 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
         }
       }
-      const dynamicSky = new DynamicSky(scene, SKY_OVERHAUL_CONFIG);
-      dynamicSky.attach();
+      // 2.0 — ONE atmosphere system owns the sky dome, celestial bodies,
+      // clouds, stars, aurora, fog and biome weather particles. Nothing else in
+      // the engine writes scene.clearColor / fogColor, which is what keeps the
+      // horizon seamless and killed the flashing blue overhead.
+      const atmosphere = new AtmosphereSystem(scene, {
+        seed,
+        dayLengthSeconds: DAY_LENGTH_SECONDS,
+        particlesEnabled: settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion,
+        particleQuality: particleQualityFor(settingsRef.current.qualityPreset),
+      });
+      atmosphere.attach();
+      atmosphere.timeOfDay = worldTimeRef.current.timeOfDay;
+      atmosphere.setDimension(dimensionRuntime.getState().id);
+      // Track the biome under the player so the sky can cross-fade per biome.
+      let lastBiomeKey = '';
       const portalSystem = new PortalSystem(scene);
       // spawn the "home" portal near spawn
       const currentDim = dimensionRuntime.getState();
@@ -378,6 +412,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
 
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
+      // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
+      // the heat and you must find water (or an oasis) to top it back up.
+      let hydrationState: HydrationState = createStarterHydration();
+      let currentClimate = climateForBiome('plains');
       let worldDay = 1, lastTimeOfDay = worldTimeRef.current.timeOfDay;
       let timeState: WorldTimeState = worldTimeRef.current;
       let lastCameraPosition = camera.position.clone();
@@ -423,23 +461,61 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const gravityStrength = GRAVITY_BASE * (Math.abs(dimGravityY) / 0.52);
         const jumpVel = JUMP_VELOCITY_BASE * (dimGravityY < -0.3 ? 1 : 0.9 + Math.abs(dimGravityY) / 0.52 * 0.2);
 
-        updateWorldLighting(scene, lighting, timeState.timeOfDay, settingsRef.current.experimentalVulkanMode || settingsRef.current.realisticLighting);
+        // Keep the atmosphere clock in sync with the world clock (so /time works).
+        atmosphere.timeOfDay = timeState.timeOfDay;
+        atmosphere.frozen = timeState.frozen;
+        atmosphere.setParticlesEnabled(settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion);
+
+        // Cross-fade the sky whenever the player walks into a new biome.
+        if (streamFrame % 20 === 0) {
+          try {
+            const raw = (terrain as unknown as { getBiomeAt?: (x: number, z: number) => unknown })
+              .getBiomeAt?.(camera.position.x, camera.position.z);
+            let biomeKey = '';
+            let biomeCategory: string | undefined;
+            if (typeof raw === 'string') biomeKey = raw;
+            else if (raw && typeof raw === 'object') {
+              const def = raw as { id?: unknown; name?: unknown; category?: unknown };
+              biomeKey = String(def.id ?? def.name ?? '');
+              biomeCategory = def.category === undefined ? undefined : String(def.category);
+            }
+            if (biomeKey && biomeKey !== lastBiomeKey) {
+              lastBiomeKey = biomeKey;
+              atmosphere.setBiome(biomeKey, biomeCategory);
+            }
+            // Swap the soundscape to match where the player actually is,
+            // including going underwater and dropping into deep caves.
+            const eyeBlock = terrain.getBlockAt(
+              Math.floor(camera.position.x),
+              Math.floor(camera.position.y),
+              Math.floor(camera.position.z)
+            );
+            const underwater = eyeBlock === 5;
+            const surfaceY = terrain.getHeightAt(camera.position.x, camera.position.z);
+            const underground = camera.position.y < surfaceY - 6;
+            const ambienceKey = underground && !underwater
+              ? (camera.position.y < surfaceY * 0.45 ? 'deep_cave' : 'cave')
+              : (biomeKey || 'plains');
+            ambience.play(ambienceForBiome(ambienceKey, { underwater }));
+          } catch { /* biome lookup is cosmetic — never break the frame */ }
+        }
+
+        ambience.setVolume(settingsRef.current.volume, settingsRef.current.muted);
+        ambience.update(deltaSeconds);
+        const atmosphereFrame = atmosphere.update(deltaSeconds, camera.position);
+        updateWorldLighting(lighting, atmosphereFrame, settingsRef.current.experimentalVulkanMode || settingsRef.current.realisticLighting);
         if (pipeline) {
           // Runtime safety clamp: if the player enables a heavy shader pack,
           // keep exposure and bloom inside a readable range.
           pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.80);
           pipeline.bloomWeight = Math.min(pipeline.bloomWeight, 0.18);
         }
-        ambientParticles.setEnabled(settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion);
-        ambientParticles.update(timeState.timeOfDay, settingsRef.current.experimentalVulkanMode);
-        cloudRuntime.update(deltaSeconds);
         nextGenRuntime.update(deltaSeconds, camera.position, settingsRef.current);
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
-        // 1.0 — dynamic sky drives scene color/fog/ambient per frame.
-        dynamicSky.update(deltaSeconds, camera.position);
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
-        // 1.0 — wind from sky drives the advanced physics simulations.
-        physics.setWind(new Vector3(0.4 + 0.6 * Math.sin(dynamicSky.time * 0.1), 0, 0.3 + 0.4 * Math.cos(dynamicSky.time * 0.13)));
+        // Wind from the atmosphere drives the advanced physics simulations.
+        const windPhase = performance.now() * 0.0001;
+        physics.setWind(new Vector3(0.4 + 0.6 * Math.sin(windPhase), 0, 0.3 + 0.4 * Math.cos(windPhase * 1.3)));
         physics.update(deltaSeconds);
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
@@ -526,6 +602,35 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const horiz = Math.hypot(camera.position.x - lastCameraPosition.x, camera.position.z - lastCameraPosition.z);
         const moving = horiz > 0.01;
         let nextSurvival = updateSurvivalLoop(survivalStatsRef.current, deltaSeconds, moving);
+
+        // --- Thirst ---------------------------------------------------------
+        // Sun exposure is the atmosphere's daylight scaled by how open the sky
+        // is above the player, so caves and night are safe.
+        const headBlock = terrain.getBlockAt(
+          Math.floor(camera.position.x),
+          Math.floor(camera.position.y),
+          Math.floor(camera.position.z)
+        );
+        const standingInWater = headBlock === 5;
+        const sunExposure = atmosphereFrame.dayFactor;
+        currentClimate = climateForBiome(lastBiomeKey || 'plains');
+        const hydrationTick = updateHydration(hydrationState, {
+          deltaSeconds,
+          climate: currentClimate,
+          moving,
+          exerting: flightEnabledRef.current && moving,
+          sunExposure,
+          inWater: standingInWater,
+        });
+        hydrationState = { hydration: hydrationTick.hydration, parchedSeconds: hydrationTick.parchedSeconds };
+        if (hydrationTick.warning) showActionMessage(hydrationTick.warning);
+        if (hydrationTick.damage > 0) nextSurvival = applyDamage(nextSurvival, hydrationTick.damage);
+        // Dehydration throttles stamina recovery.
+        if (hydrationTick.staminaScale < 1 && nextSurvival.stamina > survivalStatsRef.current.stamina) {
+          const regained = nextSurvival.stamina - survivalStatsRef.current.stamina;
+          nextSurvival = { ...nextSurvival, stamina: survivalStatsRef.current.stamina + regained * hydrationTick.staminaScale };
+        }
+
         survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
         // Incremental world streaming — a small budget every frame so the world
         // keeps filling in without ever blocking the render loop.
@@ -562,7 +667,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         positionFrame += 1;
         if (positionFrame % 8 === 0) {
           // Sync the in-world clock with the dynamic sky.
-          const synced: WorldTimeState = { ...timeState, timeOfDay: dynamicSky.config.timeOfDay };
+          const synced: WorldTimeState = { ...timeState, timeOfDay: atmosphere.timeOfDay };
           worldTimeRef.current = synced;
           setWorldTime(synced);
           // Feed the concept-art HUD (compass, minimap, clock, coordinates).
@@ -581,6 +686,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               day: worldDay,
               biome: biomeName,
               flightEnabled: flightEnabledRef.current,
+              hydration: hydrationState.hydration,
+              climate: currentClimate,
+              weather: atmosphere.getProfile().weather,
+              skyProfile: atmosphere.getProfile().label,
             });
           }
         }
@@ -622,9 +731,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (terrain.getBlockAt(placeTarget.x, placeTarget.y, placeTarget.z) !== 0) { showActionMessage('Occupied'); return; }
         if (wouldBlockPlayer(placeTarget, camera.position)) { showActionMessage('Cannot place inside player'); return; }
         const blockToPlace = selectedBlockRef.current;
-        if (gameMode !== 'creative' && !canConsumeBlock(inventoryRef.current, blockToPlace, 1)) { showActionMessage(`No ${getBlock(blockToPlace).name} left`); return; }
+        const creativeNow = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
+        if (!creativeNow && !canConsumeBlock(inventoryRef.current, blockToPlace, 1)) { showActionMessage(`No ${getBlock(blockToPlace).name} left`); return; }
         terrain.setBlockAt(placeTarget.x, placeTarget.y, placeTarget.z, blockToPlace);
-        authorityRuntime.recordAction(); if (gameMode !== 'creative') publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
+        authorityRuntime.recordAction(); if (!creativeNow) publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
         onGameplayEvent('blocksPlaced'); audio.play('place', settingsRef.current); rebuildEditedBlock(placeTarget); saveWorldEdits();
         showActionMessage(`Placed ${getBlock(blockToPlace).name}`);
       };
@@ -635,8 +745,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleMouseUp = (event: MouseEvent): void => { if (event.button !== 0 || !miningSession) return; showActionMessage('Mining canceled'); clearMining(); };
       const handleKeyDown = (event: KeyboardEvent): void => {
         const ambienceProfile = dimensionRuntime.getState().id === 'nether' ? 'nether' : (dimensionRuntime.getState().id === 'end' ? 'end' : 'forest');
+        // Music stays on GameAudio; ambience is owned by AmbienceEngine now.
         audio.startMusic(settingsRef.current, ambienceProfile === 'nether' ? 'nether' : 'overworld');
-        audio.startAmbience(settingsRef.current, ambienceProfile);
         pressedKeys.add(event.code);
         if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (!flightEnabledRef.current && grounded) jumpRequested = true; return; }
         if (event.key === 'F5') {
@@ -650,6 +760,37 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           showActionMessage(thirdPerson ? '🎥 Third-person view — player model visible in front of you' : '🎥 First-person view');
           return;
         }
+        if (event.key.toLowerCase() === 'x') {
+          // Drink: you must be standing in, or directly beside, water.
+          event.preventDefault();
+          const px = Math.floor(camera.position.x);
+          const pz = Math.floor(camera.position.z);
+          const py = Math.floor(camera.position.y);
+          let nearWater = false;
+          for (let dx = -1; dx <= 1 && !nearWater; dx += 1) {
+            for (let dz = -1; dz <= 1 && !nearWater; dz += 1) {
+              for (let dy = -2; dy <= 1 && !nearWater; dy += 1) {
+                if (terrain.getBlockAt(px + dx, py + dy, pz + dz) === 5) nearWater = true;
+              }
+            }
+          }
+          if (!nearWater) { showActionMessage('No water within reach — find a lake, river or oasis'); return; }
+          const result = drink(hydrationState);
+          hydrationState = result.state;
+          audio.play('pickup', settingsRef.current);
+          showActionMessage(result.message);
+          return;
+        }
+        if (event.key === 'F4') {
+          // Quick survival <-> creative toggle, so the creative inventory is
+          // always one key away without opening the chat console.
+          event.preventDefault();
+          const next: GameMode = gameModeRef.current === 'creative' ? 'survival' : 'creative';
+          gameModeChangeRef.current?.(next);
+          audio.play('ui', settingsRef.current);
+          showActionMessage(`Game mode: ${next.toUpperCase()} — press E for the ${next === 'creative' ? 'creative' : 'survival'} inventory`);
+          return;
+        }
         if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
         if (event.key === 'Escape') { event.preventDefault(); if (commandOpen || chatOpen) { setCommandOpen(false); setChatOpen(false); return; } document.exitPointerLock?.(); setPaused(true); return; }
         if (event.key === '/' && settingsRef.current.commandBlocksEnabled) { event.preventDefault(); document.exitPointerLock?.(); setCommandText('/'); setCommandOpen(true); setChatOpen(false); showActionMessage('Command console / — try /day /time /summon'); return; }
@@ -658,8 +799,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const keyIndex = Number.parseInt(event.key, 10) - 1;
         if (keyIndex >= 0 && keyIndex < HOTBAR_BLOCKS.length && !Number.isNaN(keyIndex)) { event.preventDefault(); const nextBlock = HOTBAR_BLOCKS[keyIndex]; selectedBlockRef.current = nextBlock; onSelectedBlockChange(nextBlock); showActionMessage(`Selected ${getBlock(nextBlock).name}`); return; }
         if (event.key.toLowerCase() === 'i' || event.key.toLowerCase() === 'e') { event.preventDefault(); onToggleInventory(); audio.play('ui', settingsRef.current); showActionMessage('Inventory with block logos + 2x2/3x3 crafting'); return; }
-        if (event.key.toLowerCase() === 'p') { event.preventDefault(); const used = hasNearbyBlock(terrain, camera.position, 15, 5); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return; }
-        if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameMode === 'creative' || gameMode === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
+        if (event.key.toLowerCase() === 'p') { event.preventDefault(); const used = hasNearbyBlock(terrain, camera.position, 15, 5); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return; }
+        if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameModeRef.current === 'creative' || gameModeRef.current === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'c') { event.preventDefault(); showActionMessage(nextGenRuntime.startCredits()); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'k') { event.preventDefault(); showActionMessage(nextGenRuntime.skipCredits()); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'h') { event.preventDefault(); showActionMessage(nextGenRuntime.toggleGodMode()); publishRuntimeStatus(); return; }
@@ -680,6 +821,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         handleKeyDown(new KeyboardEvent('keydown', { key, bubbles: false }));
       };
       window.addEventListener('eaoin-ability', handleAbilityEvent);
+      // Instant dimension travel, raised by the Dimensions menu (F8).
+      const handleTravelEvent = (event: Event): void => {
+        const dimensionId = (event as CustomEvent<{ dimensionId: string }>).detail?.dimensionId;
+        if (!dimensionId) return;
+        dimensionRuntime.setDimension(dimensionId as RuntimeDimensionID);
+        dimensionRuntime.triggerTransitionEffect(camera.position, true);
+        // Swap the whole atmosphere to the destination's sky and fog.
+        atmosphere.setDimension(dimensionId);
+        const state = dimensionRuntime.getState();
+        audio.play('ui', settingsRef.current);
+        showActionMessage(`Traveled to ${state.name}`);
+        publishRuntimeStatus();
+      };
+      window.addEventListener('eaoin-travel-dimension', handleTravelEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       let recoveredFromRenderError = false;
       engine.runRenderLoop(() => {
@@ -701,24 +856,34 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
+        window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
-        audio.stopMusic(); itemDrops.dispose(); ambientParticles.dispose(); cloudRuntime.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     })();
     return () => { disposed = true; cleanupScene?.(); };
-  }, [gameMode, onGameplayEvent, onInventoryChange, onRuntimeStatusChange, onSelectedBlockChange, onSelectedToolChange, onSurvivalStatsChange, onToggleInventory, onToggleSettings, seed, settings.rendererPreference, worldVersion]);
+  }, [onGameplayEvent, onInventoryChange, onRuntimeStatusChange, onSelectedBlockChange, onSelectedToolChange, onSurvivalStatsChange, onToggleInventory, onToggleSettings, seed, settings.rendererPreference, worldVersion]);
 
+  const applyCommandResult = (result: ReturnType<typeof runCommand>): void => {
+    onSettingsChange(clampSettings(result.settings));
+    worldTimeRef.current = result.time;
+    setWorldTime(result.time);
+    setActionMessage(result.lastMessage);
+    // `/gamemode creative` swaps the HUD to the creative inventory live.
+    if (result.gameModeChange) onGameModeChange?.(result.gameModeChange);
+  };
   const submitCommand = (): void => {
-    const result = runCommand(commandText, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage });
-    onSettingsChange(clampSettings(result.settings)); worldTimeRef.current = result.time; setWorldTime(result.time); setActionMessage(result.lastMessage); setCommandOpen(false);
+    const result = runCommand(commandText, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage, gameMode: gameModeRef.current });
+    applyCommandResult(result);
+    setCommandOpen(false);
     setChatMessages(m => [...m, { text: result.lastMessage, system: true }].slice(-18));
   };
   const submitChat = (): void => {
     const t = chatText.trim(); if (!t) { setChatOpen(false); return; }
     if (t.startsWith('/')) {
-      const result = runCommand(t, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage });
-      onSettingsChange(clampSettings(result.settings)); worldTimeRef.current = result.time; setWorldTime(result.time); setActionMessage(result.lastMessage);
+      const result = runCommand(t, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage, gameMode: gameModeRef.current });
+      applyCommandResult(result);
       setChatMessages(m => [...m, { text: `> ${t}`, system: false }, { text: result.lastMessage, system: true }].slice(-20));
       // Special handling for summon
       if (t.toLowerCase().startsWith('/summon')) { setChatMessages(m => [...m, { text: `Summoned ${t.split(' ')[1] ?? 'entity'} near you (mock)`, system: true }].slice(-20)); }
@@ -851,22 +1016,73 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${part(r)}${part(g)}${part(b)}`;
 }
 
-function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeOfDay: number, realistic: boolean): void {
-  const angle = (timeOfDay / 24) * Math.PI * 2;
-  const daylight = Math.max(0.08, Math.sin(angle - Math.PI / 2) * 0.5 + 0.5);
-  const moonlight = 1 - daylight; const boost = realistic ? 1.08 : 1;
-  lighting.sun.intensity = daylight * 0.82 * boost; lighting.sky.intensity = (0.18 + daylight * 0.38) * boost; lighting.spawnLight.intensity = 0.24 + moonlight * 0.72;
-  scene.fogDensity = realistic ? 0.0010 + moonlight * 0.0005 : 0.0011;
-  scene.ambientColor = new Color3(0.10 + daylight * 0.28, 0.12 + daylight * 0.32, 0.18 + daylight * 0.38);
-  const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22); const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4)); const rayAlpha = sunset * (realistic ? 1.3 : 0.85);
-  lighting.godRays.visibility = rayAlpha; lighting.godRays.rotation.y += 0.00012; const rayMaterial = lighting.godRays.material as any; if (rayMaterial) rayMaterial.alpha = 0.038 * rayAlpha;
-  const skyMat = lighting.skyDome.material as StandardMaterial; if (skyMat) { skyMat.emissiveColor = new Color3(0.08 + daylight * 0.14 + sunset * 0.26, 0.14 + daylight * 0.20 + sunset * 0.12, 0.24 + daylight * 0.24 - sunset * 0.06); }
-  lighting.sunDisk.visibility = Math.max(0, daylight - 0.12); lighting.moonDisk.visibility = Math.max(0, 1 - daylight - 0.05);
-  lighting.stars.forEach((star, index) => { star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index)); });
-  scene.clearColor = new Color4(0.03 + daylight * 0.39 + sunset * 0.26, 0.04 + daylight * 0.50 + sunset * 0.10, 0.08 + daylight * 0.68 - sunset * 0.04, 1);
-  scene.fogColor = new Color3(0.18 + daylight * 0.28 + sunset * 0.30, 0.24 + daylight * 0.36 + sunset * 0.10, 0.42 + daylight * 0.30 - sunset * 0.12);
-  const sunOrbit = angle; lighting.sunDisk.position.x = 0 + Math.cos(sunOrbit) * 180; lighting.sunDisk.position.y = 50 + Math.sin(sunOrbit) * 110; lighting.sunDisk.position.z = 0 + Math.sin(sunOrbit) * 40;
+/**
+ * Drive the world lighting rig from the atmosphere frame.
+ *
+ * BUGFIX 2.0: this function used to also write `scene.clearColor`,
+ * `scene.fogColor` and `scene.fogDensity`, and to position its own sun disc,
+ * moon disc, god-ray cone and 120 star meshes — all of which duplicated and
+ * fought with `DynamicSky`, which wrote the same three scene properties every
+ * frame with completely different formulas. The sky you saw overhead therefore
+ * never matched the fog at the horizon, which is what produced the hard blue
+ * band that flashed when you looked up.
+ *
+ * `AtmosphereSystem` is now the sole owner of sky colour, fog and celestial
+ * bodies. This function only maps the resulting atmosphere onto the actual
+ * lights, so there is exactly one source of truth.
+ */
+function updateWorldLighting(
+  lighting: SceneLightingHandles,
+  frame: AtmosphereFrame,
+  realistic: boolean
+): void {
+  const boost = realistic ? 1.08 : 1;
+  const daylight = Math.max(0.08, frame.dayFactor);
+  const moonlight = frame.nightFactor;
+
+  // Point the sun light along the real sun direction from the celestial rig, so
+  // shadows track the visible cube sun across the sky.
+  lighting.sun.direction.copyFrom(frame.sunDirection);
+  lighting.sun.intensity = daylight * 0.86 * boost * frame.profile.ambientScale;
+  lighting.sun.diffuse = frame.sunColor;
+
+  lighting.sky.intensity = (0.16 + daylight * 0.40) * boost * frame.profile.ambientScale;
+  lighting.sky.diffuse = Color3.Lerp(
+    frame.profile.zenithNight.scale(3),
+    frame.profile.horizonDay,
+    frame.dayFactor
+  );
+
+  // The spawn beacon glows brighter at night so it stays findable.
+  lighting.spawnLight.intensity = 0.24 + moonlight * 0.72;
 }
+
+/**
+ * Translate a world-type preset into `AdvancedTerrainGenerator` config.
+ *
+ * Kept separate from `WorldTypes.ts` so the preset table stays a pure data
+ * description and this file owns the mapping onto whatever the generator's
+ * current option names happen to be.
+ */
+function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (config.floatingIslands) { out.floatingIslands = true; out.skyIslands = true; }
+  if (config.seaLevelOverride !== undefined) out.seaLevel = config.seaLevelOverride;
+  if (config.heightScale !== undefined) out.mountainIntensity = config.heightScale;
+  // A superflat world has no relief, no caves and no erosion to run.
+  if (config.flatGroundY !== undefined) {
+    out.mountainIntensity = 0;
+    out.caveScale = 0;
+    out.erosionIterations = 0;
+    out.ravines = false;
+    out.sinkholes = false;
+    out.volcanoes = false;
+  }
+  // Cave worlds crank the carve rate right up.
+  if (config.caveWorld) out.caveScale = 3;
+  return out;
+}
+
 function toBlockCoordinate(point: Vector3): BlockCoordinate { return { x: Math.floor(point.x), y: Math.floor(point.y), z: Math.floor(point.z) }; }
 function toChunkCoordinate(worldX: number, worldZ: number): { cx: number; cz: number } { return { cx: Math.floor(worldX / 16), cz: Math.floor(worldZ / 16) }; }
 function hasNearbyBlock(terrain: { getBlockAt(x: number, y: number, z: number): BlockID }, position: Vector3, blockId: BlockID, radius: number): boolean {

@@ -249,6 +249,17 @@ export class CreatureManager {
       }
     }
 
+    // 2.0 — every mob gets emissive eyes so creatures are visible at night and
+    // read as alive rather than as unlit boxes.
+    const eyeMaterial = this.getEyeMaterial(kind);
+    for (const x of [-0.13, 0.13]) {
+      const eye = MeshBuilder.CreateBox(`creature_${kind}_eye`, { width: 0.075, height: 0.075, depth: 0.05 }, this.scene);
+      eye.parent = root;
+      eye.position = new Vector3(x, 0.9, 1.0);
+      eye.material = eyeMaterial;
+      meshes.push(eye);
+    }
+
     for (const mesh of meshes) {
       mesh.isPickable = true;
       mesh.checkCollisions = false;
@@ -360,6 +371,35 @@ export class CreatureManager {
       head: this.getMaterial('sheep_head', new Color3(0.18, 0.18, 0.16)),
       leg: this.getMaterial('sheep_leg', new Color3(0.1, 0.1, 0.09)),
     };
+  }
+
+  /**
+   * Emissive eye material, cached per species.
+   *
+   * Predators get a harder, hotter eyeshine than prey — the same trick real
+   * animals' tapetum lucidum produces, and it makes a wolf at the treeline
+   * instantly readable as a threat.
+   */
+  private getEyeMaterial(kind: CreatureKind): StandardMaterial {
+    const name = `eye_${kind}`;
+    const existing = this.materials.get(name);
+    if (existing) return existing;
+
+    const glow = kind === 'goat'
+      ? new Color3(1.0, 0.82, 0.28)
+      : kind === 'deer'
+        ? new Color3(0.62, 0.92, 1.0)
+        : kind === 'hare'
+          ? new Color3(1.0, 0.44, 0.44)
+          : new Color3(0.86, 0.96, 1.0);
+
+    const material = new StandardMaterial(`creature_material_${name}`, this.scene);
+    material.diffuseColor = Color3.Black();
+    material.emissiveColor = glow;
+    material.specularColor = Color3.Black();
+    material.disableLighting = true;
+    this.materials.set(name, material);
+    return material;
   }
 
   private getMaterial(name: string, color: Color3): StandardMaterial {
