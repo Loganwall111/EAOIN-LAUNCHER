@@ -74,10 +74,18 @@ function shade(color: Rgb, amount: number): Rgb {
   return { r: color.r * k, g: color.g * k, b: color.b * k };
 }
 
-/** Deterministic hash in [0,1). */
+/**
+ * Deterministic hash in [0,1).
+ *
+ * Avalanches twice. A single multiply-and-shift left the low bits of `x`
+ * correlated when `y` and `salt` were held constant, which is how the deer's
+ * scatter spots came out as diagonal streaks instead of dapples.
+ */
 function rand(x: number, y: number, salt: number): number {
-  let h = Math.imul(x * 374761393 + y * 668265263 + salt * 2246822519, 3266489917);
-  h = (h ^ (h >>> 15)) >>> 0;
+  let h = Math.imul(x + 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13) ^ Math.imul(y + 0x165667b1, 0xc2b2ae35), 0x27d4eb2f);
+  h = Math.imul(h ^ (h >>> 15) ^ Math.imul(salt + 0x2545f491, 0x9e3779b1), 0x85ebca77);
+  h = (h ^ (h >>> 16)) >>> 0;
   return h / 4294967296;
 }
 
@@ -234,27 +242,31 @@ function paintBodyMarkings(
   if (species === 'cow') {
     // Irregular patches, the defining feature of a cow.
     for (let i = 0; i < 4; i += 1) {
-      const px = Math.floor(rand(i, 1, salt) * 11);
-      const py = Math.floor(rand(i, 2, salt) * 11);
-      const w = 3 + Math.floor(rand(i, 3, salt) * 3);
-      const h = 3 + Math.floor(rand(i, 4, salt) * 3);
+      const px = Math.floor(rand(i * 41 + 7, i * 13 + 3, salt) * 11);
+      const py = Math.floor(rand(i * 23 + 29, i * 31 + 17, salt + 53) * 11);
+      const w = 3 + Math.floor(rand(i * 11 + 2, i * 43 + 9, salt + 71) * 3);
+      const h = 3 + Math.floor(rand(i * 37 + 13, i * 19 + 27, salt + 89) * 3);
       canvas.rect(px, py, w, h, accent);
     }
   }
   if (species === 'deer') {
     // Dappled spots down the flank.
-    for (let i = 0; i < 7; i += 1) {
-      const px = 2 + Math.floor(rand(i, 5, salt) * 12);
-      const py = 3 + Math.floor(rand(i, 6, salt) * 9);
-      canvas.set(px, py, shade(accent, 0.2));
-      canvas.set(px + 1, py, shade(accent, 0.1));
+    for (let i = 0; i < 9; i += 1) {
+      const px = 2 + Math.floor(rand(i * 31 + 5, i * 7 + 11, salt) * 12);
+      const py = 3 + Math.floor(rand(i * 17 + 23, i * 13 + 41, salt + 97) * 9);
+      // A rounded 2x2 dapple. Setting (px,py) and (px+1,py+1) drew a
+      // one-pixel diagonal, which read as slashes rather than spots.
+      canvas.set(px, py, shade(accent, 0.24));
+      canvas.set(px + 1, py, shade(accent, 0.18));
+      canvas.set(px, py + 1, shade(accent, 0.16));
+      canvas.set(px + 1, py + 1, shade(accent, 0.10));
     }
   }
   if (species === 'sheep') {
     // Extra-fluffy tufts so wool reads at a distance.
-    for (let i = 0; i < 10; i += 1) {
-      const px = Math.floor(rand(i, 7, salt) * 15);
-      const py = Math.floor(rand(i, 8, salt) * 15);
+    for (let i = 0; i < 12; i += 1) {
+      const px = Math.floor(rand(i * 29 + 3, i * 11 + 19, salt) * 15);
+      const py = Math.floor(rand(i * 19 + 37, i * 23 + 5, salt + 61) * 15);
       canvas.set(px, py, shade(coat, 0.26));
       canvas.set(px, py + 1, shade(coat, -0.14));
     }

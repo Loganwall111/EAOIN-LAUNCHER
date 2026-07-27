@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BlockID, getBlock, ALL_BLOCK_IDS, CATEGORY_ORDER, CATEGORY_LABELS, BlockCategory, BlockDef } from '@shared/blocks/BlockRegistry';
 import { RecipeID, RECIPES, canCraft, recipeCostLabel, recipeOutputLabel } from '../crafting/RecipeBook';
+import BlockIcon from './BlockIcon';
 import { GameMode } from '../modes/GameMode';
 import { ObjectiveStatus } from '../objectives/ObjectiveTracker';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
@@ -32,36 +33,16 @@ interface HUDProps {
   onSelectBlock: (block: BlockID) => void;
 }
 
-/* --------------------- Block logo — pixel-art canvas-rendered block icon --------------------- */
-function BlockLogo({ id, size = 28, pixelStyle = 'cube' }: { id: BlockID; size?: number; pixelStyle?: 'cube' | 'flat' | 'isometric' }) {
-  const block = getBlock(id);
-  const base = block.color;
-  const accent = block.accentColor ?? block.color;
-  // Render a proper pixel-art block icon with 3D beveled cube look
-  if (pixelStyle === 'flat') {
-    return (
-      <div className="block-logo flat" style={{ width: size, height: size, background: base, border: '2px solid #000', display: 'grid', placeItems: 'center', color: '#fff', textShadow: '1px 1px #000', font: '800 9px monospace', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)' }}>
-
-      </div>
-    );
-  }
-  if (pixelStyle === 'isometric') {
-    return (
-      <div className="block-logo iso" style={{ width: size, height: size, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)' }} />
-        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${base} 0 40%, ${accent} 40% 70%, ${base} 70% 100%)`, clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)', opacity: 0.6 }} />
-        <div className="block-logo-highlight" />
-      </div>
-    );
-  }
-  // Default cube with 3D beveled pixel look
-  return (
-    <div className="block-logo cube" style={{ width: size, height: size, position: 'relative', background: '#000' }}>
-      <div style={{ position: 'absolute', inset: '0 0 0 0', background: accent, clipPath: 'polygon(0 0, 60% 0, 100% 40%, 100% 100%, 40% 100%, 0 60%)' }} />
-      <div style={{ position: 'absolute', inset: 0, background: base, clipPath: 'polygon(40% 0, 100% 0, 100% 40%, 60% 100%, 0 100%, 0 60%)' }} />
-      <div className="block-logo-highlight" />
-    </div>
-  );
+/* --------------------- Block icon --------------------- */
+/**
+ * Inventory icons now render the block's real texture (see `BlockIcon`).
+ *
+ * This used to be `BlockLogo`, which drew a flat two-tone CSS cube from
+ * `block.color`, so every block in the inventory was a coloured lozenge rather
+ * than the textured block it is in the world.
+ */
+function BlockLogo({ id, size = 28 }: { id: BlockID; size?: number; pixelStyle?: 'cube' | 'flat' | 'isometric' }) {
+  return <BlockIcon id={id} size={size} />;
 }
 
 function SlotKey({ k }: { k: string | number }) {

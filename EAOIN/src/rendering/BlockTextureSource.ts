@@ -209,6 +209,17 @@ export function archetypeFor(id: BlockID): TextureArchetype {
   if (override) return override;
   const block = getBlock(id);
   const name = block.name.toLowerCase();
+
+  // CATEGORY WINS FIRST for held items.
+  //
+  // Name matching alone misclassified "Wooden Sword" as a log (its name
+  // contains "wood") and drew it as a bark-textured cube — precisely the
+  // "weapons in the game are blocks" bug. A weapon is a weapon whatever it is
+  // made of, so the category is checked before any name heuristic.
+  if (block.category === 'weapon' || block.category === 'tool') return 'tool';
+  if (block.category === 'armor') return 'metal';
+  if (block.category === 'plant') return 'plant';
+
   // Name-driven detection catches the long tail: "Spruce Planks", "Iron Ore"…
   if (name.includes('leaves') || name.includes('petal')) return 'leaves';
   if (name.includes('log') || name.includes('stem') || name.includes('wood')) return 'log';
@@ -347,7 +358,16 @@ function paintArchetype(
 
   switch (archetype) {
     case 'grass': {
-      if (face === 'bottom') { paintArchetype(p, 'dirt', id, 'side', hexToRgb('#8a5a36'), hexToRgb('#5b3a1c')); return; }
+      if (face === 'bottom') {
+        // The painter was pre-filled with the grass base colour, so the dirt
+        // pass must repaint every texel before mottling — otherwise `mottle`
+        // shades the existing green and the underside of grass comes out
+        // green instead of dirt.
+        const dirtBase = hexToRgb('#8a5a36');
+        for (let y = 0; y < S; y += 1) for (let x = 0; x < S; x += 1) p.set(x, y, dirtBase);
+        paintArchetype(p, 'dirt', id, 'side', dirtBase, hexToRgb('#5b3a1c'));
+        return;
+      }
       if (face === 'top') {
         mottle(0.38, 2.4);
         // Scattered brighter blades so the top reads as grass from above.

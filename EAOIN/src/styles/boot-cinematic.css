@@ -509,3 +509,88 @@
   transform: none;
   transition: opacity 200ms linear;
 }
+
+/* ==========================================================================
+   CREDITS phase — the film-style billing block.
+
+   Added because the boot went straight from the studio card to the logo, so it
+   read as a loading screen rather than a title sequence. Each card holds the
+   centre of the screen alone and cross-fades, the way a retail game's opening
+   billing does.
+   ========================================================================== */
+
+.cb-credits {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(38, 52, 74, 0.55), rgba(3, 5, 9, 0.98) 62%),
+    #04060a;
+}
+
+.cb-credit-card {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: min(760px, 82vw);
+  padding: 0 24px;
+  /* Remounted per card (React `key`), so this replays on every change. */
+  animation: cb-credit-in 1.55s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.cb-credit-role {
+  font: 600 clamp(13px, 1.5vw, 19px) / 1.5 var(--ui-font, 'Segoe UI', system-ui, sans-serif);
+  /* Wide tracking is the single strongest cue that reads as "film credit". */
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  text-transform: uppercase;
+  color: rgba(214, 230, 248, 0.94);
+  text-shadow: 0 0 28px rgba(120, 190, 255, 0.28);
+}
+
+.cb-credit-names {
+  margin-top: 18px;
+  display: grid;
+  gap: 7px;
+}
+
+.cb-credit-name {
+  font: 300 clamp(17px, 2.3vw, 30px) / 1.35 var(--ui-font, 'Segoe UI', system-ui, sans-serif);
+  letter-spacing: 0.1em;
+  color: #f2f7ff;
+  text-shadow: 0 2px 26px rgba(0, 0, 0, 0.85);
+}
+
+/* Fade up and settle; no bounce, which would undercut the tone. */
+@keyframes cb-credit-in {
+  0%   { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+  28%  { opacity: 1; transform: translateY(0); filter: blur(0); }
+  78%  { opacity: 1; transform: translateY(0); filter: blur(0); }
+  100% { opacity: 0.82; transform: translateY(-5px); filter: blur(0.6px); }
+}
+
+/* Slim progress pips so the sequence feels finite and skippable. */
+.cb-credit-progress {
+  position: absolute;
+  bottom: 46px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.cb-credit-progress span {
+  width: 26px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.5s ease, box-shadow 0.5s ease;
+}
+
+.cb-credit-progress span.on {
+  background: rgba(150, 210, 255, 0.85);
+  box-shadow: 0 0 10px rgba(120, 190, 255, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-credit-card { animation-duration: 0.4s; }
+}

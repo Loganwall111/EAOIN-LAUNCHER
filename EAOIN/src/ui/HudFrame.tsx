@@ -6,7 +6,7 @@
  * panels (inventory, shaders, quests…) still live in HUD.tsx and are layered
  * above this frame.
  */
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { getStackCount, HOTBAR_BLOCKS, InventoryStacks } from '../player/InventoryState';
 import { SurvivalStats } from '../player/SurvivalState';
@@ -19,6 +19,7 @@ import {
 } from './theme';
 import { deriveStatusEffects } from '../player/StatusEffects';
 import { AvatarPortrait } from './VoxelAvatar';
+import BlockIcon from './BlockIcon';
 
 export interface HudFrameProps {
   appearance: CharacterAppearance;
@@ -61,25 +62,16 @@ function formatClock(timeOfDay: number): string {
 
 /** Repeating pip row (hearts / drumsticks) like the concept art. */
 
+/**
+ * Hotbar item icon.
+ *
+ * Was a CSS `clip-path` cube built from two colours, which is why hotbar
+ * slots showed flat squares instead of textures — and why a sword looked
+ * exactly like a block. Now renders the real block texture, or the item
+ * sprite for tools and weapons.
+ */
 function HotbarBlockCube({ id }: { id: BlockID }) {
-  const block = getBlock(id);
-  const top = block.accentColor ?? block.color;
-  return (
-    <span
-      className="hotbar-cube"
-      style={{
-        '--cube-top': top,
-        '--cube-left': block.color,
-        '--cube-right': top,
-        '--cube-edge': 'rgba(0,0,0,.75)',
-      } as CSSProperties}
-      aria-hidden="true"
-    >
-      <i className="cube-face top" />
-      <i className="cube-face left" />
-      <i className="cube-face right" />
-    </span>
-  );
+  return <BlockIcon id={id} size={32} className="hotbar-cube" />;
 }
 
 function PipRow({ icon, value, max, count = 10 }: { icon: string; value: number; max: number; count?: number }) {
