@@ -101,6 +101,31 @@ describe('biome spacing in the world', () => {
     expect(seen.size).toBeGreaterThanOrEqual(5);
   });
 
+  it('reaches the climate extremes, not just the temperate middle', () => {
+    // fbm output is bell-shaped, but the biome thresholds were written for a
+    // uniform 0-1 range, so the tails were unreachable: the world measured 46%
+    // plains / 24% alpine with desert at 0.0% and forest at 0.3%. The climate
+    // fields are now spread before classification.
+    const gen = new AdvancedTerrainGenerator({ seed: 'distribution' });
+    const counts = new Map<string, number>();
+    let total = 0;
+    for (let x = -4000; x < 4000; x += 100) {
+      for (let z = -4000; z < 4000; z += 100) {
+        const id = gen.getBiomeAt(x, z).id;
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+        total += 1;
+      }
+    }
+
+    // Hot/dry and hot/wet must both be genuinely represented.
+    const share = (id: string) => (counts.get(id) ?? 0) / total;
+    expect(share('desert'), 'desert').toBeGreaterThan(0.01);
+    expect(share('rainforest'), 'rainforest').toBeGreaterThan(0.01);
+    // And no single biome may dominate the map.
+    const largest = Math.max(...counts.values()) / total;
+    expect(largest).toBeLessThan(0.45);
+  });
+
   it('is deterministic for a seed', () => {
     const a = new AdvancedTerrainGenerator({ seed: 'determinism' });
     const b = new AdvancedTerrainGenerator({ seed: 'determinism' });

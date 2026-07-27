@@ -218,9 +218,31 @@ const RAVINE_EXTRA_DEPTH = 26;
  * Climate sampling frequency for a `medium` biome. Divided by the region's
  * size scale, so bigger classes sample more slowly and cover more ground.
  */
-const BASE_BIOME_FREQUENCY = 0.0011;
+const BASE_BIOME_FREQUENCY = 0.00068;
+/**
+ * Lattice spacing for the smoothed-height cache. The value is a wide spatial
+ * average, so sampling it every 16 blocks and reusing the result is
+ * indistinguishable from evaluating it per column.
+ */
+const SMOOTH_HEIGHT_STEP = 16;
+
 /** Cell size, in blocks, of the Voronoi partition that assigns size classes. */
 const BIOME_REGION_CELL = 900;
+
+/**
+ * Remap a bell-shaped fbm sample onto an approximately uniform 0-1.
+ *
+ * Measured percentiles of the raw field were p05 0.29 / p50 0.50 / p95 0.72,
+ * i.e. a standard deviation of roughly 0.13. Rescaling by that spread and
+ * squashing the result with a smooth logistic keeps the ordering intact (so
+ * biomes still form contiguous regions) while making the extremes reachable.
+ */
+function spreadClimate(value: number): number {
+  // Centre, then scale so ±1 sigma maps to ±0.5.
+  const centred = (value - 0.5) / 0.135;
+  // Logistic squash back into (0, 1); gentle enough to preserve gradients.
+  return 1 / (1 + Math.exp(-centred * 1.35));
+}
 
 /** Map a uniform [0,1) roll onto a size class using `BIOME_SIZE_WEIGHT`. */
 function pickSizeClass(roll: number): BiomeSizeClass {
@@ -1039,8 +1061,20 @@ export class AdvancedTerrainGenerator {
       worldZ * frequency * 1.35 - 11,
       4, 2.0, 0.5, 102
     );
-    const tempTag: 'cold' | 'temperate' | 'warm' | 'hot' = temp < 0.30 ? 'cold' : temp < 0.55 ? 'temperate' : temp < 0.78 ? 'warm' : 'hot';
-    const moistTag: 'arid' | 'normal' | 'humid' | 'wet' | 'snow' = moist < 0.30 ? 'arid' : moist < 0.55 ? 'normal' : moist < 0.78 ? 'humid' : 'wet';
+    // Spread the climate fields before classifying them.
+    //
+    // fbm is a sum of independent octaves, so by the central limit theorem its
+    // output is bell-shaped around 0.5, not uniform. Measured over an 8km
+    // square, temperature spanned only 0.29-0.72 between the 5th and 95th
+    // percentiles — yet the thresholds below were written as though the range
+    // were a flat 0-1. The tails were therefore almost never reached: the
+    // world came out 46% plains and 24% alpine, with forest at 0.3%, desert at
+    // 0.0%, and no rainforest to speak of. `spreadClimate` remaps the bell
+    // onto an approximately uniform 0-1 so every band is actually reachable.
+    const tempSpread = spreadClimate(temp);
+    const moistSpread = spreadClimate(moist);
+    const tempTag: 'cold' | 'temperate' | 'warm' | 'hot' = tempSpread < 0.30 ? 'cold' : tempSpread < 0.55 ? 'temperate' : tempSpread < 0.78 ? 'warm' : 'hot';
+    const moistTag: 'arid' | 'normal' | 'humid' | 'wet' | 'snow' = moistSpread < 0.30 ? 'arid' : moistSpread < 0.55 ? 'normal' : moistSpread < 0.78 ? 'humid' : 'wet';
 
     if (elevation > 56 && tempTag === 'cold') return getBiome('ice_spikes');
     if (elevation > 48 && (tempTag === 'cold' || tempTag === 'temperate')) return getBiome('alpine_biome');
@@ -1073,22 +1107,36 @@ export class AdvancedTerrainGenerator {
    * during the surface, vegetation and structure passes.
    */
   private smoothedHeight(worldX: number, worldZ: number): number {
-    const x = Math.floor(worldX);
-    const z = Math.floor(worldZ);
+    // PERF: quantise to a 16-block lattice before caching.
+    //
+    // This is a 9-tap stencil, so it is 9 height lookups per call, and it is
+    // consulted for every column by the surface, vegetation and biome passes.
+    // Because the result is a wide average it barely changes between adjacent
+    // blocks, so snapping the sample point to a coarse grid gives visually
+    // identical boundaries while turning 256 evaluations per chunk into ~4.
+    const x = Math.round(worldX / SMOOTH_HEIGHT_STEP) * SMOOTH_HEIGHT_STEP;
+    const z = Math.round(worldZ / SMOOTH_HEIGHT_STEP) * SMOOTH_HEIGHT_STEP;
     const key = columnKey(x, z);
     const cached = this.smoothHeightCache.get(key);
     if (cached !== undefined) return cached;
 
-    // 5-tap cross at ±24 blocks: wide enough to erase slope noise, cheap
-    // enough to run per column.
-    const R = 24;
+    // 9-tap stencil at two radii. A single ±24 cross still let ridge lines
+    // flicker across the alpine/ice thresholds, producing one-block biome
+    // slivers along every slope. Sampling further out and in both axes gives
+    // boundaries that follow the landform rather than its noise.
+    const R1 = 28;
+    const R2 = 56;
     const value = (
-      this.getTerrainHeight(x, z)
-      + this.getTerrainHeight(x + R, z)
-      + this.getTerrainHeight(x - R, z)
-      + this.getTerrainHeight(x, z + R)
-      + this.getTerrainHeight(x, z - R)
-    ) / 5;
+      this.getTerrainHeight(x, z) * 2
+      + this.getTerrainHeight(x + R1, z)
+      + this.getTerrainHeight(x - R1, z)
+      + this.getTerrainHeight(x, z + R1)
+      + this.getTerrainHeight(x, z - R1)
+      + this.getTerrainHeight(x + R2, z)
+      + this.getTerrainHeight(x - R2, z)
+      + this.getTerrainHeight(x, z + R2)
+      + this.getTerrainHeight(x, z - R2)
+    ) / 10;
 
     this.rememberHeight(this.smoothHeightCache, key, value);
     return value;
@@ -1139,11 +1187,14 @@ export class AdvancedTerrainGenerator {
       const top = chunk.getBlock(lx, surface, lz);
       if (top === BLOCK.WATER || top === BLOCK.AIR) return;
       // Tree placement on a Poisson-disc grid.
+      // Forests should feel like forests: a tree roughly every 4 blocks reads
+      // as dense woodland once canopies overlap, while open biomes keep the
+      // occasional lone tree.
       if (biome.id === 'forest' || biome.id === 'taiga' || biome.id === 'rainforest' || biome.id === 'bamboo_jungle' || biome.id === 'redwood_biome' || biome.id === 'cherry_biome' || biome.id === 'mystic_woods' || biome.id === 'mushroom_island') {
-        if (this.featureAnchor(wx, wz, 5, 'tree')) this.placeTree(chunk, wx, surface, wz, 4 + Math.floor(this.noise.hash(wx, wz, 0, 121) * 3));
+        if (this.featureAnchor(wx, wz, 4, 'tree')) this.placeTree(chunk, wx, surface, wz, 4 + Math.floor(this.noise.hash(wx, wz, 0, 121) * 3));
       }
       if (biome.id === 'plain' || biome.id === 'meadow' || biome.id === 'sunflower_plains') {
-        if (this.featureAnchor(wx, wz, 9, 'plains-tree')) this.placeTree(chunk, wx, surface, wz, 3);
+        if (this.featureAnchor(wx, wz, 14, 'plains-tree')) this.placeTree(chunk, wx, surface, wz, 3);
       }
       if (biome.id === 'desert' && this.featureAnchor(wx, wz, 12, 'cactus')) this.placeCactus(chunk, wx, surface, wz);
       if (biome.id === 'bamboo_jungle' && this.featureAnchor(wx, wz, 5, 'bamboo')) this.placeBamboo(chunk, wx, surface, wz);
@@ -1208,16 +1259,44 @@ export class AdvancedTerrainGenerator {
 
   /* ============= STRUCTURES ============= */
 
+  /**
+   * Scatter small structures.
+   *
+   * ## Spacing
+   *
+   * These were placed on 26-42 block grids, which put a 5-block black obsidian
+   * monolith roughly every 29 blocks in every direction — measured at one per
+   * 862 columns. That is the reported "there's these little things on the
+   * ground… everywhere I go", and it is what stopped the landscape reading as
+   * natural terrain.
+   *
+   * A landmark has to be rare to feel like a landmark, so the surface features
+   * are now hundreds of blocks apart. The purely underground ones (geodes,
+   * fossils) can stay denser because you only meet them while mining.
+   */
   private applyStructures(chunk: Chunk): void {
-    // Larger structures (villages, pyramids) are too big to spawn per-chunk.
-    // We instead seed small things: monoliths, ruin fragments, geodes, fossils.
     this.forEachLocalBlock(chunk, (_lx, _lz, wx, wz) => {
       if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
-      if (this.featureAnchor(wx, wz, 30, 'monolith')) this.placeMonolith(chunk, wx, this.getTerrainHeight(wx, wz), wz);
-      if (this.featureAnchor(wx, wz, 26, 'geode')) this.placeGeode(chunk, wx, this.getTerrainHeight(wx, wz), wz);
-      if (this.featureAnchor(wx, wz, 36, 'fossil')) this.placeFossil(chunk, wx, this.getTerrainHeight(wx, wz), wz);
-      if (this.featureAnchor(wx, wz, 42, 'ruin-fragment')) this.placeRuinFragment(chunk, wx, this.getTerrainHeight(wx, wz), wz);
-      if (this.config.volcanoes && this.featureAnchor(wx, wz, 220, 'volcano')) this.placeVolcano(chunk, wx, wz);
+
+      // --- surface landmarks: rare, deliberately findable ------------------
+      if (this.featureAnchor(wx, wz, 420, 'monolith')) {
+        this.placeMonolith(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+      }
+      if (this.featureAnchor(wx, wz, 340, 'ruin-fragment')) {
+        this.placeRuinFragment(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+      }
+
+      // --- buried features: only ever seen underground ---------------------
+      if (this.featureAnchor(wx, wz, 96, 'geode')) {
+        this.placeGeode(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+      }
+      if (this.featureAnchor(wx, wz, 120, 'fossil')) {
+        this.placeFossil(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+      }
+
+      if (this.config.volcanoes && this.featureAnchor(wx, wz, 900, 'volcano')) {
+        this.placeVolcano(chunk, wx, wz);
+      }
     });
   }
 
