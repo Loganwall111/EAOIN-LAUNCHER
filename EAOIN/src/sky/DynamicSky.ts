@@ -47,7 +47,7 @@ export const CLOUD_LAYER_ALTITUDE = 120;
 export const CLOUD_BIG_LAYER_ALTITUDE = 180;
 export const STAR_LAYER_ALTITUDE = 260;
 /** Hard ceiling on cloud opacity so the sky is never fully occluded. */
-export const CLOUD_LAYER_MAX_ALPHA = 0.55;
+export const CLOUD_LAYER_MAX_ALPHA = 0.34;
 
 export const DEFAULT_SKY: SkyConfig = {
   timeOfDay: 12,
@@ -97,10 +97,10 @@ export class DynamicSky {
 
   /* ----- Sun ----- */
   private createSun(): void {
-    const sun = MeshBuilder.CreateSphere('sky_sun', { diameter: 18, segments: 16 }, this.scene);
+    const sun = MeshBuilder.CreateSphere('sky_sun', { diameter: 13, segments: 16 }, this.scene);
     sun.position.y = 200;
     const mat = new StandardMaterial('sky_sun_mat', this.scene);
-    mat.emissiveColor = new Color3(1, 0.92, 0.7);
+    mat.emissiveColor = new Color3(0.95, 0.78, 0.48);
     mat.diffuseColor = new Color3(0, 0, 0);
     mat.specularColor = new Color3(0, 0, 0);
     mat.disableLighting = true;
@@ -112,7 +112,7 @@ export class DynamicSky {
 
   /* ----- Moon ----- */
   private createMoon(): void {
-    const moon = MeshBuilder.CreateSphere('sky_moon', { diameter: 14, segments: 16 }, this.scene);
+    const moon = MeshBuilder.CreateSphere('sky_moon', { diameter: 11, segments: 16 }, this.scene);
     moon.position.y = 200;
     const mat = new StandardMaterial('sky_moon_mat', this.scene);
     mat.emissiveColor = new Color3(0.85, 0.88, 0.95);
@@ -246,7 +246,7 @@ export class DynamicSky {
       const y = Math.random() * size;
       const r = 30 + Math.random() * 80;
       const grd = ctx.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, 'rgba(255,255,255,0.85)');
+      grd.addColorStop(0, 'rgba(255,255,255,0.58)');
       grd.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = grd;
       ctx.beginPath();
@@ -347,7 +347,7 @@ export class DynamicSky {
     this.eclipseActive = Math.random() < this.config.eclipseChance * dt;
     if (this.sunDisk && this.sunDisk.material) {
       const m = this.sunDisk.material as StandardMaterial;
-      m.emissiveColor = this.eclipseActive ? new Color3(0.4, 0.4, 0.6) : new Color3(1, 0.92, 0.7);
+      m.emissiveColor = this.eclipseActive ? new Color3(0.25, 0.25, 0.42) : new Color3(0.95, 0.78, 0.48);
     }
     // Compute lighting colors.
     return this.computeSkyColors(t);
@@ -377,9 +377,10 @@ export class DynamicSky {
 
     const weather = (dayFactor > 0.7) ? 'sunny' : (dayFactor > 0.3) ? 'partly-cloudy' : (dayFactor > 0.05) ? 'dusk' : 'clear-night';
 
-    this.scene.clearColor = new Color4(sky.r, sky.g, sky.b, 1);
-    this.scene.fogColor = sky;
-    this.scene.ambientColor = ambient;
+    const visibleSky = sky.scale(0.86);
+    this.scene.clearColor = new Color4(visibleSky.r, visibleSky.g, visibleSky.b, 1);
+    this.scene.fogColor = visibleSky;
+    this.scene.ambientColor = ambient.scale(0.9);
 
     return { ambient, sunColor, moonColor, weather, eclipse: this.eclipseActive };
   }

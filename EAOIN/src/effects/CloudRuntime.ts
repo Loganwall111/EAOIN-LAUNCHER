@@ -22,13 +22,13 @@ export class CloudRuntime {
     void seed;
     // use scene via root creation below, store indirectly
     this.root = new TransformNode('cloud_root', scene);
-    this.root.position.y = spawnY + 68; // high above terrain
+    this.root.position.y = spawnY + 96; // high above terrain; never in the player's eye line
 
     this.material = new StandardMaterial('cloud_mat', scene);
-    this.material.diffuseColor = new Color3(0.92, 0.94, 0.98);
-    this.material.emissiveColor = new Color3(0.08, 0.09, 0.11);
+    this.material.diffuseColor = new Color3(0.78, 0.82, 0.88);
+    this.material.emissiveColor = new Color3(0.025, 0.03, 0.04);
     this.material.specularColor = new Color3(0.02, 0.02, 0.025);
-    this.material.alpha = 0.93;
+    this.material.alpha = 0.58;
     this.material.backFaceCulling = false;
 
     this.template = MeshBuilder.CreateBox('cloud_template', { width: this.cell, height: 4.2, depth: this.cell }, scene);
@@ -114,7 +114,7 @@ export class CloudRuntime {
     if (this.root.position.z > this.bounds * 0.5) this.root.position.z -= this.bounds;
 
     // subtle vertical bob for life
-    this.root.position.y = this.spawnY + 68 + Math.sin(performance.now() * 0.00015) * 0.8;
+    this.root.position.y = this.spawnY + 96 + Math.sin(performance.now() * 0.00015) * 0.8;
   }
 
   dispose(): void {

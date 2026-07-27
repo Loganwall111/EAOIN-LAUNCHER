@@ -1,0 +1,349 @@
+/* ============================================================================
+   Concept HUD + Worlds Overhaul
+   Implements the user's July 27 reference: readable dark glass UI, purple
+   accent callouts, circular minimap, 3D block hotbar icons, and a world loader
+   with left nav / list / preview columns.
+   ========================================================================== */
+
+:root {
+  --concept-panel: rgba(12, 14, 22, 0.72);
+  --concept-panel-strong: rgba(10, 12, 18, 0.88);
+  --concept-edge: rgba(168, 121, 255, 0.48);
+  --concept-edge-soft: rgba(168, 121, 255, 0.22);
+  --concept-gold: #ffd166;
+  --concept-text: #f5f3ff;
+  --concept-muted: rgba(236, 232, 255, 0.68);
+}
+
+/* ------------------------------ in-game HUD ------------------------------ */
+.eaoin-hud .ui-panel,
+.eaoin-hud .hud-player,
+.eaoin-hud .hud-minimap,
+.eaoin-hud .hud-quests,
+.eaoin-hud .hud-chat,
+.eaoin-hud .hud-effects,
+.eaoin-hud .hud-equipped {
+  background: linear-gradient(180deg, rgba(18, 20, 31, 0.78), rgba(6, 8, 14, 0.72));
+  border: 1px solid var(--concept-edge);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.78),
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    0 0 24px rgba(112, 69, 190, 0.12);
+  backdrop-filter: blur(10px) saturate(1.08);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+}
+
+.eaoin-hud .ui-panel-title {
+  color: #d7bcff;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--concept-edge-soft);
+}
+
+.hud-player {
+  top: 16px;
+  left: 18px;
+  min-width: 286px;
+}
+
+.hud-player::after,
+.hud-effects::after,
+.hud-chat::after,
+.hud-minimap::after,
+.hud-quests::after {
+  content: '';
+  position: absolute;
+  width: 58px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--concept-edge), transparent);
+  pointer-events: none;
+}
+
+.hud-player::after { right: -58px; top: 50%; }
+.hud-effects::after { right: -58px; top: 40px; }
+.hud-chat::after { right: -58px; top: 36px; }
+.hud-minimap::after { left: -58px; top: 55px; transform: rotate(180deg); }
+.hud-quests::after { left: -58px; top: 42px; transform: rotate(180deg); }
+
+.hud-compass {
+  top: 12px;
+  height: 30px;
+  border: 0 !important;
+  background: linear-gradient(90deg, transparent, rgba(10, 12, 18, .62) 18%, rgba(10, 12, 18, .62) 82%, transparent) !important;
+  box-shadow: none !important;
+}
+
+.compass-tick { color: rgba(255,255,255,.62); }
+.compass-tick.card { color: #fff; font-size: 15px; }
+.compass-needle { color: #f3f0ff; top: -1px; }
+
+.hud-clock {
+  top: 48px;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.45));
+}
+.hud-clock > div {
+  background: linear-gradient(180deg, rgba(30, 34, 46, .92), rgba(10, 12, 18, .92));
+  border-color: rgba(255,255,255,.16) rgba(0,0,0,.7) rgba(0,0,0,.7) rgba(255,255,255,.16);
+}
+.hud-clock .clock-sun {
+  min-width: 54px;
+  color: var(--concept-gold);
+  box-shadow: 0 0 0 2px rgba(0,0,0,.9), 0 0 18px rgba(255,209,102,.18);
+}
+
+.hud-minimap {
+  width: 236px;
+  padding: 10px 10px 8px;
+}
+.minimap-canvas {
+  width: 150px;
+  height: 150px;
+  margin: 4px auto 8px;
+  border-radius: 50%;
+  border: 2px solid rgba(210, 196, 255, .56);
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.82), 0 0 22px rgba(168,121,255,.22);
+}
+.minimap-canvas canvas { border-radius: 50%; }
+.minimap-coords,
+.minimap-footer {
+  background: rgba(0,0,0,.30);
+  border-color: var(--concept-edge-soft);
+}
+
+.hud-effects { top: 124px; left: 18px; width: 192px; }
+.hud-quests { right: 18px; top: 218px; width: 250px; }
+.hud-chat { left: 18px; bottom: 112px; width: min(420px, 30vw); }
+.hud-equipped { right: 18px; bottom: 90px; }
+
+.hud-bottom {
+  bottom: 12px;
+  gap: 4px;
+}
+.hotbar-strip {
+  padding: 6px;
+  gap: 5px;
+  background: linear-gradient(180deg, rgba(13, 15, 22, .78), rgba(4, 5, 8, .84));
+  border: 1px solid var(--concept-edge);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.9), inset 0 1px rgba(255,255,255,.08), 0 8px 28px rgba(0,0,0,.48);
+}
+.hot-slot {
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg, rgba(40,45,58,.9), rgba(12,14,20,.96));
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.86), 0 2px 8px rgba(0,0,0,.35);
+}
+.hot-slot.selected {
+  border-color: var(--concept-gold);
+  box-shadow: 0 0 0 2px var(--concept-gold), 0 0 18px rgba(255,209,102,.38), inset 0 0 18px rgba(255,209,102,.08);
+}
+.hot-slot .slot-num { color: rgba(255,255,255,.7); }
+.hot-slot .slot-count { color: #fff; font-size: 13px; }
+
+.hotbar-cube {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: block;
+  filter: drop-shadow(0 5px 3px rgba(0,0,0,.65));
+  image-rendering: pixelated;
+}
+.hotbar-cube .cube-face {
+  position: absolute;
+  display: block;
+  border: 1px solid var(--cube-edge);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.hotbar-cube .cube-face.top {
+  left: 7px; top: 1px; width: 20px; height: 20px;
+  background: linear-gradient(135deg, rgba(255,255,255,.22), transparent 42%), var(--cube-top);
+  transform: skewX(-45deg) scaleY(.58) rotate(0deg);
+  transform-origin: 50% 100%;
+}
+.hotbar-cube .cube-face.left {
+  left: 2px; top: 14px; width: 20px; height: 20px;
+  background: linear-gradient(90deg, rgba(0,0,0,.18), transparent), var(--cube-left);
+  transform: skewY(35deg) scaleX(.72);
+  transform-origin: 100% 0;
+}
+.hotbar-cube .cube-face.right {
+  right: 2px; top: 14px; width: 20px; height: 20px;
+  background: linear-gradient(270deg, rgba(0,0,0,.28), transparent), var(--cube-right);
+  transform: skewY(-35deg) scaleX(.72);
+  transform-origin: 0 0;
+}
+
+.hud-abilities { right: 18px; bottom: 18px; gap: 8px; }
+.ability-btn,
+.nav-btn {
+  background: linear-gradient(180deg, rgba(27, 31, 43, .86), rgba(8, 10, 15, .92));
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.88), inset 0 1px rgba(255,255,255,.08);
+}
+.ability-btn.active {
+  border-color: #62d8ff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.9), 0 0 18px rgba(98,216,255,.34), inset 0 0 14px rgba(98,216,255,.16);
+}
+
+.hud-crosshair {
+  width: 26px;
+  height: 26px;
+  opacity: .86;
+}
+
+/* --------------------------- inventory / creative -------------------------- */
+.inventory-panel.pro-inv,
+.menu-panel.pro {
+  background: linear-gradient(180deg, rgba(12, 14, 22, .92), rgba(4, 5, 9, .96));
+  border: 1px solid var(--concept-edge);
+  box-shadow: 0 0 0 1px #000, inset 0 1px rgba(255,255,255,.08), 0 22px 80px rgba(0,0,0,.62);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+.inventory-header h2 { color: #f7f3ff; }
+.inventory-header p { color: var(--concept-muted); }
+.creative-tabs,
+.creative-controls,
+.creative-grid { border-color: var(--concept-edge-soft); background: rgba(0,0,0,.34); }
+.creative-slot {
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg, rgba(46,51,64,.92), rgba(16,18,25,.96));
+  color: var(--concept-text);
+  appearance: none;
+  font: inherit;
+}
+.creative-slot.selected {
+  border-color: var(--concept-gold);
+  box-shadow: 0 0 0 2px rgba(255,209,102,.76), 0 0 18px rgba(255,209,102,.24);
+}
+.creative-tab.active {
+  background: linear-gradient(180deg, rgba(155, 92, 255, .86), rgba(82, 46, 145, .92));
+}
+
+/* ------------------------------ worlds page ------------------------------- */
+.singleplayer-screen .sp-overlay {
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 209, 102, .20), transparent 32%),
+    radial-gradient(circle at 78% 16%, rgba(93, 214, 255, .15), transparent 26%),
+    linear-gradient(180deg, rgba(4, 6, 10, .52), rgba(4, 6, 10, .88));
+}
+.worlds-page-body {
+  grid-template-columns: 270px minmax(390px, 1fr) minmax(330px, 430px);
+  gap: 18px;
+  padding: 18px clamp(16px, 2.2vw, 30px) 24px;
+}
+.worlds-sidebar,
+.worlds-list-panel,
+.worlds-preview-panel {
+  background: linear-gradient(180deg, rgba(14, 16, 24, .84), rgba(6, 7, 12, .90));
+  border: 1px solid rgba(168, 121, 255, .34);
+  box-shadow: 0 0 0 1px #000, inset 0 1px rgba(255,255,255,.07), 0 14px 40px rgba(0,0,0,.45);
+}
+.worlds-sidebar {
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 18px;
+  min-height: 0;
+}
+.worlds-sidebar-logo {
+  font: 1000 clamp(42px, 5vw, 68px)/.85 'Segoe UI', Arial, sans-serif;
+  letter-spacing: -.08em;
+  color: #d6d2ca;
+  text-shadow: 0 4px 0 #4b4d51, 0 9px 18px rgba(0,0,0,.78);
+}
+.worlds-sidebar-sub {
+  color: var(--concept-gold);
+  text-transform: uppercase;
+  font: 800 11px/1.2 'Segoe UI', Arial, sans-serif;
+  letter-spacing: .08em;
+}
+.worlds-sidebar-nav { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.worlds-sidebar-nav button {
+  height: 42px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #2e333e, #141820);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 0 0 1px #000;
+  font: 800 13px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: .06em;
+}
+.worlds-sidebar-nav button:hover { filter: brightness(1.22); transform: translateY(-1px); }
+.worlds-sidebar-nav .active-purple {
+  background: linear-gradient(180deg, #7f45d6, #4a2487);
+  border-color: rgba(220, 190, 255, .42);
+}
+.worlds-sidebar-nav .active {
+  background: linear-gradient(180deg, #3d454f, #181d25);
+}
+.worlds-list-panel .ui-panel-title,
+.worlds-preview-panel .ui-panel-title {
+  padding: 14px 16px;
+  font: 900 18px/1 'Segoe UI', Arial, sans-serif;
+  letter-spacing: .08em;
+  color: #ffe8a0;
+}
+.worlds-list-panel .ui-panel-title small {
+  display: block;
+  margin-top: 4px;
+  font: 500 11px/1.2 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 0;
+  color: var(--concept-muted);
+  text-transform: none;
+}
+.sp-world-card {
+  min-height: 72px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: linear-gradient(180deg, rgba(32,36,46,.76), rgba(13,15,22,.82));
+}
+.sp-world-card.selected {
+  border-left-color: #a879ff;
+  box-shadow: inset 0 0 24px rgba(168,121,255,.10), 0 0 0 1px rgba(168,121,255,.22);
+}
+.sp-world-icon,
+.sp-detail-hero {
+  position: relative;
+  overflow: hidden;
+}
+.sp-world-icon::after,
+.sp-detail-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.14), transparent 38%),
+    repeating-linear-gradient(90deg, transparent 0 18px, rgba(255,255,255,.035) 18px 19px);
+  pointer-events: none;
+}
+.worlds-preview-panel .sp-detail-hero {
+  height: 160px;
+  border-color: rgba(255,255,255,.12);
+}
+.worlds-preview-panel .sp-detail-stats {
+  grid-template-columns: 1fr;
+}
+.worlds-preview-panel .sp-play-btn {
+  color: #fff;
+  background: linear-gradient(180deg, #9f59ff, #5b2ba5);
+  border-color: rgba(255,255,255,.26) rgba(0,0,0,.7) rgba(0,0,0,.7) rgba(255,255,255,.26);
+}
+.sp-create-btn {
+  color: #fff;
+  background: linear-gradient(180deg, #9f59ff, #5b2ba5);
+}
+
+@media (max-width: 1100px) {
+  .worlds-page-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .worlds-sidebar { display: none; }
+  .hud-effects, .hud-quests { display: none; }
+  .hud-chat { width: min(380px, 42vw); }
+}
+
+@media (max-width: 760px) {
+  .hud-minimap, .hud-chat, .hud-equipped { display: none; }
+  .hot-slot { width: 44px; height: 44px; }
+  .hotbar-cube { transform: scale(.84); }
+}

@@ -26,6 +26,7 @@ interface HUDProps {
   onToggleObjectives: () => void; onToggleSystems: () => void; craftingMessage: string;
   onCraftRecipe: (recipe: RecipeID) => void; onCloseInventory: () => void; onCloseSettings: () => void;
   onSettingsChange: (s: GameSettings) => void;
+  onSelectBlock: (block: BlockID) => void;
 }
 
 /* --------------------- Block logo — pixel-art canvas-rendered block icon --------------------- */
@@ -96,7 +97,7 @@ function BlockSlot({ id, count, selected, onClick, onDoubleClick, showKey, size 
 }
 
 /* --------------------- Main HUD --------------------- */
-export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange }: HUDProps) {
+export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onSelectBlock }: HUDProps) {
   const updateSettings = (patch: Partial<GameSettings>) => onSettingsChange(clampSettings({ ...settings, ...patch }));
   const [craftMode, setCraftMode] = useState<2 | 3>(2);
   const [craftGrid, setCraftGrid] = useState<(BlockID | null)[]>([null, null, null, null]);
@@ -209,6 +210,8 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
   }, [creativeCategory, creativeSearch]);
   const CREATIVE_PER_PAGE = 36;
   const creativePageCount = Math.max(1, Math.ceil(creativeItems.length / CREATIVE_PER_PAGE));
+  useEffect(() => { setCreativePage(0); }, [creativeCategory, creativeSearch]);
+  useEffect(() => { if (creativePage > creativePageCount - 1) setCreativePage(Math.max(0, creativePageCount - 1)); }, [creativePage, creativePageCount]);
   const pagedCreative = creativeItems.slice(creativePage * CREATIVE_PER_PAGE, (creativePage + 1) * CREATIVE_PER_PAGE);
 
   return (
@@ -263,6 +266,8 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
               pageCount={creativePageCount}
               onPageChange={setCreativePage}
               items={pagedCreative}
+              selectedBlock={selectedBlock}
+              onPickBlock={(blockId) => { onSelectBlock(blockId); onCloseInventory(); }}
             />
           ) : (
             <SurvivalInventory
@@ -691,7 +696,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
 }
 
 /* --------------------- Creative Inventory --------------------- */
-function CreativeInventory({ category, onCategoryChange, search, onSearchChange, page, pageCount, onPageChange, items }: {
+function CreativeInventory({ category, onCategoryChange, search, onSearchChange, page, pageCount, onPageChange, items, selectedBlock, onPickBlock }: {
   category: BlockCategory;
   onCategoryChange: (c: BlockCategory) => void;
   search: string;
@@ -700,6 +705,8 @@ function CreativeInventory({ category, onCategoryChange, search, onSearchChange,
   pageCount: number;
   onPageChange: (p: number) => void;
   items: BlockDef[];
+  selectedBlock: BlockID;
+  onPickBlock: (id: BlockID) => void;
 }) {
   return (
     <div className="creative-inventory">
@@ -727,15 +734,20 @@ function CreativeInventory({ category, onCategoryChange, search, onSearchChange,
       </div>
       <div className="creative-grid">
         {items.map((b) => (
-          <div key={b.id} className="creative-slot" title={`${b.name} (${b.id}) — ${b.category}`}>
+          <button
+            key={b.id}
+            className={`creative-slot ${selectedBlock === b.id ? 'selected' : ''}`}
+            title={`${b.name} (${b.id}) — click to equip in the hotbar`}
+            onClick={() => onPickBlock(b.id)}
+          >
             <BlockLogo id={b.id} size={36} />
             <span className="creative-name">{b.name}</span>
             <span className="creative-id">#{b.id}</span>
-          </div>
+          </button>
         ))}
       </div>
       <div className="creative-tip">
-        💡 Creative tip: Every block in this menu is available without limits. Scroll with the page buttons or use the search bar to find what you need. Pick a block with 1-9 keys (or scroll the hotbar).
+        💡 Creative tip: Click any block to pull it into your active hotbar slot instantly. Every block here places without limits in Creative mode; use search/categories for natural blocks, ores, redstone, portals, and space blocks.
       </div>
     </div>
   );

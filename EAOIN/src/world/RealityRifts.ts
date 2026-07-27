@@ -35,7 +35,7 @@ export class RealityRift {
     mat.emissiveColor = def.color2;
     mat.diffuseColor = def.color1;
     mat.specularColor = new Color3(0, 0, 0);
-    mat.alpha = 0.9;
+    mat.alpha = 0.38;
     mat.backFaceCulling = false;
     this.mesh.material = mat;
     this.mesh.isPickable = false;
@@ -46,7 +46,7 @@ export class RealityRift {
     const innerMat = new StandardMaterial('rift_inner_mat', scene);
     innerMat.emissiveColor = Color3.Lerp(def.color1, def.color2, 0.5);
     innerMat.diffuseColor = new Color3(0, 0, 0);
-    innerMat.alpha = 0.8;
+    innerMat.alpha = 0.28;
     this.innerMesh.material = innerMat;
     this.innerMesh.isPickable = false;
 
@@ -85,7 +85,7 @@ export class RealityRift {
     this.mesh.lookAt(camera);
     const fade = Math.min(1, this.def.lifetime) * Math.min(1, (this.def.maxLifetime - this.def.lifetime) / 1.0);
     const mat = this.mesh.material as StandardMaterial;
-    if (mat) mat.alpha = 0.5 + 0.4 * Math.sin(performance.now() * 0.003) * fade;
+    if (mat) mat.alpha = 0.18 + 0.16 * (0.5 + 0.5 * Math.sin(performance.now() * 0.003)) * fade;
   }
 
   isExpired(): boolean { return this.def.lifetime <= 0; }
@@ -99,14 +99,14 @@ export class RealityRift {
 export class RealityRiftSystem {
   scene: Scene;
   rifts: RealityRift[] = [];
-  spawnCooldown: number = 30; // 30s before next rift
+  spawnCooldown: number = 120; // keep rifts rare and never immediate at spawn
   time: number = 0;
 
   constructor(scene: Scene) { this.scene = scene; }
 
   spawnRandomRift(playerPos: Vector3): RealityRift | null {
     if (this.spawnCooldown > 0) return null;
-    if (Math.random() > 0.05) return null; // 5% per call
+    if (Math.random() > 0.015) return null; // subtle ambient chance per call
     const contents: RiftContent[] = ['dimension', 'stars', 'nebula', 'black_hole', 'floating_ruins', 'alternate_reality', 'galaxy'];
     const content = contents[Math.floor(Math.random() * contents.length)];
     const colorTable: Record<RiftContent, [Color3, Color3]> = {
@@ -119,11 +119,13 @@ export class RealityRiftSystem {
       galaxy: [new Color3(0.65, 0.4, 0.95), new Color3(0.95, 0.85, 0.45)],
     };
     const [c1, c2] = colorTable[content];
-    const size = 12 + Math.random() * 16;
+    const size = 7 + Math.random() * 9;
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 160 + Math.random() * 130;
     const pos = new Vector3(
-      playerPos.x + (Math.random() - 0.5) * 200,
-      60 + Math.random() * 80,
-      playerPos.z + (Math.random() - 0.5) * 200,
+      playerPos.x + Math.cos(angle) * distance,
+      playerPos.y + 90 + Math.random() * 80,
+      playerPos.z + Math.sin(angle) * distance,
     );
     const def: RiftDef = {
       position: pos,
@@ -138,7 +140,7 @@ export class RealityRiftSystem {
     };
     const rift = new RealityRift(this.scene, def);
     this.rifts.push(rift);
-    this.spawnCooldown = 90 + Math.random() * 60;
+    this.spawnCooldown = 150 + Math.random() * 90;
     return rift;
   }
 

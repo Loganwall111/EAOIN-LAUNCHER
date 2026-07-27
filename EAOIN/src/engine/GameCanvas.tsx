@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, DynamicTexture, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Texture, TransformNode, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
 import { CloudRuntime } from '../effects/CloudRuntime';
@@ -74,6 +74,23 @@ const INITIAL_CHUNK_RADIUS = 2;
 const CHUNKS_PER_FRAME = 2;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
 
+/**
+ * The new sky is deliberately cinematic without the white-out.  Midday is a
+ * saturated blue instead of pure HDR cyan, sunrise/sunset are warmer, and rare
+ * events stay rare so they read as ambience rather than screen-filling flashes.
+ */
+const SKY_OVERHAUL_CONFIG = {
+  ...DEFAULT_SKY,
+  noonColor: new Color3(0.30, 0.50, 0.76),
+  sunriseColor: new Color3(0.95, 0.56, 0.34),
+  sunsetColor: new Color3(0.92, 0.38, 0.26),
+  midnightColor: new Color3(0.025, 0.035, 0.105),
+  eclipseColor: new Color3(0.18, 0.18, 0.30),
+  meteorShowerChance: 0.012,
+  eclipseChance: 0.003,
+  dayLengthSeconds: 1200,
+};
+
 export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
@@ -120,7 +137,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       if (disposed) { engine.dispose(); return; }
       setRenderStats(c => ({ ...c, renderer: runtimeEngine.info }));
       const scene = new Scene(engine);
-      scene.clearColor = new Color4(0.42, 0.62, 0.86, 1);
+      scene.clearColor = new Color4(0.22, 0.38, 0.58, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);
       scene.fogEnabled = settingsRef.current.fogEnabled;
@@ -156,9 +173,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
       const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
       const pants = new StandardMaterial('player_pants', scene); pants.diffuseColor = new Color3(0.20, 0.28, 0.50);
-      const arm = MeshBuilder.CreateBox('first_person_blocky_arm', { width: 0.22, height: 0.72, depth: 0.22 }, scene);
-      arm.parent = camera; arm.position = new Vector3(0.42, -0.48, 0.72); arm.rotation.z = -0.12; arm.material = skin; arm.isPickable = false;
-      const armPunchBase = new Vector3(0.42, -0.48, 0.72);
+      // Proper Minecraft-style first-person arm. The previous view used one
+      // plain cube, which read like a floating block.  This is a small arm rig:
+      // textured sleeve, cuff, skin hand, and pixel/noise details so it feels
+      // like the classic blocky Minecraft arm in the lower-right of the screen.
+      const firstPersonSkin = createPixelArmMaterial(scene, 'first_person_skin_texture', '#b87855', '#8f4f32', 'skin');
+      const firstPersonSleeve = createPixelArmMaterial(scene, 'first_person_sleeve_texture', '#1f67c8', '#123f86', 'sleeve');
+      const firstPersonCuff = createPixelArmMaterial(scene, 'first_person_cuff_texture', '#e8edf5', '#9fb2ce', 'cuff');
+      const arm = new TransformNode('first_person_minecraft_arm', scene);
+      arm.parent = camera;
+      arm.position = new Vector3(0.43, -0.50, 0.74);
+      arm.rotation.z = -0.16;
+      const sleeveMesh = MeshBuilder.CreateBox('first_person_sleeve', { width: 0.30, height: 0.58, depth: 0.30 }, scene);
+      sleeveMesh.parent = arm; sleeveMesh.position.y = 0.08; sleeveMesh.material = firstPersonSleeve; sleeveMesh.isPickable = false; sleeveMesh.checkCollisions = false;
+      const cuffMesh = MeshBuilder.CreateBox('first_person_sleeve_cuff', { width: 0.315, height: 0.075, depth: 0.315 }, scene);
+      cuffMesh.parent = arm; cuffMesh.position.y = -0.25; cuffMesh.material = firstPersonCuff; cuffMesh.isPickable = false; cuffMesh.checkCollisions = false;
+      const handMesh = MeshBuilder.CreateBox('first_person_square_hand', { width: 0.285, height: 0.255, depth: 0.285 }, scene);
+      handMesh.parent = arm; handMesh.position.y = -0.42; handMesh.material = firstPersonSkin; handMesh.isPickable = false; handMesh.checkCollisions = false;
+      const armPunchBase = new Vector3(0.43, -0.50, 0.74);
 
       // Third-person avatar — built as a parent transform so we can position
       // it independently of the camera and avoid the visual jitter of moving
@@ -208,9 +240,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const cloudRuntime = new CloudRuntime(scene, spawn.y, seed);
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
-      glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.42 : 0.15;
+      glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.22 : 0.08;
       const optionalPostEffectsEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.qualityPreset === 'cinematic' || settingsRef.current.experimentalShaders;
-      scene.environmentIntensity = 0.72;
+      scene.environmentIntensity = 0.48;
       dimensionRuntime.applyCurrent();
       // 1.0 — wire in the new cinematic lighting, dynamic sky, portals, rifts, physics, command blocks.
       //
@@ -230,8 +262,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             pipeline.samples = 2;
             pipeline.imageProcessing.vignetteEnabled = false;
             // Clamp exposure — the scene is already fully lit by the adopted rig.
-            pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.92);
-            pipeline.imageProcessing.contrast = 1.03;
+            pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.78);
+            pipeline.imageProcessing.contrast = 1.08;
+            pipeline.bloomWeight = Math.min(pipeline.bloomWeight, 0.16);
+            pipeline.bloomThreshold = Math.max(pipeline.bloomThreshold, 0.86);
             pipeline.depthOfFieldEnabled = settingsRef.current.qualityPreset === 'cinematic';
           }
         } catch (error) {
@@ -240,7 +274,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
         }
       }
-      const dynamicSky = new DynamicSky(scene, DEFAULT_SKY);
+      const dynamicSky = new DynamicSky(scene, SKY_OVERHAUL_CONFIG);
       dynamicSky.attach();
       const portalSystem = new PortalSystem(scene);
       // spawn the "home" portal near spawn
@@ -258,7 +292,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       commandBlockSystem.placeBlock(spawn.x + 5, spawn.y, spawn.z, 'impulse', 'say Welcome to EAOIN 1.0 — type /help in chat', false, true);
       commandBlockSystem.placeBlock(spawn.x + 6, spawn.y, spawn.z, 'chain', 'give @p 1 64', false, true);
       commandBlockSystem.placeBlock(spawn.x + 7, spawn.y, spawn.z, 'chain', 'give @p 22 1', false, true);
-      commandBlockSystem.placeBlock(spawn.x + 8, spawn.y, spawn.z, 'repeating', 'time set day', false, true);
+      // Do not auto-place a repeating `time set day` block: it spammed the
+      // action rail and kept the sky locked to a bright midday look.
       const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
 
       // cracking overlay mesh — official block cracking like Minecraft
@@ -389,6 +424,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const jumpVel = JUMP_VELOCITY_BASE * (dimGravityY < -0.3 ? 1 : 0.9 + Math.abs(dimGravityY) / 0.52 * 0.2);
 
         updateWorldLighting(scene, lighting, timeState.timeOfDay, settingsRef.current.experimentalVulkanMode || settingsRef.current.realisticLighting);
+        if (pipeline) {
+          // Runtime safety clamp: if the player enables a heavy shader pack,
+          // keep exposure and bloom inside a readable range.
+          pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.80);
+          pipeline.bloomWeight = Math.min(pipeline.bloomWeight, 0.18);
+        }
         ambientParticles.setEnabled(settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion);
         ambientParticles.update(timeState.timeOfDay, settingsRef.current.experimentalVulkanMode);
         cloudRuntime.update(deltaSeconds);
@@ -417,11 +458,21 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         scene.fogEnabled = settingsRef.current.fogEnabled;
         applyRenderScale(engine, settingsRef.current.renderScale);
         if (thirdPerson) {
-          // Place the avatar at the player's feet (camera is at eye level ~1.62).
-          avatar.position.x = camera.position.x;
+          // Visual third-person model: keep the real camera/player collision at
+          // the controlled position, and draw the avatar a few blocks in front
+          // of the camera. The old toggle moved the camera backward and then
+          // snapped the avatar to that same camera point, which made the model
+          // disappear into/behind the near plane.
+          const forward = camera.getForwardRay().direction.clone();
+          forward.y = 0;
+          if (forward.lengthSquared() < 0.001) forward.set(0, 0, 1);
+          forward.normalize();
+          const avatarFeet = camera.position.add(forward.scale(THIRD_PERSON_DISTANCE));
+          avatar.position.x = avatarFeet.x;
           avatar.position.y = camera.position.y - 1.62;
-          avatar.position.z = camera.position.z;
-          // Face the same direction as the camera
+          avatar.position.z = avatarFeet.z;
+          // Face the same direction as the camera so the player sees the back
+          // of their character, like a Minecraft-style third-person chase view.
           avatar.rotation.y = camera.rotation.y;
           // Walk animation
           const horiz = Math.hypot(camera.position.x - lastCameraPosition.x, camera.position.z - lastCameraPosition.z);
@@ -591,26 +642,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (event.key === 'F5') {
           event.preventDefault();
           thirdPerson = !thirdPerson;
-          arm.isVisible = !thirdPerson; // hide first-person arm in third-person
-          avatar.isVisible = thirdPerson; // show the player model in third-person
-          // For third-person we back the camera away from the player slightly,
-          // but we do this via the camera's local position rather than by
-          // teleporting the camera in world space, which used to cause the
-          // player to fall out of the world.
-          if (thirdPerson) {
-            // Move camera back along its forward direction.
-            const forward = camera.getForwardRay().direction;
-            camera.position = camera.position.add(forward.scale(-THIRD_PERSON_DISTANCE));
-            // Slight downward look so the player is centered in the frame.
-            camera.rotation.x -= 0.18;
-            // The avatar follows the camera in the render loop now.
-          } else {
-            // Return to first-person: snap camera back behind the player model.
-            const forward = camera.getForwardRay().direction;
-            camera.position = camera.position.add(forward.scale(THIRD_PERSON_DISTANCE));
-            camera.rotation.x += 0.18;
-          }
-          showActionMessage(thirdPerson ? '🎥 Third-person view — your player is now visible' : '🎥 First-person view');
+          arm.setEnabled(!thirdPerson);
+          avatar.isVisible = thirdPerson;
+          // Never teleport the gameplay camera on view toggle. The avatar is
+          // offset in the render loop instead, so F5 cannot hide the model, clip
+          // the camera into it, or drop the player through collision.
+          showActionMessage(thirdPerson ? '🎥 Third-person view — player model visible in front of you' : '🎥 First-person view');
           return;
         }
         if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
@@ -715,16 +752,115 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   );
 }
 
+
+function createPixelArmMaterial(scene: Scene, name: string, baseHex: string, accentHex: string, style: 'skin' | 'sleeve' | 'cuff'): StandardMaterial {
+  const material = new StandardMaterial(`${name}_mat`, scene);
+  const texture = new DynamicTexture(`${name}_diffuse`, { width: 64, height: 64 }, scene, false);
+  const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
+  ctx.imageSmoothingEnabled = false;
+
+  // Base pixel field.
+  ctx.fillStyle = baseHex;
+  ctx.fillRect(0, 0, 64, 64);
+
+  // Minecraft-style square texels: not random noise every frame, a stable
+  // deterministic pattern that looks like cloth/skin pixels wrapped on a cuboid.
+  for (let y = 0; y < 64; y += 8) {
+    for (let x = 0; x < 64; x += 8) {
+      const n = stableNoise(`${name}:${x}:${y}`);
+      if (n > 0.68) ctx.fillStyle = lightenHex(baseHex, style === 'cuff' ? 0.20 : 0.11);
+      else if (n < 0.22) ctx.fillStyle = darkenHex(baseHex, style === 'skin' ? 0.12 : 0.18);
+      else ctx.fillStyle = baseHex;
+      ctx.fillRect(x, y, 8, 8);
+    }
+  }
+
+  // Face boundaries / bevels so the arm reads as a real cuboid and not a flat
+  // colored box. Sleeve gets a seam, skin gets knuckle pixels, cuff gets bands.
+  ctx.fillStyle = darkenHex(accentHex, 0.18);
+  ctx.fillRect(0, 0, 64, 4);
+  ctx.fillRect(0, 60, 64, 4);
+  ctx.fillRect(0, 0, 4, 64);
+  ctx.fillRect(60, 0, 4, 64);
+  ctx.fillStyle = lightenHex(baseHex, 0.18);
+  ctx.fillRect(6, 6, 52, 3);
+  ctx.fillRect(6, 6, 3, 52);
+
+  if (style === 'sleeve') {
+    ctx.fillStyle = darkenHex(accentHex, 0.08);
+    ctx.fillRect(8, 44, 48, 4);
+    ctx.fillRect(28, 8, 4, 48);
+    ctx.fillStyle = lightenHex(baseHex, 0.20);
+    ctx.fillRect(12, 12, 12, 8);
+  } else if (style === 'skin') {
+    ctx.fillStyle = lightenHex(baseHex, 0.12);
+    ctx.fillRect(14, 16, 8, 8);
+    ctx.fillRect(28, 14, 8, 8);
+    ctx.fillRect(42, 16, 8, 8);
+    ctx.fillStyle = darkenHex(baseHex, 0.16);
+    ctx.fillRect(14, 42, 36, 4);
+    ctx.fillRect(20, 48, 4, 6);
+    ctx.fillRect(32, 48, 4, 6);
+    ctx.fillRect(44, 48, 4, 6);
+  } else {
+    ctx.fillStyle = lightenHex(baseHex, 0.28);
+    ctx.fillRect(0, 10, 64, 8);
+    ctx.fillStyle = darkenHex(accentHex, 0.10);
+    ctx.fillRect(0, 42, 64, 7);
+  }
+
+  texture.update(false);
+  texture.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE);
+  material.diffuseTexture = texture;
+  material.specularColor = new Color3(0.02, 0.02, 0.025);
+  material.emissiveColor = Color3.FromHexString(baseHex).scale(0.045);
+  material.backFaceCulling = true;
+  return material;
+}
+
+function stableNoise(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 0xffffffff;
+}
+
+function lightenHex(hex: string, amount: number): string {
+  const { r, g, b } = parseHexColor(hex);
+  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
+}
+
+function darkenHex(hex: string, amount: number): string {
+  const { r, g, b } = parseHexColor(hex);
+  return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount));
+}
+
+function parseHexColor(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '');
+  return {
+    r: Number.parseInt(clean.slice(0, 2), 16),
+    g: Number.parseInt(clean.slice(2, 4), 16),
+    b: Number.parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const part = (value: number) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+  return `#${part(r)}${part(g)}${part(b)}`;
+}
+
 function updateWorldLighting(scene: Scene, lighting: SceneLightingHandles, timeOfDay: number, realistic: boolean): void {
   const angle = (timeOfDay / 24) * Math.PI * 2;
   const daylight = Math.max(0.08, Math.sin(angle - Math.PI / 2) * 0.5 + 0.5);
   const moonlight = 1 - daylight; const boost = realistic ? 1.08 : 1;
-  lighting.sun.intensity = daylight * 1.18 * boost; lighting.sky.intensity = (0.24 + daylight * 0.56) * boost; lighting.spawnLight.intensity = 0.32 + moonlight * 0.95;
+  lighting.sun.intensity = daylight * 0.82 * boost; lighting.sky.intensity = (0.18 + daylight * 0.38) * boost; lighting.spawnLight.intensity = 0.24 + moonlight * 0.72;
   scene.fogDensity = realistic ? 0.0010 + moonlight * 0.0005 : 0.0011;
   scene.ambientColor = new Color3(0.10 + daylight * 0.28, 0.12 + daylight * 0.32, 0.18 + daylight * 0.38);
   const sunset = Math.max(0, 1 - Math.abs(daylight - 0.22) / 0.22); const starAlpha = Math.max(0, Math.min(1, (0.42 - daylight) * 2.4)); const rayAlpha = sunset * (realistic ? 1.3 : 0.85);
-  lighting.godRays.visibility = rayAlpha; lighting.godRays.rotation.y += 0.00012; const rayMaterial = lighting.godRays.material as any; if (rayMaterial) rayMaterial.alpha = 0.072 * rayAlpha;
-  const skyMat = lighting.skyDome.material as StandardMaterial; if (skyMat) { skyMat.emissiveColor = new Color3(0.13 + daylight * 0.22 + sunset * 0.34, 0.22 + daylight * 0.28 + sunset * 0.15, 0.36 + daylight * 0.34 - sunset * 0.08); }
+  lighting.godRays.visibility = rayAlpha; lighting.godRays.rotation.y += 0.00012; const rayMaterial = lighting.godRays.material as any; if (rayMaterial) rayMaterial.alpha = 0.038 * rayAlpha;
+  const skyMat = lighting.skyDome.material as StandardMaterial; if (skyMat) { skyMat.emissiveColor = new Color3(0.08 + daylight * 0.14 + sunset * 0.26, 0.14 + daylight * 0.20 + sunset * 0.12, 0.24 + daylight * 0.24 - sunset * 0.06); }
   lighting.sunDisk.visibility = Math.max(0, daylight - 0.12); lighting.moonDisk.visibility = Math.max(0, 1 - daylight - 0.05);
   lighting.stars.forEach((star, index) => { star.visibility = starAlpha * (0.68 + 0.32 * Math.sin(timeOfDay * 2.4 + index)); });
   scene.clearColor = new Color4(0.03 + daylight * 0.39 + sunset * 0.26, 0.04 + daylight * 0.50 + sunset * 0.10, 0.08 + daylight * 0.68 - sunset * 0.04, 1);
