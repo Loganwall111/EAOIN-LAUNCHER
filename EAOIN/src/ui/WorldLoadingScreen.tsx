@@ -16,6 +16,7 @@ interface LoadingProgressSnapshot {
   loadedChunks?: number;
   totalChunks?: number;
   elapsedMs?: number;
+  error?: string;
 }
 
 interface WorldLoadingScreenProps {
@@ -26,6 +27,10 @@ interface WorldLoadingScreenProps {
   loadingProgress?: LoadingProgressSnapshot;
   /** Fired when the world is playable or the safety cap is reached. */
   onComplete: () => void;
+  /** Recreates the renderer after an initialization error. */
+  onRetry?: () => void;
+  /** Leaves the failed world without revealing a blank canvas. */
+  onCancel?: () => void;
   reducedMotion?: boolean;
 }
 
@@ -51,9 +56,12 @@ export default function WorldLoadingScreen({
   seed,
   loadingProgress,
   onComplete,
+  onRetry,
+  onCancel,
   reducedMotion = false,
 }: WorldLoadingScreenProps) {
   const [tipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
+  const [timedOut, setTimedOut] = useState(false);
   const doneRef = useRef(false);
   const type = useMemo(() => getWorldType(worldType), [worldType]);
 
@@ -65,6 +73,8 @@ export default function WorldLoadingScreen({
   // on the black "eyes shut" awakening). The ref keeps the timers stable.
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+  const latestProgressRef = useRef(loadingProgress);
+  latestProgressRef.current = loadingProgress;
 
   const percent = Math.max(0, Math.min(100, loadingProgress?.percent ?? 0));
   const stageLabel = loadingProgress?.label ?? 'Waiting for renderer…';
@@ -83,12 +93,19 @@ export default function WorldLoadingScreen({
     return () => window.clearTimeout(timer);
   }, [loadingProgress?.ready, reducedMotion]);
 
-  // Defensive cap: if the renderer never sends a ready event, never leave the
-  // player staring at a stuck percentage forever. Distant chunks keep streaming
-  // in-game after the overlay closes.
+  // Defensive cap: only reveal gameplay after controls are wired (76%+). The
+  // previous unconditional timer hid this overlay even when initialization had
+  // crashed at 42%, which exposed exactly the reported HUD-over-black-canvas
+  // state. A real startup error or an earlier stall now stays visible with
+  // recovery actions instead.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (doneRef.current) return;
+      const latest = latestProgressRef.current;
+      if (latest?.error || (latest?.percent ?? 0) < 76) {
+        setTimedOut(true);
+        return;
+      }
       doneRef.current = true;
       onCompleteRef.current();
     }, SAFETY_COMPLETE_MS);
@@ -132,6 +149,21 @@ export default function WorldLoadingScreen({
             <span>{elapsedSeconds}s / 20s max</span>
           </div>
         </div>
+
+        {(loadingProgress?.error || timedOut) && (
+          <div className="wl-startup-error" role="alert">
+            <strong>{loadingProgress?.error ? 'WORLD STARTUP FAILED' : 'WORLD STARTUP IS TAKING TOO LONG'}</strong>
+            <span>
+              {loadingProgress?.error
+                ? loadingProgress.error
+                : 'The renderer did not reach a playable state. Retry instead of opening a blank world.'}
+            </span>
+            <div className="wl-error-actions">
+              {onRetry && <button type="button" onClick={onRetry}>Retry renderer</button>}
+              {onCancel && <button type="button" onClick={onCancel}>Back to worlds</button>}
+            </div>
+          </div>
+        )}
 
         <div className="wl-tip">
           <span className="wl-tip-label">TIP</span>

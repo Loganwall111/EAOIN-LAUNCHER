@@ -20,8 +20,8 @@ import { NextGenRuntime } from '../nextgen/NextGenRuntime';
 import { GameplayCounterKey } from '../objectives/ObjectiveTracker';
 import { createBlockMaterials } from '../rendering/BlockMaterials';
 import { ChunkRenderManager, ChunkRenderStats } from '../rendering/ChunkRenderManager';
-import { Chunk } from '../world/Chunk';
 import { applyRenderScale, createRuntimeEngine, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
+import { DimensionChunkSource } from './DimensionChunkSource';
 import { AdaptivePerformance, BUDGET_PRESETS, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -41,7 +41,6 @@ import { getWorldLayout } from '../world/WorldDistribution';
 import { WorldSaveManager } from '../world/WorldSave';
 import { EndGameRuntime } from '../space/EndGameRuntime';
 import { ScreenSpaceRayTracer } from '../rendering/ScreenSpaceRayTracing';
-import { AetherTerrain, BackroomsTerrain } from '../dimensions/terrain/AetherBackroomsTerrain';
 import { implantChip, powerForKey, usePower } from '../space/RealityChip';
 
 /** Live world readouts pushed to the HUD each sampling tick. */
@@ -58,6 +57,8 @@ export interface WorldLoadProgress {
   totalChunks?: number;
   /** Milliseconds since GameCanvas began initializing this world. */
   elapsedMs: number;
+  /** Present when initialization stopped before the render loop could start. */
+  error?: string;
 }
 
 export interface HudTelemetry {
@@ -163,6 +164,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
   useEffect(() => { selectedBlockRef.current = selectedBlock; }, [selectedBlock]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
@@ -183,7 +185,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       percent: number,
       label: string,
       ready = false,
-      chunks?: Pick<WorldLoadProgress, 'loadedChunks' | 'totalChunks'>
+      chunks?: Pick<WorldLoadProgress, 'loadedChunks' | 'totalChunks'>,
+      error?: string
     ): void => {
       if (disposed) return;
       const elapsedMs = performance.now() - loadingStartedAt;
@@ -195,26 +198,34 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         ready,
         elapsedMs,
         ...chunks,
+        ...(error ? { error } : {}),
       };
       const percentChanged = next.percent !== lastLoadingReport.percent;
       const labelChanged = next.label !== lastLoadingReport.label;
       const chunkChanged = next.loadedChunks !== lastLoadingReport.loadedChunks || next.totalChunks !== lastLoadingReport.totalChunks;
-      if (ready || percentChanged || labelChanged || chunkChanged || elapsedMs - lastLoadingReport.elapsedMs > 500) {
+      const errorChanged = next.error !== lastLoadingReport.error;
+      if (ready || percentChanged || labelChanged || chunkChanged || errorChanged || elapsedMs - lastLoadingReport.elapsedMs > 500) {
         lastLoadingReport = next;
         loadingProgressRef.current?.(next);
       }
     };
 
-    void (async () => {
+    setInitializationError(null);
+    const initializeWorld = async (): Promise<void> => {
       const canvas = canvasRef.current; if (!canvas) return;
       canvas.tabIndex = 1;
       reportLoadingProgress(1, 'Creating renderer');
       const runtimeEngine = await createRuntimeEngine(canvas, settingsRef.current);
       const engine = runtimeEngine.engine;
       if (disposed) { engine.dispose(); return; }
+      // Keep a provisional disposer in place throughout startup. If any
+      // subsystem throws before the full cleanup closure is installed, the GPU
+      // context is still released and Retry can create a clean renderer.
+      cleanupScene = () => { engine.dispose(); };
       reportLoadingProgress(8, runtimeEngine.info.label || 'Renderer ready');
       setRenderStats(c => ({ ...c, renderer: runtimeEngine.info }));
       const scene = new Scene(engine);
+      cleanupScene = () => { scene.dispose(); engine.dispose(); };
       scene.clearColor = new Color4(0.22, 0.38, 0.58, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);
@@ -242,6 +253,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const terrain: TerrainGenerator = useAdvancedWorld
         ? (advancedTerrain as unknown as TerrainGenerator)
         : new TerrainGenerator(seed, savedEdits);
+      // Construct every generator before the first synchronous chunk request.
+      // The old callback closed over Aether/Backrooms `const`s declared much
+      // later and crashed here with "Cannot access before initialization".
+      const chunkSource = new DimensionChunkSource(seed, terrain);
       reportLoadingProgress(22, useAdvancedWorld ? 'Terrain generator seeded' : 'Legacy terrain generator seeded');
       const floatingIslands: FloatingIslandsGenerator | null = isSkyWorld ? new FloatingIslandsGenerator(seed) : null;
       void floatingIslands; // reserved for future floating-island content injection
@@ -354,7 +369,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // black screen while thousands of chunks are meshed.
       const initialChunkTotal = chunksInRadius(INITIAL_CHUNK_RADIUS);
       reportLoadingProgress(42, `Meshing spawn chunks 0/${initialChunkTotal}`, false, { loadedChunks: 0, totalChunks: initialChunkTotal });
-      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => generateChunkForDimension(cx, cz));
+      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
       const initialLoadedChunks = Math.min(renderer.getStats().loadedChunks, startupChunkTotal);
       reportLoadingProgress(55, `Meshed spawn chunks ${Math.min(initialLoadedChunks, initialChunkTotal)}/${initialChunkTotal}`, false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       const lighting = configureSceneLighting(scene, spawn);
@@ -430,46 +445,37 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       portalSystem.spawnForDimension('nether', new Vector3(spawn.x + 18, spawn.y - 1, spawn.z + 12));
       portalSystem.spawnForDimension('crystal_realm', new Vector3(spawn.x - 22, spawn.y - 1, spawn.z + 18));
       const realityRifts = new RealityRiftSystem(scene);
+
+      // Install UI publishers before wiring any subsystem callbacks. Startup
+      // code should never be able to invoke a callback whose const is still in
+      // its temporal dead zone.
+      let actionMessageTimer: number | undefined;
+      const showActionMessage = (message: string): void => {
+        setActionMessage(message);
+        if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
+        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • F fly • Left click punch tree • Right place • T chat /day /time • Q tools • O/U panels'); }, 2400);
+      };
+      const publishInventory = (next: InventoryStacks): void => { inventoryRef.current = next; onInventoryChange(next); };
+      const publishSurvivalStats = (next: SurvivalStats): void => {
+        const r = { health: Number(next.health.toFixed(1)), food: Number(next.food.toFixed(1)), stamina: Number(next.stamina.toFixed(1)) };
+        survivalStatsRef.current = r; onSurvivalStatsChange(r);
+      };
+
       // 5.0 — the end-game chain, finally driven from the frame loop:
       // black hole → the void → Void Leviathan → Reality Chip. Also owns the
       // ocean depth/wave/whirlpool/Bloop hookup, which previously existed as
       // tested systems that nothing ever called.
-      // --- per-dimension chunk generation ---------------------------------
-      // The Aether and the Backrooms are real dimensions with their own
-      // generators, so travelling there must actually change the geometry
-      // rather than just repainting the sky.
-      const aetherTerrain = new AetherTerrain({ seed, floorY: 30, ceilingY: 112 });
-      const backroomsTerrain = new BackroomsTerrain({ seed, floorY: 14, roomHeight: 5, levels: 4 });
-      let activeDimension: string = 'overworld';
-
-      /** Generate a chunk with whichever generator the current dimension uses. */
-      const generateChunkForDimension = (cx: number, cz: number): Chunk => {
-        if (activeDimension === 'aether' || activeDimension === 'backrooms') {
-          const chunk = new Chunk(cx, cz, `${seed}:${activeDimension}`);
-          // Chunk's constructor lays down placeholder terrain; clear it so the
-          // dimension generator starts from genuine empty space.
-          for (let x = 0; x < 16; x += 1)
-            for (let y = 0; y < 128; y += 1)
-              for (let z = 0; z < 16; z += 1) chunk.setBlock(x, y, z, 0);
-
-          if (activeDimension === 'aether') aetherTerrain.generate(chunk);
-          else backroomsTerrain.generate(chunk);
-          return chunk;
-        }
-        return terrain.generateChunk(cx, cz);
-      };
-
       const endGame = new EndGameRuntime(scene, camera, {
         seed,
         seaLevel: (terrain as unknown as { config?: { seaLevel?: number } }).config?.seaLevel ?? 18,
       });
       endGame.attach();
-      endGame.onMessage = (text) => showActionMessage?.(text);
+      endGame.onMessage = (text) => showActionMessage(text);
       endGame.onPlayerDamage = (amount, source) => {
         const next = applyDamage(survivalStatsRef.current, amount);
         survivalStatsRef.current = next;
-        publishSurvivalStats?.(next);
-        showActionMessage?.(`${source} hits you for ${amount}.`);
+        publishSurvivalStats(next);
+        showActionMessage(`${source} hits you for ${amount}.`);
       };
       endGame.onEnterVoid = (arenaCenter) => {
         camera.position.copyFrom(arenaCenter).addInPlace(new Vector3(0, 4, -40));
@@ -479,7 +485,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const physics = new AdvancedPhysicsRuntime();
       physics.attach(scene);
       const commandBlockSystem = new CommandBlockSystem();
-      commandBlockSystem.onLog = (m) => showActionMessage?.(`[script] ${m}`);
+      commandBlockSystem.onLog = (m) => showActionMessage(`[script] ${m}`);
       // Place a starter command block at the spawn for immediate scripting demo.
       commandBlockSystem.placeBlock(spawn.x + 5, spawn.y, spawn.z, 'impulse', 'say Welcome to EAOIN 1.0 — type /help in chat', false, true);
       commandBlockSystem.placeBlock(spawn.x + 6, spawn.y, spawn.z, 'chain', 'give @p 1 64', false, true);
@@ -498,18 +504,6 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       crackMaterial.backFaceCulling = false;
 
       let miningSession: MiningSession | null = null;
-      let actionMessageTimer: number | undefined;
-      const showActionMessage = (message: string): void => {
-        setActionMessage(message);
-        if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
-        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • F fly • Left click punch tree • Right place • T chat /day /time • Q tools • O/U panels'); }, 2400);
-      };
-
-      const publishInventory = (next: InventoryStacks): void => { inventoryRef.current = next; onInventoryChange(next); };
-      const publishSurvivalStats = (next: SurvivalStats): void => {
-        const r = { health: Number(next.health.toFixed(1)), food: Number(next.food.toFixed(1)), stamina: Number(next.stamina.toFixed(1)) };
-        survivalStatsRef.current = r; onSurvivalStatsChange(r);
-      };
       const clearMining = (): void => {
         miningSession = null; setMiningProgress(0); setMiningLabel('');
         if (crackMesh) { crackMesh.dispose(); crackMesh = null; crackMaterial.alpha = 0; }
@@ -933,7 +927,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (centerChanged || renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
           const result = renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, renderRadius,
-            (cx, cz) => generateChunkForDimension(cx, cz),
+            chunkSource.generateChunk,
             { budget: CHUNKS_PER_FRAME }
           );
           if (result.loaded > 0 || result.unloaded > 0) {
@@ -1075,7 +1069,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           setTimeout(() => {
             dimensionRuntime.setDimension('corrupted_lands');
             atmosphere.setDimension('corrupted_lands');
-            activeDimension = 'corrupted_lands';
+            chunkSource.setDimension('corrupted_lands');
             showActionMessage('Reality distortion detected. You have reached The Corrupted Lands.');
           }, 2000);
           return;
@@ -1210,12 +1204,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleTravelEvent = (event: Event): void => {
         const dimensionId = (event as CustomEvent<{ dimensionId: string }>).detail?.dimensionId;
         if (!dimensionId) return;
-        const previousDimension = activeDimension;
+        const previousDimension = chunkSource.getDimension();
         dimensionRuntime.setDimension(dimensionId as RuntimeDimensionID);
         dimensionRuntime.triggerTransitionEffect(camera.position, true);
-        // Swap the whole atmosphere to the destination's sky and fog.
+        // Swap the whole atmosphere and chunk source to the destination.
         atmosphere.setDimension(dimensionId);
-        activeDimension = dimensionId;
+        chunkSource.setDimension(dimensionId);
 
         if (dimensionId === 'corrupted_lands') {
             showActionMessage('Reality begins to bend...');
@@ -1236,7 +1230,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
           renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,
-            (cx, cz) => generateChunkForDimension(cx, cz)
+            chunkSource.generateChunk
           );
         }
 
@@ -1252,9 +1246,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       }
       let recoveredFromRenderError = false;
+      let consecutiveRenderFailures = 0;
       engine.runRenderLoop(() => {
         try {
           scene.render();
+          consecutiveRenderFailures = 0;
         } catch (error) {
           if (!recoveredFromRenderError) {
             recoveredFromRenderError = true;
@@ -1263,7 +1259,25 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             scene.postProcessesEnabled = false;
             setActionMessage('Renderer recovered — optional effects disabled so the world stays visible');
           }
-          try { scene.render(); } catch {}
+          try {
+            scene.render();
+            consecutiveRenderFailures = 0;
+          } catch (retryError) {
+            consecutiveRenderFailures += 1;
+            if (consecutiveRenderFailures >= 3) {
+              const detail = retryError instanceof Error ? retryError.message : String(retryError);
+              console.error('[Render] Scene failed repeatedly; stopping the broken render loop.', retryError);
+              engine.stopRenderLoop();
+              setInitializationError(`Rendering stopped: ${detail || 'unknown graphics error'}`);
+              reportLoadingProgress(
+                Math.max(76, lastLoadingReport.percent),
+                'Renderer stopped after repeated frame failures',
+                false,
+                undefined,
+                detail || 'Unknown graphics error'
+              );
+            }
+          }
         }
       }); engine.resize();
       const initialStats = renderer.getStats(); console.log(`[Render] 3.2 ready: ${initialStats.loadedChunks} chunks, clouds moving, mountains & caves volumetric, 16 render, 20min day`);
@@ -1276,7 +1290,23 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
         audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
-    })();
+    };
+
+    void initializeWorld().catch((error: unknown) => {
+      if (disposed) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      console.error('[Startup] World initialization failed before the render loop started.', error);
+      try { cleanupScene?.(); } catch { /* best-effort cleanup after startup failure */ }
+      cleanupScene = undefined;
+      setInitializationError(detail || 'Unknown renderer error');
+      reportLoadingProgress(
+        Math.max(0, lastLoadingReport.percent),
+        'World failed to start',
+        false,
+        undefined,
+        detail || 'Unknown renderer error'
+      );
+    });
     return () => { disposed = true; cleanupScene?.(); };
   }, [onGameplayEvent, onInventoryChange, onRuntimeStatusChange, onSelectedBlockChange, onSelectedToolChange, onSurvivalStatsChange, onToggleInventory, onToggleSettings, seed, settings.rendererPreference, worldVersion]);
 
@@ -1315,6 +1345,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   return (
     <div className="game-screen">
       <canvas ref={canvasRef} className="game-canvas" />
+      {initializationError && (
+        <div className="world-startup-error" role="alert">
+          <strong>THE WORLD COULD NOT START</strong>
+          <span>{initializationError}</span>
+          <div>
+            <button onClick={() => setWorldVersion((version) => version + 1)}>Retry renderer</button>
+            <button onClick={onExit}>Back to worlds</button>
+          </div>
+        </div>
+      )}
       <div className="game-hud">
         {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
         {targetLabel && <div className="target-label">{targetLabel}</div>}
