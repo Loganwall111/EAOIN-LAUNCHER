@@ -1085,7 +1085,6 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const placeTarget = toBlockCoordinate(picked.point.add(picked.normal.scale(0.01)));
         if (terrain.getBlockAt(placeTarget.x, placeTarget.y, placeTarget.z) !== 0) { showActionMessage('Occupied'); return; }
         if (wouldBlockPlayer(placeTarget, camera.position)) { showActionMessage('Cannot place inside player'); return; }
-        const blockToPlace = selectedBlockRef.current;
         const creativeNow = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
         if (!creativeNow && !canConsumeBlock(inventoryRef.current, blockToPlace, 1)) { showActionMessage(`No ${getBlock(blockToPlace).name} left`); return; }
         terrain.setBlockAt(placeTarget.x, placeTarget.y, placeTarget.z, blockToPlace);
