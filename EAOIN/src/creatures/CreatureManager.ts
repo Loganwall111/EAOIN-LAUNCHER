@@ -10,12 +10,15 @@ import {
   AbstractMesh,
   Color3,
   MeshBuilder,
+  RawTexture,
   Scene,
   StandardMaterial,
+  Texture,
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
 import { BiomeID, TerrainGenerator } from '../world/TerrainGenerator';
+import { buildMobTexture, MOB_TEXTURE_SIZE, MobPart, MobSpecies } from './CreatureTextures';
 
 export type CreatureKind = 'sheep' | 'deer' | 'goat' | 'hare';
 
@@ -41,16 +44,75 @@ interface CreatureEntity {
   maxHealth: number;
   root: TransformNode;
   meshes: AbstractMesh[];
+  /** Legs, for the walk cycle. Front-left/back-right swing together. */
+  legs: AbstractMesh[];
+  /** Head, for idle grazing and look-at. */
+  head: AbstractMesh | null;
   target: Vector3;
   speed: number;
   nextDecisionAt: number;
   randomState: number;
+  /** Accumulated walk-cycle phase, advanced by distance travelled. */
+  walkPhase: number;
+  /** True while the creature is moving, so idle animation can differ. */
+  moving: boolean;
 }
+
+/**
+ * Per-species body proportions, in world units.
+ *
+ * Kept as data so a hare is genuinely small and hunched while a deer is tall
+ * and long-legged, rather than every animal being the same box with a
+ * different colour.
+ */
+interface BodyShape {
+  bodyWidth: number; bodyHeight: number; bodyDepth: number; bodyY: number;
+  headSize: number; headY: number; headZ: number;
+  legThickness: number; legHeight: number; legSpreadX: number; legSpreadZ: number;
+  earWidth: number; earHeight: number; earDepth: number;
+  tailLength: number;
+}
+
+const BODY_SHAPES: Record<CreatureKind, BodyShape> = {
+  sheep: {
+    bodyWidth: 0.78, bodyHeight: 0.68, bodyDepth: 1.14, bodyY: 0.86,
+    headSize: 0.44, headY: 1.02, headZ: 0.70,
+    legThickness: 0.18, legHeight: 0.52, legSpreadX: 0.26, legSpreadZ: 0.38,
+    earWidth: 0.16, earHeight: 0.08, earDepth: 0.10, tailLength: 0.18,
+  },
+  deer: {
+    bodyWidth: 0.62, bodyHeight: 0.62, bodyDepth: 1.28, bodyY: 1.08,
+    headSize: 0.40, headY: 1.42, headZ: 0.76,
+    legThickness: 0.14, legHeight: 0.78, legSpreadX: 0.24, legSpreadZ: 0.46,
+    earWidth: 0.10, earHeight: 0.20, earDepth: 0.06, tailLength: 0.16,
+  },
+  goat: {
+    bodyWidth: 0.66, bodyHeight: 0.60, bodyDepth: 1.06, bodyY: 0.84,
+    headSize: 0.40, headY: 1.04, headZ: 0.64,
+    legThickness: 0.15, legHeight: 0.54, legSpreadX: 0.24, legSpreadZ: 0.36,
+    earWidth: 0.16, earHeight: 0.07, earDepth: 0.08, tailLength: 0.14,
+  },
+  hare: {
+    bodyWidth: 0.34, bodyHeight: 0.32, bodyDepth: 0.52, bodyY: 0.32,
+    headSize: 0.26, headY: 0.44, headZ: 0.32,
+    legThickness: 0.09, legHeight: 0.20, legSpreadX: 0.12, legSpreadZ: 0.18,
+    earWidth: 0.07, earHeight: 0.30, earDepth: 0.04, tailLength: 0.10,
+  },
+};
 
 const SPAWN_CELL_SIZE = 18;
 const SPAWN_RADIUS = 54;
 const DESPAWN_RADIUS = 74;
 const CREATURE_CAP = 22;
+
+/** Rotate `current` toward `target` by at most `maxDelta`, wrapping at ±π. */
+function approachAngle(current: number, target: number, maxDelta: number): number {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  if (Math.abs(diff) <= maxDelta) return target;
+  return current + Math.sign(diff) * maxDelta;
+}
 
 export class CreatureManager {
   private readonly creatures = new Map<string, CreatureEntity>();
@@ -107,6 +169,43 @@ export class CreatureManager {
       drops,
       message: `${this.creatureName(creature.kind)} defeated`,
     };
+  }
+
+  /**
+   * Remove every loaded creature. Backs `/kill @e`.
+   */
+  clearAll(): number {
+    const removed = this.creatures.size;
+    for (const creature of this.creatures.values()) creature.root.dispose(false, true);
+    this.creatures.clear();
+    this.despawned += removed;
+    return removed;
+  }
+
+  /**
+   * Spawn one creature near a position. Backs `/summon`.
+   *
+   * Returns the species actually spawned, or null when there was no safe
+   * ground within range.
+   */
+  spawnNear(position: Vector3, requested: string): string | null {
+    const kind = (['sheep', 'deer', 'goat', 'hare'] as CreatureKind[])
+      .find((k) => k === requested.toLowerCase()) ?? 'sheep';
+
+    // Try a ring of candidate positions around the player.
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const angle = (attempt / 16) * Math.PI * 2;
+      const radius = 3 + (attempt % 4);
+      const x = position.x + Math.cos(angle) * radius;
+      const z = position.z + Math.sin(angle) * radius;
+      const safe = this.safeGroundPosition(x, z);
+      if (!safe) continue;
+      const id = `summon:${this.spawned}:${attempt}`;
+      this.creatures.set(id, this.createCreature(id, kind, safe));
+      this.spawned += 1;
+      return kind;
+    }
+    return null;
   }
 
   getStats(): CreatureStats {
@@ -186,7 +285,7 @@ export class CreatureManager {
     const root = new TransformNode(`creature_${kind}_${id}`, this.scene);
     root.position = position.clone();
 
-    const meshes = this.createCreatureMeshes(kind, root);
+    const { meshes, legs, head } = this.createCreatureMeshes(kind, root);
     const speed = kind === 'hare' ? 2.2 : kind === 'deer' ? 1.45 : 1.05;
     const maxHealth = kind === 'deer' ? 26 : kind === 'goat' ? 24 : kind === 'sheep' ? 20 : 12;
     const randomState = this.hashToInt(`creature-state:${id}`);
@@ -197,82 +296,165 @@ export class CreatureManager {
       maxHealth,
       root,
       meshes,
+      legs,
+      head,
       target: position.clone(),
       speed,
       nextDecisionAt: 0,
       randomState,
+      walkPhase: 0,
+      moving: false,
     };
     this.chooseNewTarget(creature, performance.now());
     return creature;
   }
 
-  private createCreatureMeshes(kind: CreatureKind, root: TransformNode): AbstractMesh[] {
-    const materials = this.creatureMaterials(kind);
-    const body = MeshBuilder.CreateBox(`creature_${kind}_body`, { width: 0.9, height: 0.62, depth: 1.25 }, this.scene);
+  /**
+   * Build a mob body from textured cuboids.
+   *
+   * Parts are proportioned per species (a hare is not a scaled sheep) and each
+   * uses a real pixel-art texture rather than a flat colour. Eyes are painted
+   * into the head texture, so the extra emissive eye cubes that produced the
+   * "white block eye" are gone.
+   */
+  private createCreatureMeshes(
+    kind: CreatureKind,
+    root: TransformNode
+  ): { meshes: AbstractMesh[]; legs: AbstractMesh[]; head: AbstractMesh | null } {
+    const species = this.speciesFor(kind);
+    const shape = BODY_SHAPES[kind];
+    const bodyMaterial = this.partMaterial(species, 'body');
+    const headMaterial = this.partMaterial(species, 'head');
+    const legMaterial = this.partMaterial(species, 'leg');
+
+    const meshes: AbstractMesh[] = [];
+    const legs: AbstractMesh[] = [];
+
+    const body = MeshBuilder.CreateBox(`creature_${kind}_body`, {
+      width: shape.bodyWidth, height: shape.bodyHeight, depth: shape.bodyDepth,
+    }, this.scene);
     body.parent = root;
-    body.position.y = 0.62;
-    body.material = materials.body;
+    body.position.y = shape.bodyY;
+    body.material = bodyMaterial;
+    meshes.push(body);
 
-    const head = MeshBuilder.CreateBox(`creature_${kind}_head`, { width: 0.46, height: 0.42, depth: 0.46 }, this.scene);
+    const head = MeshBuilder.CreateBox(`creature_${kind}_head`, {
+      width: shape.headSize, height: shape.headSize, depth: shape.headSize,
+    }, this.scene);
     head.parent = root;
-    head.position = new Vector3(0, 0.84, 0.78);
-    head.material = materials.head;
+    head.position = new Vector3(0, shape.headY, shape.headZ);
+    head.material = headMaterial;
+    meshes.push(head);
 
-    const meshes: AbstractMesh[] = [body, head];
-    for (const x of [-0.32, 0.32]) {
-      for (const z of [-0.42, 0.42]) {
-        const leg = MeshBuilder.CreateBox(`creature_${kind}_leg`, { width: 0.16, height: 0.5, depth: 0.16 }, this.scene);
+    // Snout, so the head is not a featureless cube in profile.
+    const snout = MeshBuilder.CreateBox(`creature_${kind}_snout`, {
+      width: shape.headSize * 0.5, height: shape.headSize * 0.42, depth: shape.headSize * 0.42,
+    }, this.scene);
+    snout.parent = head;
+    snout.position = new Vector3(0, -shape.headSize * 0.18, shape.headSize * 0.62);
+    snout.material = headMaterial;
+    meshes.push(snout);
+
+    // Ears — small, but they do most of the work in reading a silhouette.
+    for (const side of [-1, 1]) {
+      const ear = MeshBuilder.CreateBox(`creature_${kind}_ear`, {
+        width: shape.earWidth, height: shape.earHeight, depth: shape.earDepth,
+      }, this.scene);
+      ear.parent = head;
+      ear.position = new Vector3(side * shape.headSize * 0.34, shape.headSize * 0.6, 0);
+      ear.material = headMaterial;
+      meshes.push(ear);
+    }
+
+    // Four legs, tracked separately so they can swing.
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const leg = MeshBuilder.CreateBox(`creature_${kind}_leg`, {
+          width: shape.legThickness, height: shape.legHeight, depth: shape.legThickness,
+        }, this.scene);
         leg.parent = root;
-        leg.position = new Vector3(x, 0.25, z);
-        leg.material = materials.leg;
+        // Pivot at the hip: shift the box down inside a parent-less offset by
+        // placing it so rotation about its top edge looks like a stride.
+        leg.setPivotPoint(new Vector3(0, shape.legHeight / 2, 0));
+        leg.position = new Vector3(
+          sx * shape.legSpreadX,
+          shape.legHeight / 2,
+          sz * shape.legSpreadZ
+        );
+        leg.material = legMaterial;
         meshes.push(leg);
+        legs.push(leg);
       }
     }
+
+    // Tail.
+    const tail = MeshBuilder.CreateBox(`creature_${kind}_tail`, {
+      width: shape.legThickness * 0.8, height: shape.legThickness * 0.8, depth: shape.tailLength,
+    }, this.scene);
+    tail.parent = root;
+    tail.position = new Vector3(0, shape.bodyY + shape.bodyHeight * 0.25, -shape.bodyDepth * 0.55);
+    tail.material = bodyMaterial;
+    meshes.push(tail);
 
     if (kind === 'goat') {
-      for (const x of [-0.18, 0.18]) {
-        const horn = MeshBuilder.CreateCylinder(`creature_${kind}_horn`, { height: 0.34, diameterTop: 0.03, diameterBottom: 0.09 }, this.scene);
-        horn.parent = root;
-        horn.position = new Vector3(x, 1.14, 0.82);
-        horn.material = this.getMaterial('horn', new Color3(0.93, 0.87, 0.72));
+      for (const side of [-1, 1]) {
+        const horn = MeshBuilder.CreateCylinder(`creature_${kind}_horn`, {
+          height: 0.3, diameterTop: 0.03, diameterBottom: 0.08, tessellation: 6,
+        }, this.scene);
+        horn.parent = head;
+        horn.position = new Vector3(side * shape.headSize * 0.3, shape.headSize * 0.7, -0.02);
+        horn.rotation.z = side * 0.35;
+        horn.material = this.getMaterial('horn', new Color3(0.9, 0.86, 0.74));
         meshes.push(horn);
       }
-    }
-
-    if (kind === 'hare') {
-      for (const x of [-0.12, 0.12]) {
-        const ear = MeshBuilder.CreateBox(`creature_${kind}_ear`, { width: 0.1, height: 0.44, depth: 0.08 }, this.scene);
-        ear.parent = root;
-        ear.position = new Vector3(x, 1.2, 0.78);
-        ear.material = materials.head;
-        meshes.push(ear);
-      }
-    }
-
-    // 2.0 — every mob gets emissive eyes so creatures are visible at night and
-    // read as alive rather than as unlit boxes.
-    const eyeMaterial = this.getEyeMaterial(kind);
-    for (const x of [-0.13, 0.13]) {
-      const eye = MeshBuilder.CreateBox(`creature_${kind}_eye`, { width: 0.075, height: 0.075, depth: 0.05 }, this.scene);
-      eye.parent = root;
-      eye.position = new Vector3(x, 0.9, 1.0);
-      eye.material = eyeMaterial;
-      meshes.push(eye);
     }
 
     for (const mesh of meshes) {
       mesh.isPickable = true;
       mesh.checkCollisions = false;
+      mesh.receiveShadows = true;
       mesh.metadata = { creatureId: root.name.replace(/^creature_[^_]+_/, '') };
     }
 
-    return meshes;
+    return { meshes, legs, head };
+  }
+
+  /** Map the gameplay creature kind onto a texture species. */
+  private speciesFor(kind: CreatureKind): MobSpecies {
+    return kind;
+  }
+
+  /** Cached textured material for one body part of a species. */
+  private partMaterial(species: MobSpecies, part: MobPart): StandardMaterial {
+    const name = `${species}_${part}`;
+    const existing = this.materials.get(name);
+    if (existing) return existing;
+
+    const material = new StandardMaterial(`creature_material_${name}`, this.scene);
+    const texture = RawTexture.CreateRGBATexture(
+      buildMobTexture(species, part),
+      MOB_TEXTURE_SIZE,
+      MOB_TEXTURE_SIZE,
+      this.scene,
+      true,
+      false,
+      Texture.NEAREST_NEAREST_MIPLINEAR
+    );
+    texture.name = `creature_tex_${name}`;
+    material.diffuseTexture = texture;
+    // Animals are matte, and a little ambient keeps them readable at dusk.
+    material.specularColor = new Color3(0.03, 0.03, 0.03);
+    material.ambientColor = new Color3(1, 1, 1);
+    this.materials.set(name, material);
+    return material;
   }
 
   private updateCreature(creature: CreatureEntity, now: number, deltaSeconds: number): void {
     const toTarget = creature.target.subtract(creature.root.position);
     const horizontalDistance = Math.hypot(toTarget.x, toTarget.z);
     if (horizontalDistance < 0.35 || now >= creature.nextDecisionAt) {
+      creature.moving = false;
+      this.animateCreature(creature, now, deltaSeconds, 0);
       this.chooseNewTarget(creature, now);
       return;
     }
@@ -283,14 +465,62 @@ export class CreatureManager {
     const nextZ = creature.root.position.z + direction.z * step;
     const safe = this.safeGroundPosition(nextX, nextZ);
     if (!safe) {
+      creature.moving = false;
+      this.animateCreature(creature, now, deltaSeconds, 0);
       this.chooseNewTarget(creature, now);
       return;
     }
 
     creature.root.position = safe;
-    creature.root.rotation.y = Math.atan2(direction.x, direction.z);
-    const bob = Math.sin(now * 0.008 + creature.randomState) * 0.035;
-    creature.root.position.y += bob;
+    // Turn smoothly toward the heading rather than snapping, so animals bank
+    // into corners instead of pivoting on the spot.
+    const desiredYaw = Math.atan2(direction.x, direction.z);
+    creature.root.rotation.y = approachAngle(creature.root.rotation.y, desiredYaw, deltaSeconds * 6);
+    creature.moving = true;
+    this.animateCreature(creature, now, deltaSeconds, step);
+  }
+
+  /**
+   * Walk cycle and idle motion.
+   *
+   * Legs swing in diagonal pairs (front-left with back-right), which is how
+   * quadrupeds actually move and reads correctly even at 16px. The phase is
+   * advanced by **distance travelled**, not by time, so animals never moonwalk
+   * when their speed changes. Idle animals graze: the head dips periodically.
+   */
+  private animateCreature(
+    creature: CreatureEntity,
+    now: number,
+    deltaSeconds: number,
+    distance: number
+  ): void {
+    const shape = BODY_SHAPES[creature.kind];
+
+    if (creature.moving) {
+      // One full stride per ~0.9 world units for a sheep-sized animal.
+      creature.walkPhase += distance / Math.max(0.2, shape.legHeight * 1.6);
+      const swing = Math.sin(creature.walkPhase * Math.PI * 2) * 0.7;
+      for (let i = 0; i < creature.legs.length; i += 1) {
+        // Legs are ordered (-x,-z) (-x,+z) (+x,-z) (+x,+z); diagonals are
+        // indices 0&3 and 1&2.
+        const diagonal = i === 0 || i === 3 ? 1 : -1;
+        creature.legs[i].rotation.x = swing * diagonal;
+      }
+      // Body bob synced to the stride, plus a slight forward lean.
+      const bob = Math.abs(Math.sin(creature.walkPhase * Math.PI * 2)) * shape.legHeight * 0.06;
+      creature.root.position.y += bob;
+      if (creature.head) creature.head.rotation.x = 0.06;
+    } else {
+      // Ease the legs back to neutral so stopping does not freeze mid-stride.
+      for (const leg of creature.legs) {
+        leg.rotation.x += (0 - leg.rotation.x) * Math.min(1, deltaSeconds * 8);
+      }
+      // Grazing: dip the head on a slow cycle, offset per animal.
+      if (creature.head) {
+        const graze = Math.sin(now * 0.0011 + creature.randomState * 0.001);
+        creature.head.rotation.x = graze > 0.4 ? 0.62 : 0.06;
+      }
+    }
   }
 
   private chooseNewTarget(creature: CreatureEntity, now: number): void {
@@ -342,64 +572,6 @@ export class CreatureManager {
 
   private creatureName(kind: CreatureKind): string {
     return kind.charAt(0).toUpperCase() + kind.slice(1);
-  }
-
-  private creatureMaterials(kind: CreatureKind): { body: StandardMaterial; head: StandardMaterial; leg: StandardMaterial } {
-    if (kind === 'deer') {
-      return {
-        body: this.getMaterial('deer_body', new Color3(0.5, 0.28, 0.12)),
-        head: this.getMaterial('deer_head', new Color3(0.42, 0.22, 0.09)),
-        leg: this.getMaterial('deer_leg', new Color3(0.24, 0.13, 0.06)),
-      };
-    }
-    if (kind === 'goat') {
-      return {
-        body: this.getMaterial('goat_body', new Color3(0.72, 0.72, 0.68)),
-        head: this.getMaterial('goat_head', new Color3(0.82, 0.82, 0.78)),
-        leg: this.getMaterial('goat_leg', new Color3(0.42, 0.42, 0.4)),
-      };
-    }
-    if (kind === 'hare') {
-      return {
-        body: this.getMaterial('hare_body', new Color3(0.76, 0.58, 0.32)),
-        head: this.getMaterial('hare_head', new Color3(0.86, 0.68, 0.42)),
-        leg: this.getMaterial('hare_leg', new Color3(0.54, 0.38, 0.2)),
-      };
-    }
-    return {
-      body: this.getMaterial('sheep_body', new Color3(0.88, 0.86, 0.76)),
-      head: this.getMaterial('sheep_head', new Color3(0.18, 0.18, 0.16)),
-      leg: this.getMaterial('sheep_leg', new Color3(0.1, 0.1, 0.09)),
-    };
-  }
-
-  /**
-   * Emissive eye material, cached per species.
-   *
-   * Predators get a harder, hotter eyeshine than prey — the same trick real
-   * animals' tapetum lucidum produces, and it makes a wolf at the treeline
-   * instantly readable as a threat.
-   */
-  private getEyeMaterial(kind: CreatureKind): StandardMaterial {
-    const name = `eye_${kind}`;
-    const existing = this.materials.get(name);
-    if (existing) return existing;
-
-    const glow = kind === 'goat'
-      ? new Color3(1.0, 0.82, 0.28)
-      : kind === 'deer'
-        ? new Color3(0.62, 0.92, 1.0)
-        : kind === 'hare'
-          ? new Color3(1.0, 0.44, 0.44)
-          : new Color3(0.86, 0.96, 1.0);
-
-    const material = new StandardMaterial(`creature_material_${name}`, this.scene);
-    material.diffuseColor = Color3.Black();
-    material.emissiveColor = glow;
-    material.specularColor = Color3.Black();
-    material.disableLighting = true;
-    this.materials.set(name, material);
-    return material;
   }
 
   private getMaterial(name: string, color: Color3): StandardMaterial {

@@ -14,10 +14,36 @@ export interface CommandRuntimeState {
   gameMode?: GameMode;
 }
 
+/**
+ * Side effects a command asks the engine to perform.
+ *
+ * Commands stay pure — they return a description of what should happen and
+ * `GameCanvas` carries it out. That keeps this module testable while letting
+ * `/kill`, `/tp` and `/give` actually do something; previously several
+ * commands only returned a chat string, which is why typing `/kill` appeared
+ * to do nothing at all.
+ */
+export interface CommandEffect {
+  kind: 'kill' | 'teleport' | 'give' | 'heal' | 'clear' | 'spawn' | 'weather';
+  /** Target coordinates for `teleport`. */
+  x?: number;
+  y?: number;
+  z?: number;
+  /** Block/item id for `give`. */
+  blockId?: number;
+  amount?: number;
+  /** Entity name for `spawn`. */
+  entity?: string;
+  /** Weather id for `weather`. */
+  weather?: string;
+}
+
 export interface CommandResult extends CommandRuntimeState {
   ok: boolean;
   /** Set when the command asks for a live game-mode change. */
   gameModeChange?: GameMode;
+  /** Set when the command asks the engine to change the world or player. */
+  effect?: CommandEffect;
 }
 
 /** Accepts Minecraft-style aliases: `/gamemode 1`, `/gamemode c`, `/gmc`. */
@@ -39,7 +65,7 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
     return {
       ...state,
       ok: true,
-      lastMessage: 'Commands: /gamemode <survival|creative|story|experimental> /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
+      lastMessage: 'Commands: /gamemode <survival|creative|story|experimental> /kill /heal /tp <x> <y> <z> /give <id> [n] /clear /weather <clear|rain|storm> /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
     };
   }
 
@@ -57,6 +83,54 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
   if (/^gm[0-9scei]$/.test(name)) {
     const mode = GAME_MODE_ALIASES[name.slice(2)];
     if (mode) return { ...state, ok: true, gameMode: mode, gameModeChange: mode, lastMessage: `Game mode set to ${mode}` };
+  }
+
+  // --- commands with real world effects ----------------------------------
+
+  if (name === 'kill') {
+    // `/kill` with no argument kills the player, exactly like Minecraft.
+    const target = args[0]?.toLowerCase();
+    if (!target || target === '@s' || target === '@p') {
+      return { ...state, ok: true, effect: { kind: 'kill' }, lastMessage: 'You died. Respawning at the world spawn.' };
+    }
+    if (target === '@e') {
+      return { ...state, ok: true, effect: { kind: 'clear' }, lastMessage: 'Removed every loaded creature.' };
+    }
+    return { ...state, ok: false, lastMessage: 'Usage: /kill [@s|@p|@e]' };
+  }
+
+  if (name === 'heal') {
+    return { ...state, ok: true, effect: { kind: 'heal' }, lastMessage: 'Health, hunger and stamina restored.' };
+  }
+
+  if (name === 'tp' || name === 'teleport') {
+    const [x, y, z] = args.map(Number);
+    if (![x, y, z].every(Number.isFinite)) {
+      return { ...state, ok: false, lastMessage: 'Usage: /tp <x> <y> <z>' };
+    }
+    return { ...state, ok: true, effect: { kind: 'teleport', x, y, z }, lastMessage: `Teleported to ${x}, ${y}, ${z}` };
+  }
+
+  if (name === 'give') {
+    const blockId = Number(args[0]);
+    const amount = args[1] === undefined ? 1 : Number(args[1]);
+    if (!Number.isFinite(blockId) || blockId <= 0 || !Number.isFinite(amount) || amount <= 0) {
+      return { ...state, ok: false, lastMessage: 'Usage: /give <blockId> [amount]' };
+    }
+    return {
+      ...state,
+      ok: true,
+      effect: { kind: 'give', blockId, amount: Math.min(999, Math.floor(amount)) },
+      lastMessage: `Gave ${Math.floor(amount)} of block ${blockId}`,
+    };
+  }
+
+  if (name === 'weather') {
+    const weather = args[0]?.toLowerCase();
+    if (!weather || !['clear', 'rain', 'storm', 'snow'].includes(weather)) {
+      return { ...state, ok: false, lastMessage: 'Usage: /weather <clear|rain|storm|snow>' };
+    }
+    return { ...state, ok: true, effect: { kind: 'weather', weather }, lastMessage: `Weather set to ${weather}` };
   }
 
   if (name === 'day') {
@@ -135,7 +209,10 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
   if (name === 'rocket' || name === 'moon') return { ...state, ok: true, lastMessage: 'Rocket command accepted: stand near the rocket and press R to launch' };
   if (name === 'mars') return { ...state, ok: true, lastMessage: 'Mars is visible in the solar runtime; planetary landing is staged through rockets' };
   if (name === 'incredible') return { ...state, ok: true, lastMessage: 'Incredible mode is seed-gated; use McDonald\'s half for the rare world' };
-  if (name === 'summon') return { ...state, ok: true, lastMessage: `Summon preview accepted for ${args[0] ?? 'entity'} through the 3.0 modding API` };
+  if (name === 'summon') {
+    const entity = args[0] ?? 'sheep';
+    return { ...state, ok: true, effect: { kind: 'spawn', entity }, lastMessage: `Summoned ${entity}` };
+  }
 
   return { ...state, ok: false, lastMessage: `Unknown command: /${name}. Try /help` };
 }

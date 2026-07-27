@@ -177,8 +177,129 @@ const biomes: BiomeDefinition[] = [
 
 export const ALL_BIOMES: BiomeDefinition[] = biomes;
 
+/**
+ * Index for `getBiome`.
+ *
+ * `getBiome` is called for *every block column* during terrain generation, and
+ * it used to run `biomes.find(...)` — a linear scan across 150+ entries with a
+ * string comparison each. That is on the order of a hundred million string
+ * compares while streaming a render radius, and it was a measurable part of
+ * the world-loading stall. A Map turns it into one hash lookup.
+ */
+const BIOME_INDEX = new Map<BiomeID, BiomeDefinition>(biomes.map((b) => [b.id, b]));
+
 export function getBiome(id: BiomeID): BiomeDefinition {
-  return biomes.find((b) => b.id === id) ?? biomes[0];
+  return BIOME_INDEX.get(id) ?? biomes[0];
+}
+
+/* ------------------------------------------------------------------ *
+ * biome size classes
+ * ------------------------------------------------------------------ */
+
+/**
+ * How much of the map a biome should occupy.
+ *
+ * Previously every biome was selected from the same climate grid at one
+ * frequency, so they all came out roughly the same middling size and packed
+ * tightly together — the "biomes look so cramped, everything in one area"
+ * problem. Assigning each biome a size class lets rare/special biomes appear
+ * as small pockets while staples such as plains and ocean form the large
+ * backdrops a Minecraft world needs.
+ */
+export type BiomeSizeClass = 'rare' | 'small' | 'medium' | 'large' | 'huge';
+
+/**
+ * Radius multiplier per class, applied to the base biome cell size. A `huge`
+ * biome covers roughly 9x the area of a `small` one.
+ */
+export const BIOME_SIZE_SCALE: Record<BiomeSizeClass, number> = {
+  rare: 0.42,
+  small: 0.68,
+  medium: 1.0,
+  large: 1.55,
+  huge: 2.3,
+};
+
+/** Relative chance of a region being assigned to each class. */
+export const BIOME_SIZE_WEIGHT: Record<BiomeSizeClass, number> = {
+  rare: 0.06,
+  small: 0.16,
+  medium: 0.30,
+  large: 0.30,
+  huge: 0.18,
+};
+
+/**
+ * Explicit size class per biome. Anything not listed falls back to the
+ * category default below, so the 150-biome roster stays maintainable.
+ */
+const BIOME_SIZE_OVERRIDES: Record<string, BiomeSizeClass> = {
+  // Big, ordinary backdrops — these should dominate the map.
+  plain: 'huge',
+  ocean_world_biome: 'huge',
+  deep_ocean: 'huge',
+  forest: 'large',
+  meadow: 'large',
+  desert: 'large',
+  savanna: 'large',
+  taiga: 'large',
+  snowy_plains: 'large',
+  rainforest: 'large',
+  // Mid-sized character biomes.
+  birch_forest: 'medium',
+  dark_forest: 'medium',
+  swamp: 'medium',
+  badlands: 'medium',
+  beach: 'small',
+  snowy_beach: 'small',
+  // Small, memorable pockets.
+  sunflower_plains: 'small',
+  flower_forest: 'small',
+  cherry_grove: 'small',
+  bamboo_jungle: 'small',
+  oasis: 'rare',
+  ice_spikes: 'rare',
+  mushroom_biome: 'rare',
+  mushroom_island: 'rare',
+  mushroom_valley: 'rare',
+  giant_mushroom_island: 'rare',
+  crystal_forest: 'rare',
+  haunted_forest: 'rare',
+  volcano: 'rare',
+  mystic_woods: 'rare',
+};
+
+const CATEGORY_SIZE_DEFAULT: Record<string, BiomeSizeClass> = {
+  ocean: 'huge',
+  forest: 'large',
+  desert: 'large',
+  snow: 'large',
+  mountain: 'medium',
+  mangrove: 'medium',
+  coral: 'small',
+  cave: 'medium',
+  mushroom: 'rare',
+  magic: 'rare',
+  crystal: 'rare',
+  shadow: 'rare',
+  spooky: 'rare',
+  alien: 'rare',
+  volcanic: 'small',
+  mystic: 'rare',
+  sky: 'small',
+  space: 'medium',
+  nether: 'large',
+  end: 'large',
+};
+
+/** Size class for a biome, from the override table or its category. */
+export function biomeSizeClass(biome: BiomeDefinition): BiomeSizeClass {
+  return BIOME_SIZE_OVERRIDES[biome.id] ?? CATEGORY_SIZE_DEFAULT[biome.category] ?? 'medium';
+}
+
+/** Every biome that belongs to a given size class. */
+export function biomesOfSize(size: BiomeSizeClass): BiomeDefinition[] {
+  return biomes.filter((b) => biomeSizeClass(b) === size);
 }
 
 export const BIOMES_BY_CATEGORY: Record<string, BiomeDefinition[]> = biomes.reduce((acc, b) => {

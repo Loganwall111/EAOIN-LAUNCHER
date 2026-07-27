@@ -173,6 +173,23 @@ const CAVERN_BAND_END = 0.55;
 const DEEP_BAND_END = 0.82;
 /** Never carve closer than this many blocks to the surface, whatever the maths. */
 const MIN_ROOF_BLOCKS = 5;
+/* ---- cavern system placement (see `cavernPresence`) ---- */
+/** Grid cell size, in blocks, that cavern systems are placed on. */
+const CAVERN_CELL_SIZE = 170;
+/** Fraction of cells that host a cavern system. Uniform on every seed. */
+const CAVERN_SYSTEM_CHANCE = 0.62;
+/** Smallest cavern-system footprint radius, in blocks. */
+const CAVERN_MIN_RADIUS = 70;
+/** Largest cavern-system footprint radius, in blocks. */
+const CAVERN_MAX_RADIUS = 150;
+/**
+ * Where a cavern hall sits in the rock column, and how tall it is, as
+ * fractions of the carvable span. Centring at 0.45 puts halls in the lower
+ * middle of the world with rock above and below — so caverns have a real
+ * ceiling and a real floor rather than hollowing the column end to end.
+ */
+const HALL_CENTER_FRACTION = 0.45;
+const HALL_HALF_FRACTION = 0.30;
 
 export class DeepCaveGenerator {
   private readonly cavernNoise: AdvancedNoise;
@@ -226,6 +243,63 @@ export class DeepCaveGenerator {
   }
 
   /**
+   * How strongly this column belongs to a cavern system, in [0, 1].
+   *
+   * ## Why this is cell-based rather than a threshold on fbm
+   *
+   * The underlying value-noise fbm has a large **seed-dependent DC offset** at
+   * the very low frequencies wanted for regional features. Sampled over the
+   * same area, one seed's field sat entirely within 0.39-0.44 while another's
+   * sat within 0.66-0.72. Any fixed threshold therefore gave a solid world on
+   * one seed and a hollow one on the next — measured at 3% air on seed
+   * `eaoin_seed_2026` against 82% on `beta`. Subtracting a local mean helped
+   * but left the *variance* uncontrolled, so density still swung from 0.1% to
+   * 43%.
+   *
+   * Cavern systems are therefore placed the way structures are: the world is
+   * divided into fixed cells, a hash decides whether each cell hosts a system,
+   * and a second hash positions and sizes it. Because the hash is uniform by
+   * construction, `CAVERN_SYSTEM_CHANCE` *is* the fraction of cells with
+   * caverns on every seed. Smooth radial falloff from each centre keeps the
+   * edges natural, and neighbouring cells are checked so systems can overlap
+   * into larger networks.
+   */
+  private cavernPresence(worldX: number, worldZ: number): number {
+    const cellX = Math.floor(worldX / CAVERN_CELL_SIZE);
+    const cellZ = Math.floor(worldZ / CAVERN_CELL_SIZE);
+
+    let best = 0;
+    // Check the 3x3 neighbourhood so systems near a cell border still reach
+    // in, and adjacent systems merge into bigger networks.
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        const cx = cellX + dx;
+        const cz = cellZ + dz;
+        if (this.biomeNoise.hash(cx, cz, 0, 601) > CAVERN_SYSTEM_CHANCE) continue;
+
+        // Centre jittered inside the cell, radius varied per system.
+        const ox = this.biomeNoise.hash(cx, cz, 1, 602);
+        const oz = this.biomeNoise.hash(cx, cz, 2, 603);
+        const centerX = (cx + ox) * CAVERN_CELL_SIZE;
+        const centerZ = (cz + oz) * CAVERN_CELL_SIZE;
+        const radius = CAVERN_MIN_RADIUS
+          + this.biomeNoise.hash(cx, cz, 3, 604) * (CAVERN_MAX_RADIUS - CAVERN_MIN_RADIUS);
+
+        const distance = Math.hypot(worldX - centerX, worldZ - centerZ);
+        if (distance >= radius) continue;
+
+        // Smoothstep falloff: full strength at the core, tapering to nothing
+        // at the rim so caverns end in narrowing passages, not sheer walls.
+        const t = 1 - distance / radius;
+        const strength = t * t * (3 - 2 * t);
+        if (strength > best) best = strength;
+      }
+    }
+
+    return best;
+  }
+
+  /**
    * Carve the huge caverns into a chunk and dress them.
    *
    * Called after the base terrain and the existing thin-tunnel cave pass, so it
@@ -249,6 +323,21 @@ export class DeepCaveGenerator {
         const top = surface - roof;
         if (top <= bottom) continue;
 
+        // Regional gate, computed once per column.
+        //
+        // Previously the carve threshold was a flat 0.50, so roughly half of
+        // *every* rock column in the world opened up: the underground came out
+        // hollow rather than cavernous, which is exactly the "empty, amplified"
+        // look reported. Caverns should instead cluster into a limited number
+        // of large systems with real rock between them.
+        const presence = this.cavernPresence(wx, wz);
+        if (presence <= 0) {
+          // Still dress and score the column so tunnels carved by the main
+          // cave pass get floors, ceilings and glow.
+          this.dressColumn(chunk, lx, lz, wx, wz, surface, bottom, top);
+          continue;
+        }
+
         for (let y = bottom; y < top; y += 1) {
           // 0 at the surface, 1 at bedrock.
           const depthFraction = (surface - y) / column;
@@ -271,14 +360,29 @@ export class DeepCaveGenerator {
             77
           );
 
-          // Caverns get larger with depth. `depthBoost` ramps from 0 at the
-          // roof to 1 at bedrock.
-          const depthBoost = Math.min(1, Math.max(0, (depthFraction - ROOF_FRACTION) / (1 - ROOF_FRACTION)));
           const scale = biome.sizeScale * this.config.sizeScale;
-          // Lower threshold => more air => bigger caverns. These caverns are
-          // meant to be genuinely huge, so the threshold sits well below the
-          // 0.69-0.74 used by the thin-tunnel pass.
-          const threshold = 0.50 - depthBoost * 0.13 * scale;
+
+          // --- vertical hall shaping ---------------------------------------
+          // A cavern is a *hall*: it has a floor you can stand on and a
+          // ceiling above you. Carving on a purely 3D field with a depth ramp
+          // hollowed whole columns from bedrock to roof — measured at 99% air
+          // in the strongest regions, which is the "hollow" look again, just
+          // relocated.
+          //
+          // Each system therefore gets a hall centred at `hallCenter` with a
+          // half-height of `hallHalf`, and the carve strength falls to zero at
+          // the hall's floor and ceiling.
+          const hallSpan = top - bottom;
+          const hallCenter = bottom + hallSpan * HALL_CENTER_FRACTION;
+          const hallHalf = Math.max(4, hallSpan * HALL_HALF_FRACTION * (0.7 + presence * 0.6) * scale);
+          const vertical = 1 - Math.abs(y - hallCenter) / hallHalf;
+          if (vertical <= 0) continue;
+          // Smoothstep so the hall's roof arches instead of being cut flat.
+          const arch = vertical * vertical * (3 - 2 * vertical);
+
+          // Threshold high enough that solid rock is the default state;
+          // `presence` and the vertical arch pull it down inside a hall.
+          const threshold = 0.70 - presence * arch * 0.34 * scale;
 
           if (n > threshold) {
             chunk.setBlock(lx, y, lz, B.AIR);

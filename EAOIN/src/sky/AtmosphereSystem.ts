@@ -38,6 +38,7 @@ import {
   lerpSkyProfile,
   OVERWORLD_SKY,
   SkyProfile,
+  SkyWeather,
 } from './SkyProfiles';
 import { StarField } from './StarField';
 import { VolumetricClouds } from './VolumetricClouds';
@@ -69,6 +70,14 @@ export interface AtmosphereFrame {
   isDay: boolean;
 }
 
+/**
+ * Darkest the world's ambient light is ever allowed to get.
+ *
+ * Tuned so a moonlit field reads as dim blue and a cave interior stays
+ * navigable, rather than resolving to pure black.
+ */
+const MIN_AMBIENT = { r: 0.34, g: 0.37, b: 0.44 };
+
 export class AtmosphereSystem {
   private readonly scene: Scene;
   private readonly options: AtmosphereOptions;
@@ -92,6 +101,8 @@ export class AtmosphereSystem {
   private blend = 1;
   /** Currently interpolated profile — what everything actually reads. */
   private current: SkyProfile = OVERWORLD_SKY;
+  /** Set by `/weather`; overrides the biome profile's own weather. */
+  private weatherOverride: SkyWeather | null = null;
   private elapsed = 0;
   private disposed = false;
 
@@ -150,7 +161,24 @@ export class AtmosphereSystem {
   }
 
   getProfile(): SkyProfile {
-    return this.current;
+    return this.weatherOverride
+      ? { ...this.current, weather: this.weatherOverride }
+      : this.current;
+  }
+
+  /**
+   * Force a weather type, as `/weather` does. Pass `'clear'` or `null` to hand
+   * control back to the biome's own profile.
+   */
+  setWeatherOverride(weather: string | null): void {
+    if (!weather || weather === 'clear') { this.weatherOverride = null; return; }
+    // `/weather` accepts friendly names; map them onto real sky weather.
+    const alias: Record<string, SkyWeather> = {
+      rain: 'rain', storm: 'rain', snow: 'snowstorm', snowstorm: 'snowstorm',
+      sand: 'sandstorm', sandstorm: 'sandstorm', ash: 'ashfall', ashfall: 'ashfall',
+      spores: 'spores', fireflies: 'fireflies', pollen: 'pollen', embers: 'embers', void: 'void',
+    };
+    this.weatherOverride = alias[weather.toLowerCase()] ?? null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -209,7 +237,7 @@ export class AtmosphereSystem {
     this.clouds.update(deltaSeconds, cameraPosition);
 
     // --- Biome particles -------------------------------------------------
-    this.vfx.setProfile(profile.weather, this.chooseAmbientEffects(profile, dayFactor));
+    this.vfx.setProfile(this.weatherOverride ?? profile.weather, this.chooseAmbientEffects(profile, dayFactor));
     this.vfx.update(cameraPosition);
 
     // --- Lighting outputs ------------------------------------------------
@@ -227,7 +255,19 @@ export class AtmosphereSystem {
       dayFactor
     );
     const ambient = ambientBase.scale(profile.ambientScale);
-    this.scene.ambientColor = ambient;
+    // Ambient FLOOR.
+    //
+    // This line writes `scene.ambientColor` every frame, which makes it the
+    // final authority on how dark an unlit face can get. Several sky profiles
+    // drove it to nearly zero at night, and with block materials taking their
+    // ambient term from here that is exactly how caves and forest interiors
+    // ended up as unreadable black blocks. The lighting rig sets a sensible
+    // base; this clamps the per-frame value so no profile can go below it.
+    this.scene.ambientColor = new Color3(
+      Math.max(MIN_AMBIENT.r, ambient.r),
+      Math.max(MIN_AMBIENT.g, ambient.g),
+      Math.max(MIN_AMBIENT.b, ambient.b)
+    );
 
     return {
       timeOfDay: this.timeOfDay,
