@@ -192,7 +192,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [chatText, setChatText] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{ text: string; system?: boolean }>>([{ text: 'Welcome — T to chat, / for commands, Q to cycle tools, SPACE to jump, clouds moving', system: true }]);
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
-  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
+  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0, species: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
 
@@ -510,7 +510,18 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       commandBlockSystem.placeBlock(spawn.x + 7, spawn.y, spawn.z, 'chain', 'give @p 22 1', false, true);
       // Do not auto-place a repeating `time set day` block: it spammed the
       // action rail and kept the sky locked to a bright midday look.
-      const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
+      const creatureManager = new CreatureManager(scene, terrain, seed);
+      // Hostile wildlife can now actually hurt the player. Damage funnels into
+      // the same survival stats as everything else, so the death check covers it.
+      creatureManager.onPlayerDamage = ({ amount, source }) => {
+        if (amount <= 0 || isCreativeMode(gameModeRef.current)) return;
+        const next = applyDamage(survivalStatsRef.current, amount);
+        survivalStatsRef.current = next;
+        publishSurvivalStats(next);
+        audio.play('hit', settingsRef.current);
+        showActionMessage(`${source} attacks you for ${amount}!`);
+      };
+      creatureManager.update(camera.position, 1);
 
       // Real Minecraft-style destroy-stage cracks. The old overlay just faded a
       // dark box to red over the block, which is the "red screen when breaking
@@ -943,6 +954,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
+        // Keep the spawner's clock in step so nocturnal species (scorpions,
+        // owls, bats) only appear after dark.
+        creatureManager.setTimeOfDay(timeState.timeOfDay);
         creatureManager.update(camera.position, deltaSeconds);
         const collectedDrops = itemDrops.update(camera.position, deltaSeconds);
         if (collectedDrops.length > 0) {

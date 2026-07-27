@@ -433,9 +433,100 @@ export function speciesForBiome(
     // but is not hard-gated, so the world never feels empty.
     if (s.nocturnal && !isNight) return false;
     if (s.biomes.length === 0) return true;
-    return s.biomes.some((b) => key.includes(b) || b.includes(key));
+    // Climate veto is decided per SPECIES, not per tag. A lion lists both
+    // 'savanna' and 'plain'; checking tags individually let the neutral
+    // 'plain' tag sneak it into `snowy_plains` even though 'savanna' was
+    // vetoed. What matters is whether the animal as a whole belongs here.
+    if (!climateAllows(key, s)) return false;
+    return s.biomes.some((tag) => biomeMatches(key, tag));
   });
 }
+
+/**
+ * Reject a species whose overall climate is incompatible with the biome.
+ *
+ * A species is "warm" if any of its habitat tags is warm-only and none is
+ * cold-only, and vice versa. Animals that list both (or neither) are
+ * climate-agnostic and always pass.
+ */
+function climateAllows(biomeId: string, species: SpeciesDefinition): boolean {
+  const tokens = biomeId.split(/[^a-z]+/).filter(Boolean);
+  const biomeIsCold = tokens.some((t) => COLD_QUALIFIERS.has(t));
+  const biomeIsWarm = tokens.some((t) => WARM_QUALIFIERS.has(t));
+
+  const wantsWarm = species.biomes.some((t) => WARM_ONLY_TAGS.has(t));
+  const wantsCold = species.biomes.some((t) => COLD_ONLY_TAGS.has(t));
+
+  if (wantsWarm && !wantsCold && biomeIsCold) return false;
+  if (wantsCold && !wantsWarm && biomeIsWarm) return false;
+  return true;
+}
+
+/**
+ * Does a biome id match a species' habitat tag?
+ *
+ * ## Why this is not a plain substring test
+ *
+ * It used to be `key.includes(tag) || tag.includes(key)`, which put **savanna
+ * lions and elephants into `snowy_plains`** — because `'snowy_plains'`
+ * contains the substring `'plain'`. Every `*_plains` and `*_forest` biome
+ * inherited the fauna of its warm counterpart, so snowfields had lions in them.
+ *
+ * Matching is now on whole underscore-separated tokens, with an explicit
+ * exclusion list for climate words that invert a biome's meaning. A tag only
+ * matches if it appears as a token AND the biome is not disqualified.
+ */
+function biomeMatches(biomeId: string, tag: string): boolean {
+  const tokens = biomeId.split(/[^a-z]+/).filter(Boolean);
+
+  // Species tags are written in the singular and informally ('snow', 'jungle',
+  // 'mountain'), while biome ids are specific ('snowy_plains', 'rainforest',
+  // 'alpine_biome'). Synonyms bridge the two vocabularies so a tag matches the
+  // biomes a reader would expect it to.
+  const synonyms = TAG_SYNONYMS[tag] ?? [tag];
+  const present = synonyms.some((syn) =>
+    syn.split(/[^a-z]+/).filter(Boolean).every((t) => tokens.includes(t))
+  );
+  if (!present) return false;
+
+  // NOTE: the climate veto lives in `climateAllows`, which reasons about the
+  // species as a whole. Doing it here, per tag, let an animal with one neutral
+  // tag ('plain') bypass a veto earned by another ('savanna').
+  return true;
+}
+
+/**
+ * Maps an informal species habitat tag onto the biome-id tokens that should
+ * satisfy it. Keeps `WildlifeRegistry` readable while matching the 150-entry
+ * biome vocabulary in `Biomes.ts`.
+ */
+const TAG_SYNONYMS: Record<string, string[]> = {
+  plain: ['plain', 'plains', 'meadow', 'grassland'],
+  snow: ['snow', 'snowy', 'frozen', 'ice', 'tundra', 'glacial'],
+  ice: ['ice', 'frozen', 'iceberg', 'glacial'],
+  arctic: ['arctic', 'frozen', 'snowy', 'tundra'],
+  tundra: ['tundra', 'snowy', 'frozen'],
+  jungle: ['jungle', 'rainforest', 'bamboo'],
+  rainforest: ['rainforest', 'jungle'],
+  mountain: ['mountain', 'alpine', 'highland', 'peaks', 'stony', 'jagged'],
+  alpine: ['alpine', 'mountain', 'peaks'],
+  highland: ['highland', 'mountain', 'alpine'],
+  forest: ['forest', 'woods', 'grove', 'taiga'],
+  taiga: ['taiga', 'spruce', 'pine'],
+  swamp: ['swamp', 'mangrove', 'bog', 'marsh'],
+  ocean: ['ocean', 'sea'],
+  beach: ['beach', 'coast', 'shore'],
+  desert: ['desert', 'badlands', 'dune'],
+  cave: ['cave', 'cavern', 'caverns', 'underground'],
+};
+
+const COLD_QUALIFIERS = new Set(['snowy', 'frozen', 'ice', 'tundra', 'glacial', 'arctic']);
+const WARM_QUALIFIERS = new Set(['desert', 'savanna', 'jungle', 'rainforest', 'tropical', 'warm']);
+
+/** Tags whose species must not appear in a cold variant of that biome. */
+const WARM_ONLY_TAGS = new Set(['savanna', 'jungle', 'rainforest', 'desert', 'oasis', 'bamboo']);
+/** Tags whose species must not appear in a warm variant of that biome. */
+const COLD_ONLY_TAGS = new Set(['snow', 'ice', 'arctic', 'tundra', 'frozen', 'iceberg']);
 
 /** Weighted pick from a candidate list using a deterministic 0-1 roll. */
 export function pickSpecies(candidates: SpeciesDefinition[], roll: number): SpeciesDefinition | null {

@@ -22,10 +22,34 @@
 
 export const MOB_TEXTURE_SIZE = 16;
 
-export type MobPart = 'body' | 'head' | 'leg';
+export type MobPart = 'body' | 'head' | 'leg' | 'wing' | 'fin' | 'segment';
 
-/** The species this module knows how to paint. */
+/**
+ * Species this module has a hand-tuned palette for.
+ *
+ * Any other species is painted from the palette supplied by the caller (see
+ * `buildMobTextureFromPalette`), so the whole 41-entry wildlife roster and all
+ * of its colour variants are covered without an entry each.
+ */
 export type MobSpecies = 'sheep' | 'deer' | 'goat' | 'hare' | 'wolf' | 'cow' | 'pig' | 'chicken';
+
+/** Surface treatment; picked from the body plan when not otherwise known. */
+export type CoatStyle = 'wool' | 'fur' | 'hide' | 'feather' | 'scale' | 'chitin' | 'slick';
+
+/** Everything the painter needs. Variants supply their own transformed hexes. */
+export interface MobPaletteInput {
+  /** Main coat colour. */
+  coat: string;
+  /** Secondary: face, hooves, markings. */
+  accent: string;
+  /** Eye colour. Defaults to near-black. */
+  eye?: string;
+  style: CoatStyle;
+  /** Stable id used to seed the pattern, so variants differ from each other. */
+  seed: string;
+  /** Drives species-specific markings (spots, patches). */
+  markings?: 'none' | 'patches' | 'dapples' | 'tufts' | 'stripes' | 'belly';
+}
 
 interface Rgb { r: number; g: number; b: number; }
 
@@ -37,7 +61,7 @@ interface SpeciesPalette {
   /** Eye colour. */
   eye: string;
   /** Coat surface treatment. */
-  fur: 'wool' | 'fur' | 'hide' | 'feather';
+  fur: CoatStyle;
 }
 
 export const MOB_PALETTES: Record<MobSpecies, SpeciesPalette> = {
@@ -147,8 +171,8 @@ export function buildMobTexture(species: MobSpecies, part: MobPart): Uint8Array 
   return canvas.data;
 }
 
-/** Surface treatment: wool tufts, fur grain, smooth hide, or feathers. */
-function paintCoat(canvas: Canvas, coat: Rgb, fur: SpeciesPalette['fur'], salt: number): void {
+/** Surface treatment: wool, fur, hide, feathers, scales, chitin or wet skin. */
+function paintCoat(canvas: Canvas, coat: Rgb, fur: CoatStyle, salt: number): void {
   const S = MOB_TEXTURE_SIZE;
   for (let y = 0; y < S; y += 1) {
     for (let x = 0; x < S; x += 1) {
@@ -165,6 +189,18 @@ function paintCoat(canvas: Canvas, coat: Rgb, fur: SpeciesPalette['fur'], salt: 
         // Overlapping scallops.
         const scallop = ((x + (y % 2) * 2) % 4 === 0) ? -0.12 : 0;
         delta = scallop + (rand(x, y, salt) - 0.5) * 0.12;
+      } else if (fur === 'scale') {
+        // Diamond lattice — reptiles and fish.
+        const lattice = ((x + y) % 3 === 0 || (x - y + S) % 3 === 0) ? -0.16 : 0.06;
+        delta = lattice + (rand(x, y, salt) - 0.5) * 0.1;
+      } else if (fur === 'chitin') {
+        // Hard banded plates with dark seams.
+        const band = y % 4 === 0 ? -0.3 : y % 4 === 1 ? 0.12 : 0;
+        delta = band + (rand(Math.floor(x / 2), y, salt) - 0.5) * 0.12;
+      } else if (fur === 'slick') {
+        // Wet skin: a broad vertical sheen, almost no texture.
+        const sheen = Math.cos(((x / S) - 0.35) * Math.PI) * 0.16;
+        delta = sheen + (rand(Math.floor(x / 4), Math.floor(y / 4), salt) - 0.5) * 0.06;
       } else {
         // Hide: smooth with subtle mottling.
         delta = (rand(Math.floor(x / 3), Math.floor(y / 3), salt) - 0.5) * 0.16;
@@ -273,6 +309,232 @@ function paintBodyMarkings(
   }
   if (species === 'pig') {
     canvas.rect(0, 11, MOB_TEXTURE_SIZE, 1, shade(accent, -0.2));
+  }
+}
+
+/**
+ * Build a texture from an arbitrary palette.
+ *
+ * This is the entry point used for the full wildlife roster and every colour
+ * variant: rather than hand-authoring an entry per species, the caller passes
+ * the species' (or variant's) own colours and the painter applies the right
+ * surface treatment, face and markings for the part.
+ */
+export function buildMobTextureFromPalette(input: MobPaletteInput, part: MobPart): Uint8Array {
+  const key = `pal:${input.seed}:${input.coat}:${input.accent}:${input.style}:${input.markings ?? 'none'}:${part}`;
+  const cached = CACHE.get(key);
+  if (cached) return cached;
+
+  const coat = hexToRgb(input.coat);
+  const accent = hexToRgb(input.accent);
+  const eye = hexToRgb(input.eye ?? '#1c1610');
+  // Seed from the full identity so two variants of one species differ.
+  let salt = 0;
+  for (let i = 0; i < input.seed.length; i += 1) salt = (salt * 31 + input.seed.charCodeAt(i)) >>> 0;
+  salt += part.charCodeAt(0) * 7919;
+
+  const canvas = new Canvas(coat);
+  paintCoat(canvas, coat, input.style, salt);
+
+  switch (part) {
+    case 'head':
+      paintGenericFace(canvas, coat, accent, eye, input.style);
+      break;
+    case 'leg':
+      paintGenericLeg(canvas, coat, accent);
+      break;
+    case 'wing':
+      paintWing(canvas, coat, accent, salt);
+      break;
+    case 'fin':
+      paintFin(canvas, coat, accent);
+      break;
+    case 'segment':
+      paintSegment(canvas, coat, accent, salt);
+      break;
+    default:
+      paintGenericMarkings(canvas, coat, accent, input.markings ?? 'none', salt);
+      break;
+  }
+
+  CACHE.set(key, canvas.data);
+  return canvas.data;
+}
+
+/**
+ * Faces, drawn per coat style.
+ *
+ * A shark with a mammal's muzzle and nostrils reads as wrong even at 16px, so
+ * the mouth, eyes and brow are chosen by what kind of animal this is:
+ *
+ *   feather  — beak, small round eyes set high
+ *   scale    — wide fish/reptile jaw with a tooth line, side-set eyes
+ *   chitin   — mandibles and a cluster of small eyes
+ *   slick    — smooth face, a simple curved mouth (dolphins, frogs, whales)
+ *   default  — the mammal muzzle with nostrils
+ */
+function paintGenericFace(canvas: Canvas, coat: Rgb, accent: Rgb, eye: Rgb, style: CoatStyle): void {
+  if (style === 'feather') {
+    // Beak: a wedge sitting proud of the face.
+    canvas.rect(6, 9, 4, 4, shade(accent, 0.1));
+    canvas.rect(7, 12, 2, 2, shade(accent, -0.12));
+    canvas.rect(6, 11, 4, 1, shade(accent, -0.35));
+    paintEyes(canvas, coat, eye, [3, 11], 4, true);
+    return;
+  }
+
+  if (style === 'scale') {
+    // Wide jaw spanning the face, with a pale tooth line.
+    canvas.rect(2, 10, 12, 4, shade(coat, -0.3));
+    canvas.rect(2, 10, 12, 1, shade(coat, -0.5));
+    for (let x = 3; x < 14; x += 2) canvas.set(x, 11, shade(accent, 0.55));
+    // Eyes sit high and to the sides on fish and reptiles.
+    paintEyes(canvas, coat, eye, [1, 13], 4, false);
+    return;
+  }
+
+  if (style === 'chitin') {
+    // Mandibles.
+    canvas.rect(5, 11, 2, 4, shade(accent, -0.3));
+    canvas.rect(9, 11, 2, 4, shade(accent, -0.3));
+    canvas.rect(6, 14, 4, 1, shade(accent, -0.45));
+    // A cluster of small eyes, which is what makes an arthropod unsettling.
+    for (const [ex, ey] of [[3, 5], [6, 4], [9, 4], [12, 5], [5, 7], [10, 7]]) {
+      canvas.set(ex, ey, eye);
+      canvas.set(ex + 1, ey, shade(eye, 0.5));
+    }
+    return;
+  }
+
+  if (style === 'slick') {
+    // Smooth face, gentle curved mouth — dolphins, frogs, whales.
+    for (let x = 4; x < 12; x += 1) {
+      const y = 12 + (x === 4 || x === 11 ? -1 : 0);
+      canvas.set(x, y, shade(coat, -0.4));
+    }
+    paintEyes(canvas, coat, eye, [2, 12], 5, true);
+    return;
+  }
+
+  // Mammal default: muzzle, nostrils, mouth line.
+  canvas.rect(4, 9, 8, 5, shade(accent, 0.05));
+  canvas.set(6, 11, shade(accent, -0.55));
+  canvas.set(9, 11, shade(accent, -0.55));
+  canvas.rect(6, 13, 4, 1, shade(accent, -0.42));
+  paintEyes(canvas, coat, eye, [3, 11], 5, true);
+}
+
+/**
+ * Paint a symmetric pair of eyes with a catchlight.
+ *
+ * Eyes live in the head texture rather than being separate emissive cubes —
+ * the old approach is what produced the "sheep has an eye that's like a white
+ * block" complaint.
+ */
+function paintEyes(
+  canvas: Canvas,
+  coat: Rgb,
+  eye: Rgb,
+  columns: [number, number],
+  row: number,
+  brow: boolean
+): void {
+  for (const ex of columns) {
+    canvas.rect(ex, row, 2, 2, eye);
+    // Single-pixel catchlight, top-left of the iris.
+    canvas.set(ex, row, shade(eye, 0.82));
+  }
+  if (brow) {
+    for (const ex of columns) canvas.rect(ex, row - 1, 2, 1, shade(coat, -0.24));
+  }
+}
+
+function paintGenericLeg(canvas: Canvas, coat: Rgb, accent: Rgb): void {
+  canvas.rect(0, 12, MOB_TEXTURE_SIZE, 4, shade(accent, -0.5));
+  canvas.rect(2, 0, 1, 12, shade(coat, 0.14));
+}
+
+/** Feathered wing: primaries fanning out from the leading edge. */
+function paintWing(canvas: Canvas, coat: Rgb, accent: Rgb, salt: number): void {
+  for (let y = 0; y < MOB_TEXTURE_SIZE; y += 1) {
+    for (let x = 0; x < MOB_TEXTURE_SIZE; x += 1) {
+      // Feather quills every third column, darkening toward the tip.
+      const quill = x % 3 === 0;
+      const tip = y / MOB_TEXTURE_SIZE;
+      const base = quill ? shade(coat, -0.24) : shade(coat, 0.06);
+      canvas.set(x, y, shade(base, -tip * 0.22));
+    }
+  }
+  // Coverts along the leading edge.
+  canvas.rect(0, 0, MOB_TEXTURE_SIZE, 3, shade(accent, 0.1));
+  for (let i = 0; i < 5; i += 1) {
+    const x = Math.floor(rand(i * 13 + 1, i * 7 + 3, salt) * MOB_TEXTURE_SIZE);
+    canvas.set(x, 1, shade(accent, -0.28));
+  }
+}
+
+/** Fin membrane with visible rays. */
+function paintFin(canvas: Canvas, coat: Rgb, accent: Rgb): void {
+  for (let y = 0; y < MOB_TEXTURE_SIZE; y += 1) {
+    for (let x = 0; x < MOB_TEXTURE_SIZE; x += 1) {
+      const ray = x % 4 === 0 ? -0.26 : 0.04;
+      canvas.set(x, y, shade(coat, ray));
+    }
+  }
+  canvas.rect(0, MOB_TEXTURE_SIZE - 2, MOB_TEXTURE_SIZE, 2, shade(accent, -0.2));
+}
+
+/** One body segment of a serpent: banded, with a lighter belly stripe. */
+function paintSegment(canvas: Canvas, coat: Rgb, accent: Rgb, salt: number): void {
+  for (let y = 0; y < MOB_TEXTURE_SIZE; y += 1) {
+    // Bands every few rows, jittered so they are not perfectly regular.
+    const band = (y + Math.floor(rand(y, 1, salt) * 2)) % 5 < 2;
+    if (!band) continue;
+    canvas.rect(0, y, MOB_TEXTURE_SIZE, 1, shade(accent, -0.15));
+  }
+  // Pale belly.
+  canvas.rect(0, MOB_TEXTURE_SIZE - 3, MOB_TEXTURE_SIZE, 3, shade(coat, 0.28));
+}
+
+/** Coat markings driven by the species' marking style. */
+function paintGenericMarkings(
+  canvas: Canvas,
+  coat: Rgb,
+  accent: Rgb,
+  markings: NonNullable<MobPaletteInput['markings']>,
+  salt: number
+): void {
+  if (markings === 'patches') {
+    for (let i = 0; i < 4; i += 1) {
+      const px = Math.floor(rand(i * 41 + 7, i * 13 + 3, salt) * 11);
+      const py = Math.floor(rand(i * 23 + 29, i * 31 + 17, salt + 53) * 11);
+      const w = 3 + Math.floor(rand(i * 11 + 2, i * 43 + 9, salt + 71) * 3);
+      const h = 3 + Math.floor(rand(i * 37 + 13, i * 19 + 27, salt + 89) * 3);
+      canvas.rect(px, py, w, h, accent);
+    }
+  } else if (markings === 'dapples') {
+    for (let i = 0; i < 9; i += 1) {
+      const px = 2 + Math.floor(rand(i * 31 + 5, i * 7 + 11, salt) * 12);
+      const py = 3 + Math.floor(rand(i * 17 + 23, i * 13 + 41, salt + 97) * 9);
+      canvas.set(px, py, shade(accent, 0.24));
+      canvas.set(px + 1, py, shade(accent, 0.18));
+      canvas.set(px, py + 1, shade(accent, 0.16));
+      canvas.set(px + 1, py + 1, shade(accent, 0.1));
+    }
+  } else if (markings === 'tufts') {
+    for (let i = 0; i < 12; i += 1) {
+      const px = Math.floor(rand(i * 29 + 3, i * 11 + 19, salt) * 15);
+      const py = Math.floor(rand(i * 19 + 37, i * 23 + 5, salt + 61) * 15);
+      canvas.set(px, py, shade(coat, 0.26));
+      canvas.set(px, py + 1, shade(coat, -0.14));
+    }
+  } else if (markings === 'stripes') {
+    for (let x = 0; x < MOB_TEXTURE_SIZE; x += 3) {
+      const jitter = Math.floor(rand(x, 2, salt) * 2);
+      canvas.rect(x + jitter, 0, 1, MOB_TEXTURE_SIZE, shade(accent, -0.3));
+    }
+  } else if (markings === 'belly') {
+    canvas.rect(0, MOB_TEXTURE_SIZE - 4, MOB_TEXTURE_SIZE, 4, shade(coat, 0.34));
   }
 }
 
