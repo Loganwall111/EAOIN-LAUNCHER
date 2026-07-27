@@ -1,25 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, DynamicTexture, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Texture, TransformNode, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { AmbienceEngine, ambienceForBiome } from '../audio/AmbienceEngine';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
-import { runCommand, WorldTimeState } from '../commands/CommandRuntime';
+import { CommandEffect, runCommand, WorldTimeState } from '../commands/CommandRuntime';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { addToInventory, canConsumeBlock, getStackCount, HOTBAR_BLOCKS, InventoryStacks, removeFromInventory } from '../player/InventoryState';
-import { applyDamage, SurvivalStats, updateSurvivalLoop } from '../player/SurvivalState';
+import { applyDamage, createStarterSurvivalStats, SurvivalStats, updateSurvivalLoop } from '../player/SurvivalState';
 import { climateForBiome, createStarterHydration, drink, HydrationState, updateHydration } from '../player/Hydration';
 import { estimateMining, getTool, nextTool, ToolID, ToolInventory } from '../player/ToolState';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
+import { BossState } from '../creatures/BossEncounter';
+import { BossEncounter } from '../creatures/BossEncounter';
+import { ALL_BOSSES, getBoss } from '../creatures/BossRegistry';
 import DimensionRuntime, { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
 import { WorldInteractionRuntime } from '../effects/WorldInteractionRuntime';
 import { ItemDropManager } from '../items/ItemDropManager';
 import { LocalAuthorityRuntime } from '../networking/LocalAuthorityRuntime';
-import { GameMode } from '../modes/GameMode';
+import { GameMode, isCreativeMode } from '../modes/GameMode';
 import { ModdingRuntime } from '../modding/ModdingRuntime';
 import { NextGenRuntime } from '../nextgen/NextGenRuntime';
 import { GameplayCounterKey } from '../objectives/ObjectiveTracker';
 import { createBlockMaterials } from '../rendering/BlockMaterials';
 import { ChunkRenderManager, ChunkRenderStats } from '../rendering/ChunkRenderManager';
+import { BreakOverlay } from '../rendering/BreakOverlay';
+import { FirstPersonViewModel } from '../rendering/FirstPersonViewModel';
 import { applyRenderScale, createRuntimeEngine, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
 import { DimensionChunkSource } from './DimensionChunkSource';
 import { AdaptivePerformance, BUDGET_PRESETS, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
@@ -115,7 +120,16 @@ const TERMINAL_VELOCITY = -28;
 /** Chunks meshed synchronously before the first frame is presented. */
 const INITIAL_CHUNK_RADIUS = 2;
 /** Chunks generated + meshed per frame while streaming the render radius in. */
-const CHUNKS_PER_FRAME = 2;
+const CHUNKS_PER_FRAME = 4;
+/**
+ * Wall-clock budget for chunk streaming per frame, in ms.
+ *
+ * Measured cost is ~7ms for an average chunk but several times that for
+ * mountainous, cavern-heavy terrain, so a fixed count of 2 chunks/frame was
+ * either wasteful or a visible hitch depending on where you stood. ~6ms leaves
+ * the rest of a 16.6ms frame for rendering and simulation.
+ */
+const CHUNK_STREAM_BUDGET_MS = 6;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required', vulkanStatus: 'Detecting graphics backend…' };
 /** Hard cap for the blocking loading overlay; remaining distant chunks stream while playing. */
 const WORLD_LOADING_MAX_MS = 18_000;
@@ -157,12 +171,35 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [targetLabel, setTargetLabel] = useState('');
   const [paused, setPaused] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  /**
+   * Mirrors of the chat/command open flags for the window key handler.
+   *
+   * BUGFIX: `handleKeyDown` is registered once on `window` inside the scene
+   * effect, so it closed over the *initial* `commandOpen` / `chatOpen` values,
+   * which were always `false`. Every gameplay hotkey therefore still fired
+   * while the player was typing — pressing "i" in `/kill` opened the
+   * inventory, "d" in `/time set day` toggled things, and so on. Refs are read
+   * live inside the handler, so the guard actually reflects the current UI.
+   */
+  const textEntryOpenRef = useRef(false);
+  /**
+   * Set by the scene effect to the live command-effect executor.
+   *
+   * Commands are pure and return a `CommandEffect`; the running scene is the
+   * only thing that can act on one (teleport the camera, kill the player,
+   * spawn a creature). This ref is the bridge between the two.
+   */
+  const commandEffectRef = useRef<((effect: CommandEffect) => string | void) | null>(null);
+  /** Set by the scene; summons a boss by id. Used by `/boss` and the B key. */
+  const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
+  /** Live boss state, drives the on-screen boss health bar. */
+  const [bossState, setBossState] = useState<BossState | null>(null);
   const [commandText, setCommandText] = useState('/help');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{ text: string; system?: boolean }>>([{ text: 'Welcome — T to chat, / for commands, Q to cycle tools, SPACE to jump, clouds moving', system: true }]);
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
-  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
+  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0, species: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
 
@@ -175,6 +212,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
   useEffect(() => { worldTimeRef.current = worldTime; }, [worldTime]);
+  useEffect(() => { textEntryOpenRef.current = commandOpen || chatOpen; }, [commandOpen, chatOpen]);
 
   useEffect(() => {
     let disposed = false;
@@ -279,24 +317,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
       const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
       const pants = new StandardMaterial('player_pants', scene); pants.diffuseColor = new Color3(0.20, 0.28, 0.50);
-      // Proper Minecraft-style first-person arm. The previous view used one
-      // plain cube, which read like a floating block.  This is a small arm rig:
-      // textured sleeve, cuff, skin hand, and pixel/noise details so it feels
-      // like the classic blocky Minecraft arm in the lower-right of the screen.
-      const firstPersonSkin = createPixelArmMaterial(scene, 'first_person_skin_texture', '#b87855', '#8f4f32', 'skin');
-      const firstPersonSleeve = createPixelArmMaterial(scene, 'first_person_sleeve_texture', '#1f67c8', '#123f86', 'sleeve');
-      const firstPersonCuff = createPixelArmMaterial(scene, 'first_person_cuff_texture', '#e8edf5', '#9fb2ce', 'cuff');
-      const arm = new TransformNode('first_person_minecraft_arm', scene);
-      arm.parent = camera;
-      arm.position = new Vector3(0.43, -0.50, 0.74);
-      arm.rotation.z = -0.16;
-      const sleeveMesh = MeshBuilder.CreateBox('first_person_sleeve', { width: 0.30, height: 0.58, depth: 0.30 }, scene);
-      sleeveMesh.parent = arm; sleeveMesh.position.y = 0.08; sleeveMesh.material = firstPersonSleeve; sleeveMesh.isPickable = false; sleeveMesh.checkCollisions = false;
-      const cuffMesh = MeshBuilder.CreateBox('first_person_sleeve_cuff', { width: 0.315, height: 0.075, depth: 0.315 }, scene);
-      cuffMesh.parent = arm; cuffMesh.position.y = -0.25; cuffMesh.material = firstPersonCuff; cuffMesh.isPickable = false; cuffMesh.checkCollisions = false;
-      const handMesh = MeshBuilder.CreateBox('first_person_square_hand', { width: 0.285, height: 0.255, depth: 0.285 }, scene);
-      handMesh.parent = arm; handMesh.position.y = -0.42; handMesh.material = firstPersonSkin; handMesh.isPickable = false; handMesh.checkCollisions = false;
-      const armPunchBase = new Vector3(0.43, -0.50, 0.74);
+      // First-person view model: a hinged arm that actually holds the selected
+      // block or item. Replaces three stacked boxes that showed nothing in the
+      // hand and slid around the screen instead of swinging.
+      const viewModel = new FirstPersonViewModel(scene, camera);
+      viewModel.setHeldItem(selectedBlockRef.current);
 
       // Third-person avatar — built as a parent transform so we can position
       // it independently of the camera and avoid the visual jitter of moving
@@ -492,23 +517,118 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       commandBlockSystem.placeBlock(spawn.x + 7, spawn.y, spawn.z, 'chain', 'give @p 22 1', false, true);
       // Do not auto-place a repeating `time set day` block: it spammed the
       // action rail and kept the sky locked to a bright midday look.
-      const creatureManager = new CreatureManager(scene, terrain, seed); creatureManager.update(camera.position, 1);
+      const creatureManager = new CreatureManager(scene, terrain, seed);
+      // Hostile wildlife can now actually hurt the player. Damage funnels into
+      // the same survival stats as everything else, so the death check covers it.
+      creatureManager.onPlayerDamage = ({ amount, source }) => {
+        if (amount <= 0 || isCreativeMode(gameModeRef.current)) return;
+        const next = applyDamage(survivalStatsRef.current, amount);
+        survivalStatsRef.current = next;
+        publishSurvivalStats(next);
+        audio.play('hit', settingsRef.current);
+        showActionMessage(`${source} attacks you for ${amount}!`);
+      };
+      creatureManager.update(camera.position, 1);
 
-      // cracking overlay mesh — official block cracking like Minecraft
-      let crackMesh: Mesh | null = null;
-      const crackMaterial = new StandardMaterial('crack_mat', scene);
-      crackMaterial.diffuseColor = new Color3(0.05, 0.05, 0.05);
-      crackMaterial.emissiveColor = new Color3(0.12, 0.12, 0.12);
-      crackMaterial.alpha = 0.0;
-      crackMaterial.wireframe = false;
-      crackMaterial.backFaceCulling = false;
+      /* ---------------------------------------------------------------- *
+       * Boss encounters
+       *
+       * BossRegistry defines 38 bosses; before this the only thing that
+       * imported it was the HUD menu, so none could be fought. `activeBoss`
+       * holds the live encounter, driven from the frame loop below.
+       * ---------------------------------------------------------------- */
+      let activeBoss: BossEncounter | null = null;
+
+      const clearBoss = (): void => {
+        activeBoss?.dispose();
+        activeBoss = null;
+        setBossState(null);
+      };
+
+      const publishBoss = (): void => {
+        setBossState(activeBoss ? activeBoss.getState() : null);
+      };
+
+      const summonBoss = (bossId: string): string => {
+        const def = getBoss(bossId)
+          ?? ALL_BOSSES.find((b) => b.name.toLowerCase() === bossId.toLowerCase());
+        if (!def) return `No such boss: ${bossId}`;
+
+        clearBoss();
+        // Place it in front of the player, clear of the ground.
+        const forward = camera.getForwardRay(1).direction;
+        const spawnAt = camera.position.add(
+          new Vector3(forward.x, 0, forward.z).normalize().scale(14 + def.size.depth * 0.5)
+        );
+        spawnAt.y = terrain.getHeightAt(spawnAt.x, spawnAt.z) + 1;
+
+        const boss = new BossEncounter(scene, def, spawnAt);
+
+        boss.onPhase = (phase, bossDef) => {
+          showActionMessage(`${bossDef.name} enters phase ${phase} of ${bossDef.phases}!`);
+          audio.play('hit', settingsRef.current);
+          publishBoss();
+        };
+
+        boss.onAbility = (event) => {
+          const distance = Vector3.Distance(event.position, camera.position);
+          if (event.kind === 'summon') {
+            for (let i = 0; i < (event.summonCount ?? 1); i += 1) {
+              creatureManager.spawnNear(event.position, event.summonSpecies ?? 'husk_wanderer');
+            }
+            showActionMessage(`${def.name} uses ${event.name}!`);
+            return;
+          }
+          // Melee and pulses need the player actually within reach.
+          const reach = event.kind === 'melee' ? 5 : event.kind === 'pulse' ? 12 : 36;
+          if (distance > reach) return;
+          if (isCreativeMode(gameModeRef.current)) return;
+
+          const next = applyDamage(survivalStatsRef.current, event.damage);
+          survivalStatsRef.current = next;
+          publishSurvivalStats(next);
+          audio.play('hit', settingsRef.current);
+          showActionMessage(`${def.name}: ${event.name} hits you for ${event.damage}!`);
+        };
+
+        boss.onDefeated = (bossDef, position) => {
+          showActionMessage(`${bossDef.name} defeated! Drops: ${bossDef.drops.join(', ')}`);
+          audio.play('creature_down', settingsRef.current);
+          onGameplayEvent('creaturesDefeated');
+          // Registry drops are lore item names; award a themed block stack so
+          // the kill has a tangible reward in the inventory.
+          const reward = bossDef.tier === 'final' ? 16 : bossDef.tier === 'world' ? 11 : 10;
+          for (let i = 0; i < Math.min(6, bossDef.phases + 1); i += 1) {
+            itemDrops.spawnDrop(reward as BlockID, position, 1);
+          }
+          window.setTimeout(() => { clearBoss(); }, 400);
+        };
+
+        publishBoss();
+        audio.play('ui', settingsRef.current);
+        return `${def.name} — ${def.tier.toUpperCase()} — ${def.health} HP, ${def.phases} phases. ${def.lore}`;
+      };
+
+      bossSummonRef.current = summonBoss;
+
+      // Real Minecraft-style destroy-stage cracks. The old overlay just faded a
+      // dark box to red over the block, which is the "red screen when breaking
+      // a block" the player called outdated.
+      const breakOverlay = new BreakOverlay(scene);
 
       let miningSession: MiningSession | null = null;
+      /**
+       * Last mining progress pushed into React state.
+       *
+       * Declared here, beside `miningSession`, because `clearMining` below
+       * assigns it — declaring it further down (next to the render-loop
+       * locals) put it in the temporal dead zone for that call and threw.
+       */
+      let lastPublishedMiningProgress = 0;
       const clearMining = (): void => {
-        miningSession = null; setMiningProgress(0); setMiningLabel('');
-        if (crackMesh) { crackMesh.dispose(); crackMesh = null; crackMaterial.alpha = 0; }
-        // reset arm
-        arm.position.copyFrom(armPunchBase); arm.rotation.z = -0.12;
+        miningSession = null; lastPublishedMiningProgress = 0; setMiningProgress(0); setMiningLabel('');
+        breakOverlay.hide();
+        viewModel.setContinuousSwing(false);
       };
       const publishRenderStats = (): void => {
         const s = renderer.getStats();
@@ -551,7 +671,97 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         rebuildEditedBlock(session.target); saveWorldEdits(); clearMining();
       };
 
-      let velocityY = 0; let grounded = false; let jumpRequested = false; let fallStartY = camera.position.y; let wasFalling = false;
+      // --- player physics + survival locals ------------------------------
+      // Declared here rather than further down because `respawnPlayer` and the
+      // command executor below both assign them. `let` bindings are in the
+      // temporal dead zone until their declaration is *executed*, so declaring
+      // them after those closures made `/kill` and `/tp` throw a ReferenceError
+      // the moment they ran.
+      let velocityY = 0;
+      let fallStartY = camera.position.y;
+      let wasFalling = false;
+      // 2.0 — thirst. Deserts are genuinely hostile: the bar drains fast in
+      // the heat and you must find water (or an oasis) to top it back up.
+      let hydrationState: HydrationState = createStarterHydration();
+
+      /**
+       * Kill and respawn the player.
+       *
+       * Survival had no death at all: health could hit zero and nothing
+       * happened, and `/kill` was not even a command. Dying now recentres you
+       * on the world spawn with fresh stats, which is what makes survival
+       * mode have stakes.
+       */
+      const respawnPlayer = (reason: string): string => {
+        const safeY = terrain.getHeightAt(spawn.x, spawn.z) + 2;
+        camera.position.set(spawn.x, safeY, spawn.z);
+        velocityY = 0;
+        fallStartY = safeY;
+        wasFalling = false;
+        const fresh = createStarterSurvivalStats();
+        survivalStatsRef.current = fresh;
+        publishSurvivalStats(fresh);
+        clearMining();
+        audio.play('error', settingsRef.current);
+        return `${reason} — respawned at the world spawn.`;
+      };
+
+      /**
+       * Execute a `CommandEffect` against the running world.
+       *
+       * Registered on a ref so the React-side command handlers can reach the
+       * live scene without the scene being rebuilt when they change.
+       */
+      commandEffectRef.current = (effect: CommandEffect): string | void => {
+        switch (effect.kind) {
+          case 'kill':
+            return respawnPlayer('You died');
+          case 'heal': {
+            const fresh = createStarterSurvivalStats();
+            survivalStatsRef.current = fresh;
+            publishSurvivalStats(fresh);
+            hydrationState = createStarterHydration();
+            return 'Fully healed.';
+          }
+          case 'teleport': {
+            camera.position.set(effect.x ?? 0, effect.y ?? 64, effect.z ?? 0);
+            velocityY = 0;
+            wasFalling = false;
+            fallStartY = camera.position.y;
+            // Re-centre streaming so the destination meshes immediately.
+            streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+            return;
+          }
+          case 'give': {
+            const id = effect.blockId ?? 0;
+            const amount = effect.amount ?? 1;
+            if (!id) return 'Nothing to give.';
+            publishInventory(addToInventory(inventoryRef.current, id as BlockID, amount));
+            return `Gave ${amount}x ${getBlock(id as BlockID).name}.`;
+          }
+          case 'clear':
+            creatureManager.clearAll();
+            return 'Removed every loaded creature.';
+          case 'spawn': {
+            const spawned = creatureManager.spawnNear(camera.position, effect.entity ?? 'sheep');
+            return spawned ? `Summoned ${spawned}.` : 'No room to summon here.';
+          }
+          case 'boss': {
+            const note = bossSummonRef.current?.(effect.entity ?? 'wood_warden');
+            return note ?? 'Boss system unavailable.';
+          }
+          case 'weather':
+            // The atmosphere system owns weather; setBiome re-evaluates it.
+            atmosphere.setWeatherOverride(effect.weather ?? 'clear');
+            return `Weather set to ${effect.weather}.`;
+          default:
+            return;
+        }
+      };
+
+      // NOTE: velocityY / fallStartY / wasFalling are declared above, before
+      // respawnPlayer and the command executor, which both assign them.
+      let grounded = false; let jumpRequested = false;
       const pressedKeys = new Set<string>();
       const setFlightMode = (enabled: boolean): void => {
         flightEnabledRef.current = enabled;
@@ -613,41 +823,56 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let startupLoadingComplete = !renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
       // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
       // the heat and you must find water (or an oasis) to top it back up.
-      let hydrationState: HydrationState = createStarterHydration();
+      // NOTE: hydrationState is declared above, before the command executor.
       let currentClimate = climateForBiome('plains');
       let worldDay = 1, lastTimeOfDay = worldTimeRef.current.timeOfDay;
       let timeState: WorldTimeState = worldTimeRef.current;
       let lastCameraPosition = camera.position.clone();
+      /**
+       * 0 = open sky above the player, 1 = fully enclosed.
+       *
+       * Sampled a few times a second (not per frame) by walking straight up
+       * from the camera and counting solid blocks. It drives the carried
+       * light, so stepping into a cave or under a thick canopy brightens the
+       * player's immediate surroundings instead of leaving them in the dark.
+       */
+      let enclosureFactor = 0;
+      let enclosureFrame = 0;
+      const sampleEnclosure = (): number => {
+        const px = Math.floor(camera.position.x);
+        const pz = Math.floor(camera.position.z);
+        const py = Math.floor(camera.position.y);
+        let blocked = 0;
+        const samples = 12;
+        for (let i = 1; i <= samples; i += 1) {
+          const id = terrain.getBlockAt(px, py + i, pz);
+          if (id !== 0 && id !== 5) blocked += 1;
+        }
+        return Math.min(1, blocked / 4);
+      };
 
       scene.onBeforeRenderObservable.add(() => {
         const now = performance.now();
         if (miningSession) {
           const progress = Math.min(1, (now - miningSession.startedAt) / miningSession.durationMs);
-          setMiningProgress(progress);
-          // hand punch animation — arm goes towards block when punching tree
-          const punch = Math.sin(progress * Math.PI * 6) * 0.12; // rapid punch
-          const forward = progress * 0.55;
-          const isWood = miningSession.blockId === 6;
-          arm.position.x = armPunchBase.x - forward * (isWood ? 0.38 : 0.28) + punch * 0.1;
-          arm.position.y = armPunchBase.y + forward * 0.14 + Math.abs(punch) * 0.08;
-          arm.position.z = armPunchBase.z - forward * 0.55 - Math.abs(punch) * 0.12;
-          arm.rotation.x = isWood ? -0.28 * progress : 0;
-          arm.rotation.z = -0.12 - punch * 0.6;
-          // cracking overlay progress
-          if (crackMesh) {
-            crackMaterial.alpha = 0.18 + progress * 0.62;
-            const scale = 1.002 + progress * 0.018;
-            crackMesh.scaling.set(scale, scale, scale);
-            // simulate cracking lines by changing emissive
-            crackMaterial.emissiveColor = new Color3(progress * 0.2, 0, 0);
+          // PERF: this used to call setState every single frame while mining,
+          // re-rendering the whole HUD React tree ~60x/second for a bar that
+          // is only ~300px wide. Publishing at 2% granularity is visually
+          // identical and cuts the renders by roughly 30x.
+          const quantised = Math.round(progress * 50) / 50;
+          if (quantised !== lastPublishedMiningProgress) {
+            lastPublishedMiningProgress = quantised;
+            setMiningProgress(quantised);
           }
+          // Cracks advance through ten discrete destroy stages on the block
+          // itself; the arm keeps swinging on its own constant tempo.
+          breakOverlay.show(
+            miningSession.target.x,
+            miningSession.target.y,
+            miningSession.target.z,
+            progress
+          );
           if (progress >= 1) finishMining(miningSession);
-        } else {
-          // idle arm sway
-          arm.position.x = armPunchBase.x + Math.sin(now * 0.0012) * 0.02;
-          arm.position.y = armPunchBase.y + Math.cos(now * 0.0015) * 0.015;
-          arm.position.z = armPunchBase.z;
-          arm.rotation.x = 0; arm.rotation.z = -0.12;
         }
 
         const rawDeltaMs = engine.getDeltaTime();
@@ -728,10 +953,33 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           } catch { /* biome lookup is cosmetic — never break the frame */ }
         }
 
+        // View model: swing tempo is wall-clock based, bob follows real speed.
+        const horizontalSpeed = Math.hypot(
+          camera.position.x - lastCameraPosition.x,
+          camera.position.z - lastCameraPosition.z
+        ) / Math.max(0.0001, deltaSeconds);
+        viewModel.setHeldItem(selectedBlockRef.current);
+        viewModel.update(deltaSeconds, horizontalSpeed);
+
+        enclosureFrame += 1;
+        if (enclosureFrame % 15 === 0) {
+          try {
+            // Smooth toward the new reading so walking under a tree fades the
+            // light up instead of popping it.
+            enclosureFactor += (sampleEnclosure() - enclosureFactor) * 0.5;
+          } catch { /* terrain probe is cosmetic — never break the frame */ }
+        }
+
         ambience.setVolume(settingsRef.current.volume, settingsRef.current.muted);
         ambience.update(deltaSeconds);
         const atmosphereFrame = atmosphere.update(deltaSeconds, camera.position);
-        updateWorldLighting(lighting, atmosphereFrame, settingsRef.current.experimentalVulkanMode || settingsRef.current.realisticLighting);
+        updateWorldLighting(
+          lighting,
+          atmosphereFrame,
+          settingsRef.current.experimentalVulkanMode || settingsRef.current.realisticLighting,
+          camera.position,
+          enclosureFactor
+        );
         if (pipeline) {
           // Runtime safety clamp: if the player enables a heavy shader pack,
           // keep exposure and bloom inside a readable range.
@@ -798,6 +1046,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
+        // Keep the spawner's clock in step so nocturnal species (scorpions,
+        // owls, bats) only appear after dark.
+        // Boss encounters tick before creatures so summoned minions appear
+        // in the same frame the ability fires.
+        if (activeBoss) {
+          activeBoss.update(deltaSeconds, camera.position);
+          if (streamFrame % 6 === 0) publishBoss();
+        }
+        creatureManager.setTimeOfDay(timeState.timeOfDay);
         creatureManager.update(camera.position, deltaSeconds);
         const collectedDrops = itemDrops.update(camera.position, deltaSeconds);
         if (collectedDrops.length > 0) {
@@ -919,6 +1176,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
 
         survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
+
+        // --- death ------------------------------------------------------------
+        // Health could previously reach zero and simply stay there: starving,
+        // dehydrating or falling had no terminal consequence, so survival had
+        // no stakes. One check here covers every damage source, since they all
+        // funnel into `survivalStatsRef` above.
+        if (nextSurvival.health <= 0 && !isCreativeMode(gameModeRef.current)) {
+          showActionMessage(respawnPlayer('You died'));
+        }
         // Incremental world streaming — a small budget every frame so the world
         // keeps filling in without ever blocking the render loop.
         const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);
@@ -928,7 +1194,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           const result = renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, renderRadius,
             chunkSource.generateChunk,
-            { budget: CHUNKS_PER_FRAME }
+            { budget: CHUNKS_PER_FRAME, timeBudgetMs: CHUNK_STREAM_BUDGET_MS }
           );
           if (result.loaded > 0 || result.unloaded > 0) {
             // Meshing is expensive and bursty; tell the tuner to ignore this
@@ -1026,11 +1292,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const toolId = selectedToolRef.current; const estimate = estimateMining(picked.blockId, toolId); const tool = getTool(toolId);
         miningSession = { target: picked.target, blockId: picked.blockId, startedAt: performance.now(), durationMs: estimate.durationMs, canHarvest: estimate.canHarvest, toolName: tool.name };
         setMiningProgress(0.01); setMiningLabel(`${tool.name} punching ${getBlock(picked.blockId).name}${estimate.canHarvest ? '' : ' (no drop)'}`);
-        // create cracking overlay box at block position
-        if (crackMesh) crackMesh.dispose();
-        crackMesh = MeshBuilder.CreateBox(`crack_${picked.target.x}_${picked.target.y}_${picked.target.z}`, { width: 1.02, height: 1.02, depth: 1.02 }, scene);
-        crackMesh.position = new Vector3(picked.target.x + 0.5, picked.target.y + 0.5, picked.target.z + 0.5);
-        crackMesh.material = crackMaterial; crackMaterial.alpha = 0.12; crackMesh.isPickable = false; crackMesh.checkCollisions = false;
+        // Cracks start at stage 0; the arm swings continuously while held.
+        breakOverlay.show(picked.target.x, picked.target.y, picked.target.z, 0);
+        viewModel.setContinuousSwing(true);
         showActionMessage(`${getBlock(picked.blockId).name}: cracking… ${(estimate.durationMs / 1000).toFixed(1)}s`);
       };
       const attackCreature = (): boolean => {
@@ -1052,6 +1316,27 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             return true;
           }
         }
+        // Bosses are large, so they get a longer reach than ordinary mobs and
+        // are checked first.
+        if (activeBoss?.isAlive()) {
+          const bossPick = scene.pickWithRay(
+            camera.getForwardRay(Math.max(BLOCK_REACH, 12)),
+            (mesh) => Boolean(mesh.metadata?.bossId)
+          );
+          if (bossPick?.hit) {
+            const tool = getTool(selectedToolRef.current);
+            const damage = 12 + tool.tier * 9 + (tool.kind === 'axe' ? 4 : 0);
+            const result = activeBoss.damage(damage);
+            audio.play(result.dead ? 'creature_down' : 'hit', settingsRef.current);
+            authorityRuntime.recordAction();
+            if (!result.dead) {
+              showActionMessage(`${activeBoss.def.name}: ${Math.ceil(result.health)}/${activeBoss.def.health} HP`);
+            }
+            publishBoss();
+            return true;
+          }
+        }
+
         const pick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH), (mesh) => Boolean(mesh.metadata?.creatureId));
         const creatureId = pick?.pickedMesh?.metadata?.creatureId as string | undefined; if (!pick?.hit || !creatureId) return false;
         const tool = getTool(selectedToolRef.current); const damage = 5 + tool.tier * 4 + (tool.kind === 'axe' ? 3 : 0);
@@ -1088,10 +1373,40 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       const handleBlockMouseDown = (event: MouseEvent): void => {
         if (event.button !== 0 && event.button !== 2) return; event.preventDefault(); if (!lockPointerIfNeeded()) return;
-        if (event.button === 0) { if (!attackCreature()) startMining(); } else placeSelectedBlock();
+        if (event.button === 0) {
+          // Always swing on click, whether you connect with a mob, a block or
+          // thin air — that feedback is most of what makes punching feel real.
+          viewModel.swing();
+          if (!attackCreature()) startMining();
+        } else {
+          viewModel.swing();
+          placeSelectedBlock();
+        }
       };
       const handleMouseUp = (event: MouseEvent): void => { if (event.button !== 0 || !miningSession) return; showActionMessage('Mining canceled'); clearMining(); };
       const handleKeyDown = (event: KeyboardEvent): void => {
+        // --- text-entry guard ------------------------------------------------
+        // While chat or the command console is open, the keyboard belongs to
+        // the input field and nothing else. Without this, typing "/kill" fired
+        // the inventory hotkey on the "i", "/time set day" fired several more,
+        // and the game was unplayable from the console.
+        //
+        // Checked against a ref (not the captured state) because this listener
+        // is attached once and would otherwise see the values from first mount.
+        if (textEntryOpenRef.current) return;
+
+        // Also stand down whenever focus is genuinely in a text field, such as
+        // the seed box or a marketplace search, so hotkeys never steal typing.
+        const target = event.target as HTMLElement | null;
+        if (target) {
+          const tag = target.tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+        }
+
+        // Modifier chords belong to the browser/OS (Ctrl+R, Cmd+L, Alt+Tab…).
+        // Only Shift is used by gameplay.
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+
         const ambienceProfile = dimensionRuntime.getState().id === 'nether' ? 'nether' : (dimensionRuntime.getState().id === 'end' ? 'end' : 'forest');
         // Music stays on GameAudio; ambience is owned by AmbienceEngine now.
         audio.startMusic(settingsRef.current, ambienceProfile === 'nether' ? 'nether' : 'overworld');
@@ -1100,7 +1415,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (event.key === 'F5') {
           event.preventDefault();
           thirdPerson = !thirdPerson;
-          arm.setEnabled(!thirdPerson);
+          viewModel.setEnabled(!thirdPerson);
           avatar.isVisible = thirdPerson;
           // Never teleport the gameplay camera on view toggle. The avatar is
           // offset in the render loop instead, so F5 cannot hide the model, clip
@@ -1140,9 +1455,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           return;
         }
         if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
-        if (event.key === 'Escape') { event.preventDefault(); if (commandOpen || chatOpen) { setCommandOpen(false); setChatOpen(false); return; } document.exitPointerLock?.(); setPaused(true); return; }
+        if (event.key === 'Escape') { event.preventDefault(); document.exitPointerLock?.(); setPaused(true); return; }
         if (event.key === '/' && settingsRef.current.commandBlocksEnabled) { event.preventDefault(); document.exitPointerLock?.(); setCommandText('/'); setCommandOpen(true); setChatOpen(false); showActionMessage('Command console / — try /day /time /summon'); return; }
-        if (event.key.toLowerCase() === 't' && !commandOpen && !chatOpen) { event.preventDefault(); document.exitPointerLock?.(); setChatText(''); setChatOpen(true); showActionMessage('Chat opened — T like Minecraft, type /day /time /summon'); return; }
+        if (event.key.toLowerCase() === 't') { event.preventDefault(); document.exitPointerLock?.(); setChatText(''); setChatOpen(true); showActionMessage('Chat opened — T like Minecraft, type /day /time /summon'); return; }
         if (event.key.toLowerCase() === 'q') { event.preventDefault(); const tool = nextTool(selectedToolRef.current, toolInventoryRef.current); selectedToolRef.current = tool; onSelectedToolChange(tool); showActionMessage(`Equipped ${getTool(tool).name} (Q)`); return; }
         const keyIndex = Number.parseInt(event.key, 10) - 1;
         if (keyIndex >= 0 && keyIndex < HOTBAR_BLOCKS.length && !Number.isNaN(keyIndex)) { event.preventDefault(); const nextBlock = HOTBAR_BLOCKS[keyIndex]; selectedBlockRef.current = nextBlock; onSelectedBlockChange(nextBlock); showActionMessage(`Selected ${getBlock(nextBlock).name}`); return; }
@@ -1287,7 +1602,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
-        if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
+        breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
         audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
@@ -1317,6 +1632,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
     setActionMessage(result.lastMessage);
     // `/gamemode creative` swaps the HUD to the creative inventory live.
     if (result.gameModeChange) onGameModeChange?.(result.gameModeChange);
+    // Anything that touches the running world (kill, tp, give, summon…) is
+    // executed by the scene, which owns the camera, terrain and creatures.
+    if (result.effect) {
+      const note = commandEffectRef.current?.(result.effect);
+      if (typeof note === 'string' && note) setActionMessage(note);
+    }
   };
   const submitCommand = (): void => {
     const result = runCommand(commandText, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage, gameMode: gameModeRef.current });
@@ -1357,6 +1678,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       )}
       <div className="game-hud">
         {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
+        {bossState && bossState.alive && (
+          <div className="boss-bar" role="status" aria-live="polite">
+            <div className="boss-bar-head">
+              <span className="boss-name">{bossState.def.emoji} {bossState.def.name}</span>
+              <span className="boss-tier">{bossState.def.tier.toUpperCase()}</span>
+            </div>
+            <div className="boss-bar-track">
+              <span
+                className="boss-bar-fill"
+                style={{ width: `${Math.max(0, (bossState.health / bossState.maxHealth) * 100)}%` }}
+              />
+            </div>
+            <div className="boss-bar-foot">
+              <span>PHASE {bossState.phase} / {bossState.def.phases}</span>
+              <span>{Math.ceil(bossState.health)} / {bossState.maxHealth}</span>
+            </div>
+          </div>
+        )}
         {targetLabel && <div className="target-label">{targetLabel}</div>}
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
         {commandOpen && <div className="command-console"><input value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
@@ -1373,104 +1712,6 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 }
 
 
-function createPixelArmMaterial(scene: Scene, name: string, baseHex: string, accentHex: string, style: 'skin' | 'sleeve' | 'cuff'): StandardMaterial {
-  const material = new StandardMaterial(`${name}_mat`, scene);
-  const texture = new DynamicTexture(`${name}_diffuse`, { width: 64, height: 64 }, scene, false);
-  const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
-  ctx.imageSmoothingEnabled = false;
-
-  // Base pixel field.
-  ctx.fillStyle = baseHex;
-  ctx.fillRect(0, 0, 64, 64);
-
-  // Minecraft-style square texels: not random noise every frame, a stable
-  // deterministic pattern that looks like cloth/skin pixels wrapped on a cuboid.
-  for (let y = 0; y < 64; y += 8) {
-    for (let x = 0; x < 64; x += 8) {
-      const n = stableNoise(`${name}:${x}:${y}`);
-      if (n > 0.68) ctx.fillStyle = lightenHex(baseHex, style === 'cuff' ? 0.20 : 0.11);
-      else if (n < 0.22) ctx.fillStyle = darkenHex(baseHex, style === 'skin' ? 0.12 : 0.18);
-      else ctx.fillStyle = baseHex;
-      ctx.fillRect(x, y, 8, 8);
-    }
-  }
-
-  // Face boundaries / bevels so the arm reads as a real cuboid and not a flat
-  // colored box. Sleeve gets a seam, skin gets knuckle pixels, cuff gets bands.
-  ctx.fillStyle = darkenHex(accentHex, 0.18);
-  ctx.fillRect(0, 0, 64, 4);
-  ctx.fillRect(0, 60, 64, 4);
-  ctx.fillRect(0, 0, 4, 64);
-  ctx.fillRect(60, 0, 4, 64);
-  ctx.fillStyle = lightenHex(baseHex, 0.18);
-  ctx.fillRect(6, 6, 52, 3);
-  ctx.fillRect(6, 6, 3, 52);
-
-  if (style === 'sleeve') {
-    ctx.fillStyle = darkenHex(accentHex, 0.08);
-    ctx.fillRect(8, 44, 48, 4);
-    ctx.fillRect(28, 8, 4, 48);
-    ctx.fillStyle = lightenHex(baseHex, 0.20);
-    ctx.fillRect(12, 12, 12, 8);
-  } else if (style === 'skin') {
-    ctx.fillStyle = lightenHex(baseHex, 0.12);
-    ctx.fillRect(14, 16, 8, 8);
-    ctx.fillRect(28, 14, 8, 8);
-    ctx.fillRect(42, 16, 8, 8);
-    ctx.fillStyle = darkenHex(baseHex, 0.16);
-    ctx.fillRect(14, 42, 36, 4);
-    ctx.fillRect(20, 48, 4, 6);
-    ctx.fillRect(32, 48, 4, 6);
-    ctx.fillRect(44, 48, 4, 6);
-  } else {
-    ctx.fillStyle = lightenHex(baseHex, 0.28);
-    ctx.fillRect(0, 10, 64, 8);
-    ctx.fillStyle = darkenHex(accentHex, 0.10);
-    ctx.fillRect(0, 42, 64, 7);
-  }
-
-  texture.update(false);
-  texture.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE);
-  material.diffuseTexture = texture;
-  material.specularColor = new Color3(0.02, 0.02, 0.025);
-  material.emissiveColor = Color3.FromHexString(baseHex).scale(0.045);
-  material.backFaceCulling = true;
-  return material;
-}
-
-function stableNoise(input: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i += 1) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 0xffffffff;
-}
-
-function lightenHex(hex: string, amount: number): string {
-  const { r, g, b } = parseHexColor(hex);
-  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
-}
-
-function darkenHex(hex: string, amount: number): string {
-  const { r, g, b } = parseHexColor(hex);
-  return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount));
-}
-
-function parseHexColor(hex: string): { r: number; g: number; b: number } {
-  const clean = hex.replace('#', '');
-  return {
-    r: Number.parseInt(clean.slice(0, 2), 16),
-    g: Number.parseInt(clean.slice(2, 4), 16),
-    b: Number.parseInt(clean.slice(4, 6), 16),
-  };
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const part = (value: number) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
-  return `#${part(r)}${part(g)}${part(b)}`;
-}
-
 /**
  * Drive the world lighting rig from the atmosphere frame.
  *
@@ -1486,30 +1727,54 @@ function rgbToHex(r: number, g: number, b: number): string {
  * bodies. This function only maps the resulting atmosphere onto the actual
  * lights, so there is exactly one source of truth.
  */
+/**
+ * Drive the lighting rig from the atmosphere frame.
+ *
+ * The important change here is that every term has a **floor**. Previously the
+ * sky fill bottomed out near zero at night and inside dim sky profiles, so
+ * anything the sun missed went black. Night is now dim and blue rather than
+ * invisible, and the player-carried light guarantees the immediate
+ * surroundings are always readable — the fix for "in the trees / underground
+ * I cannot see anything".
+ */
 function updateWorldLighting(
   lighting: SceneLightingHandles,
   frame: AtmosphereFrame,
-  realistic: boolean
+  realistic: boolean,
+  playerPosition?: Vector3,
+  /** 0 = open sky, 1 = fully enclosed. Boosts the carried light in caves. */
+  enclosure = 0
 ): void {
   const boost = realistic ? 1.08 : 1;
   const daylight = Math.max(0.08, frame.dayFactor);
   const moonlight = frame.nightFactor;
+  // Never let a sky profile drive ambient scale to zero.
+  const ambientScale = Math.max(0.45, frame.profile.ambientScale);
 
   // Point the sun light along the real sun direction from the celestial rig, so
   // shadows track the visible cube sun across the sky.
   lighting.sun.direction.copyFrom(frame.sunDirection);
-  lighting.sun.intensity = daylight * 0.86 * boost * frame.profile.ambientScale;
+  lighting.sun.intensity = daylight * 0.55 * boost * ambientScale;
   lighting.sun.diffuse = frame.sunColor;
 
-  lighting.sky.intensity = (0.16 + daylight * 0.40) * boost * frame.profile.ambientScale;
+  // Hemispheric fill is now the primary readability source, with a hard floor
+  // so no time of day or dimension can black the world out.
+  lighting.sky.intensity = Math.max(0.42, 0.40 + daylight * 0.55) * boost * ambientScale;
   lighting.sky.diffuse = Color3.Lerp(
-    frame.profile.zenithNight.scale(3),
+    // Night sky colour lifted so moonlit terrain reads blue, not black.
+    frame.profile.zenithNight.scale(4.2),
     frame.profile.horizonDay,
     frame.dayFactor
   );
 
   // The spawn beacon glows brighter at night so it stays findable.
   lighting.spawnLight.intensity = 0.24 + moonlight * 0.72;
+
+  // Carried light: subtle outdoors in daylight, strong in caves and at night.
+  if (playerPosition) lighting.playerLight.position.copyFrom(playerPosition);
+  const nightNeed = 1 - frame.dayFactor;
+  lighting.playerLight.intensity = 0.22 + enclosure * 0.85 + nightNeed * 0.35;
+  lighting.playerLight.range = 12 + enclosure * 10;
 }
 
 /**

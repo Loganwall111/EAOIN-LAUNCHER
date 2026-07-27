@@ -1,0 +1,415 @@
+/* ==========================================================================
+   hud-layout.css — the authoritative in-game HUD layout.
+
+   ## Why this file exists
+
+   The HUD was assembled from three stylesheets written at different times
+   (global.css, eaoin-ui.css, boot-signin-sp-hud.css) and two separate React
+   trees (`HudFrame` and `GameCanvas`'s own `.game-hud`). Nothing owned the
+   screen as a whole, so panels were positioned independently and landed on
+   top of each other:
+
+     top-left      .hud-player          vs  .objectives-panel  (both 12-18px)
+     top-right     .hud-minimap         vs  .systems-panel     (both 12-18px)
+     bottom-left   .hud-chat  .hud-nav  vs  .chat-panel  .survival-panel
+     bottom-centre .hud-bottom          vs  .hotbar  .status-bar
+     bottom-right  .hud-abilities       vs  .toolbelt  .world-action-rail
+
+   That is the reported "there are buttons and stuff that are in my way and I
+   can't fully see", and why the interface read as cluttered rather than AAA.
+
+   ## The model
+
+   The screen is divided into named safe zones, and every panel is assigned to
+   exactly one. Zones are flex stacks, so multiple panels in the same corner
+   queue up instead of overlapping. Loaded LAST in main.tsx so it wins over the
+   older rules without needing them deleted.
+
+   Layering (z-index) is also standardised here, lowest to highest:
+     1  world-space overlays (crosshair, target label)
+     10 passive HUD panels
+     20 the hotbar and vitals — always readable
+     30 interactive rails and nav
+     40 chat and the command console
+     50 modal panels (inventory, settings)
+   ========================================================================== */
+
+:root {
+  /* Distance every panel keeps from the screen edge. */
+  --hud-gutter: 16px;
+  /* Vertical space reserved at the bottom for the hotbar block. */
+  --hud-bottom-reserve: 132px;
+  /* Standard gap between stacked panels in a zone. */
+  --hud-stack-gap: 10px;
+
+  --hud-z-world: 1;
+  --hud-z-panel: 10;
+  --hud-z-hotbar: 20;
+  --hud-z-rail: 30;
+  --hud-z-chat: 40;
+  --hud-z-modal: 50;
+}
+
+/* --------------------------------------------------------------------------
+   Zone scaffolding
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud,
+.game-hud {
+  /* Both HUD roots cover the screen but must not eat clicks meant for the
+     canvas; individual controls opt back in. */
+  pointer-events: none;
+}
+
+.eaoin-hud > *,
+.game-hud > * {
+  /* Panels are placed by the zone rules below, never by ad-hoc offsets. */
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   TOP-LEFT — identity and vitals
+   Player card, then the objectives tracker beneath it.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-player {
+  top: var(--hud-gutter) !important;
+  left: var(--hud-gutter) !important;
+  z-index: var(--hud-z-panel);
+}
+
+/* The objectives panel used to sit at 14-18px top-left, directly on top of the
+   player card. It now hangs below it. */
+.objectives-panel {
+  top: 112px !important;
+  left: var(--hud-gutter) !important;
+  width: 250px !important;
+  max-height: 30vh !important;
+  overflow: auto;
+  z-index: var(--hud-z-panel);
+}
+
+/* Status effects move below the objectives tracker rather than overlapping. */
+.eaoin-hud .hud-effects {
+  top: auto !important;
+  bottom: calc(var(--hud-bottom-reserve) + 96px) !important;
+  left: var(--hud-gutter) !important;
+  width: 176px !important;
+  z-index: var(--hud-z-panel);
+}
+
+/* --------------------------------------------------------------------------
+   TOP-CENTRE — compass and clock
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-compass {
+  top: var(--hud-gutter) !important;
+  z-index: var(--hud-z-panel);
+}
+
+.eaoin-hud .hud-clock {
+  top: 48px !important;
+  z-index: var(--hud-z-panel);
+}
+
+/* --------------------------------------------------------------------------
+   TOP-RIGHT — map, then quests, then diagnostics
+   These three were all pinned to the same corner at the same offset.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-minimap {
+  top: var(--hud-gutter) !important;
+  right: var(--hud-gutter) !important;
+  z-index: var(--hud-z-panel);
+}
+
+.eaoin-hud .hud-quests {
+  /* Sits directly under the minimap, which is ~200px tall. */
+  top: 232px !important;
+  right: var(--hud-gutter) !important;
+  max-height: 26vh !important;
+  overflow: auto;
+  z-index: var(--hud-z-panel);
+}
+
+/* The systems panel shared the top-right corner with the minimap. Moved to the
+   far side of the quest tracker and made a compact, scrollable column. */
+.systems-panel {
+  top: var(--hud-gutter) !important;
+  right: calc(var(--hud-gutter) + 250px) !important;
+  width: 220px !important;
+  max-height: 40vh !important;
+  overflow: auto;
+  z-index: var(--hud-z-panel);
+}
+
+/* Developer stats overlay: tucked under the systems column, opt-in only. */
+.render-stats-panel {
+  top: calc(var(--hud-gutter) + 4px) !important;
+  right: calc(var(--hud-gutter) + 486px) !important;
+  max-width: 230px;
+  max-height: 44vh;
+  overflow: auto;
+  opacity: 0.82;
+  z-index: var(--hud-z-panel);
+}
+
+/* --------------------------------------------------------------------------
+   BOTTOM-CENTRE — the hotbar block
+   The single most important part of the HUD, so nothing else may enter it.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-bottom {
+  bottom: var(--hud-gutter) !important;
+  z-index: var(--hud-z-hotbar);
+}
+
+/* The legacy standalone hotbar/status bar are superseded by `.hud-bottom`. */
+.game-hud .hotbar,
+.game-hud .status-bar,
+.game-hud .toolbelt,
+.game-hud .survival-panel {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   BOTTOM-LEFT — chat
+   Raised clear of the hotbar row and given a single owner.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-chat {
+  left: var(--hud-gutter) !important;
+  bottom: var(--hud-bottom-reserve) !important;
+  z-index: var(--hud-z-chat);
+}
+
+/* GameCanvas's own chat panel is the one wired to the command runtime, so it
+   takes the corner and the decorative HudFrame chat steps aside when both
+   would be visible. */
+.game-hud .chat-panel {
+  left: var(--hud-gutter) !important;
+  bottom: var(--hud-bottom-reserve) !important;
+  width: min(520px, 46vw) !important;
+  z-index: var(--hud-z-chat);
+}
+
+.game-hud .command-console {
+  left: 50% !important;
+  bottom: calc(var(--hud-bottom-reserve) + 8px) !important;
+  z-index: var(--hud-z-chat);
+}
+
+/* --------------------------------------------------------------------------
+   BOTTOM-RIGHT — abilities, equipped item, world actions
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-abilities {
+  right: var(--hud-gutter) !important;
+  bottom: var(--hud-gutter) !important;
+  z-index: var(--hud-z-rail);
+}
+
+.eaoin-hud .hud-equipped {
+  right: var(--hud-gutter) !important;
+  bottom: 84px !important;
+  z-index: var(--hud-z-panel);
+}
+
+/* The world action rail (FLY / RESET / EXIT) previously floated over the
+   abilities row. It now sits above the equipped card as a compact column. */
+.game-hud .world-action-rail {
+  position: absolute;
+  right: var(--hud-gutter);
+  bottom: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: var(--hud-z-rail);
+  pointer-events: auto;
+}
+
+.game-hud .world-action-rail .world-action {
+  min-width: 104px;
+  padding: 7px 10px;
+  font: 700 10px/1 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.06em;
+  color: #dce8f6;
+  background: linear-gradient(180deg, rgba(28, 34, 44, 0.92), rgba(16, 20, 27, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.game-hud .world-action-rail .world-action:hover {
+  filter: brightness(1.25);
+  transform: translateY(-1px);
+}
+
+.game-hud .world-action-rail .world-action.fly.active {
+  color: #061018;
+  background: linear-gradient(180deg, #7fdcff, #35a8dd);
+  border-color: rgba(180, 240, 255, 0.7);
+}
+
+.game-hud .world-action-rail .world-action.danger {
+  color: #ffd9d5;
+  border-color: rgba(255, 120, 100, 0.4);
+}
+
+/* --------------------------------------------------------------------------
+   BOTTOM-LEFT RAIL — nav buttons
+   Moved off the chat corner and onto the row just above the hotbar.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-nav {
+  left: var(--hud-gutter) !important;
+  bottom: calc(var(--hud-bottom-reserve) - 58px) !important;
+  z-index: var(--hud-z-rail);
+}
+
+/* --------------------------------------------------------------------------
+   CENTRE — crosshair, target name, mining progress
+   The mining bar used to be centred on top of the crosshair.
+   -------------------------------------------------------------------------- */
+
+.eaoin-hud .hud-crosshair {
+  z-index: var(--hud-z-world);
+}
+
+.game-hud .target-label {
+  top: calc(50% + 34px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: var(--hud-z-world);
+}
+
+.game-hud .mining-progress {
+  /* Below the crosshair, above the hotbar — where Minecraft puts it. */
+  top: auto !important;
+  bottom: calc(var(--hud-bottom-reserve) + 22px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: min(320px, 34vw);
+  z-index: var(--hud-z-hotbar);
+}
+
+/* --------------------------------------------------------------------------
+   Modal panels sit above everything and dim the world behind them.
+   -------------------------------------------------------------------------- */
+
+.inventory-modal,
+.settings-modal,
+.pause-panel {
+  z-index: var(--hud-z-modal) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Small screens: drop the decorative panels rather than letting them collide.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  .systems-panel,
+  .render-stats-panel,
+  .eaoin-hud .hud-effects {
+    display: none !important;
+  }
+
+  .eaoin-hud .hud-quests {
+    max-height: 20vh !important;
+  }
+}
+
+@media (max-width: 900px) {
+  :root { --hud-bottom-reserve: 116px; }
+
+  .eaoin-hud .hud-minimap,
+  .eaoin-hud .hud-quests,
+  .objectives-panel {
+    display: none !important;
+  }
+
+  .game-hud .chat-panel,
+  .eaoin-hud .hud-chat {
+    width: min(320px, 60vw) !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   BOSS BAR — top-centre, below the compass and clock.
+
+   Bosses were defined in the registry but never fightable, so there was no UI
+   for them at all. This is deliberately the widest element on screen: when a
+   boss is up, it is the thing that matters.
+   -------------------------------------------------------------------------- */
+
+.game-hud .boss-bar {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, 52vw);
+  padding: 8px 12px 9px;
+  background: linear-gradient(180deg, rgba(18, 12, 16, 0.86), rgba(10, 7, 10, 0.9));
+  border: 1px solid rgba(255, 120, 100, 0.34);
+  border-radius: 3px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  z-index: var(--hud-z-hotbar);
+  pointer-events: none;
+  animation: boss-bar-in 0.45s ease-out both;
+}
+
+@keyframes boss-bar-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.game-hud .boss-bar-head,
+.game-hud .boss-bar-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.game-hud .boss-name {
+  font: 700 13px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.06em;
+  color: #ffe4d8;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.game-hud .boss-tier {
+  font: 700 9px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.16em;
+  color: #ff9a7a;
+}
+
+.game-hud .boss-bar-track {
+  position: relative;
+  height: 12px;
+  margin: 6px 0 5px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.game-hud .boss-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, #ff6a52, #b81f2a 60%, #7a1018);
+  box-shadow: 0 0 12px rgba(255, 90, 70, 0.5);
+  /* Eased so chip damage reads as a drain rather than a jump. */
+  transition: width 0.22s ease-out;
+}
+
+.game-hud .boss-bar-foot {
+  font: 600 9px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.08em;
+  color: rgba(255, 220, 210, 0.72);
+}
+
+@media (max-width: 900px) {
+  .game-hud .boss-bar { width: 76vw; top: 68px; }
+}

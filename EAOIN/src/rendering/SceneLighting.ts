@@ -42,47 +42,83 @@ export interface SceneLightingHandles {
   spawnLight: PointLight;
   spawnMarker: Mesh;
   shadowGenerator: ShadowGenerator;
+  /**
+   * Follows the camera and lifts nearby surfaces. Without it, standing inside
+   * a forest canopy or a cave left every face at pure ambient and the world
+   * read as solid black blocks.
+   */
+  playerLight: PointLight;
 }
 
+/**
+ * ## The "everything is black underground / in the trees" fix
+ *
+ * The previous rig lit the world almost entirely with one strong directional
+ * sun (intensity 1.18) plus a hemispheric fill. Any face the sun did not hit
+ * fell back to `scene.ambientColor`, and because block materials were PBR
+ * with `environmentIntensity = 0`, that ambient never actually reached them.
+ * Result: readable in the open, pitch black under a canopy or below ground.
+ *
+ * The new balance is:
+ *   - sun intensity roughly halved — it shapes the scene, it is not the only
+ *     source of light,
+ *   - a much stronger hemispheric fill with a warm ground bounce, so
+ *     downward-facing and shadowed faces still carry colour,
+ *   - a soft player-carried point light so caves and dense forest are lit
+ *     locally, the way a Minecraft player's own light level behaves,
+ *   - contact shading now comes from the mesher's baked AO instead of from
+ *     crushing the ambient term.
+ */
 export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLightingHandles {
-  scene.ambientColor = new Color3(0.32, 0.40, 0.52);
+  // Raised substantially: this is the floor brightness for any surface the
+  // sun cannot see, and it is multiplied by each material's ambientColor.
+  scene.ambientColor = new Color3(0.62, 0.66, 0.74);
   // Fog MODE is set here; fog COLOR and DENSITY are owned by AtmosphereSystem
   // so the horizon always matches the sky gradient exactly.
   scene.fogMode = Scene.FOGMODE_EXP2;
   scene.environmentIntensity = 0.72;
 
   const sky = new HemisphericLight('global_sky_light', new Vector3(0.25, 1, 0.18), scene);
-  sky.intensity = 0.78;
-  sky.diffuse = new Color3(0.68, 0.78, 0.92);
-  sky.groundColor = new Color3(0.35, 0.30, 0.22);
-  sky.specular = new Color3(0.08, 0.08, 0.08);
+  sky.intensity = 0.95;
+  sky.diffuse = new Color3(0.74, 0.82, 0.94);
+  // A warm ground bounce keeps undersides from going flat grey-black.
+  sky.groundColor = new Color3(0.42, 0.38, 0.32);
+  sky.specular = new Color3(0.03, 0.03, 0.03);
 
   const sun = new DirectionalLight('global_sun_light', new Vector3(-0.45, -0.9, -0.25), scene);
   sun.position = new Vector3(42, 78, 32);
-  sun.intensity = 1.18;
-  sun.diffuse = new Color3(1.0, 0.96, 0.84);
-  sun.specular = new Color3(0.22, 0.20, 0.14);
+  sun.intensity = 0.62;
+  sun.diffuse = new Color3(1.0, 0.96, 0.86);
+  sun.specular = new Color3(0.05, 0.05, 0.04);
   sun.shadowMinZ = 1;
-  sun.shadowMaxZ = 300;
+  sun.shadowMaxZ = 220;
 
-  // Real shadow map — ray-traced style soft shadows
-  const shadowGenerator = new ShadowGenerator(2048, sun);
-  shadowGenerator.usePoissonSampling = true;
-  shadowGenerator.useCloseExponentialShadowMap = true;
-  shadowGenerator.bias = 0.0005;
-  shadowGenerator.normalBias = 0.02;
-  shadowGenerator.setDarkness(0.38);
-  shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
+  // Real shadow map. Kept at 1024 with exponential filtering: 2048 + Poisson
+  // + close-ESM was three filtering modes fighting each other and cost several
+  // milliseconds per frame for shadows that were then darkened to mush.
+  const shadowGenerator = new ShadowGenerator(1024, sun);
+  shadowGenerator.useExponentialShadowMap = true;
+  shadowGenerator.bias = 0.0012;
+  shadowGenerator.normalBias = 0.03;
+  // Much lighter shadows — the AO bake now carries the contact darkening.
+  shadowGenerator.setDarkness(0.62);
+  shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
 
   const spawnLight = new PointLight('spawn_point_light', new Vector3(spawn.x, spawn.y + 1.25, spawn.z), scene);
   spawnLight.diffuse = new Color3(0.35, 0.78, 1.0);
-  spawnLight.specular = new Color3(0.4, 0.9, 1.0);
-  spawnLight.intensity = 0.62;
+  spawnLight.specular = new Color3(0.1, 0.2, 0.25);
+  spawnLight.intensity = 0.5;
   spawnLight.range = 18;
+
+  const playerLight = new PointLight('player_carried_light', new Vector3(spawn.x, spawn.y, spawn.z), scene);
+  playerLight.diffuse = new Color3(1.0, 0.94, 0.82);
+  playerLight.specular = new Color3(0.05, 0.05, 0.05);
+  playerLight.intensity = 0.35;
+  playerLight.range = 14;
 
   const spawnMarker = createSpawnMarker(scene, spawn);
 
-  return { sun, sky, spawnLight, spawnMarker, shadowGenerator };
+  return { sun, sky, spawnLight, spawnMarker, shadowGenerator, playerLight };
 }
 
 function createSpawnMarker(scene: Scene, spawn: SpawnPoint): Mesh {

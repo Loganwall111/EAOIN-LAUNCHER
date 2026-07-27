@@ -402,7 +402,271 @@ const BIRDS: SpeciesDefinition[] = [
   },
 ];
 
-export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS];
+
+/* ------------------------------------------------------------------ */
+/* EAOIN natives — creatures themed on the game's own world            */
+/*                                                                     */
+/* The roster above is real-world wildlife. These are the mobs that     */
+/* belong to EAOIN specifically: the things that live in its caves, its */
+/* nights, and its 30 dimensions. They are the hostile backbone of the  */
+/* game, so combat has something to be about.                           */
+/* ------------------------------------------------------------------ */
+
+const EAOIN_NATIVES: SpeciesDefinition[] = [
+  /* ---- Overworld night ---- */
+  {
+    id: 'husk_wanderer', name: 'Husk Wanderer', emoji: '🧟', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#5a6a4a', head: '#6a7a58', limb: '#3a4a30', accent: '#2a3020' },
+    scale: 1.0, health: 34, speed: 1.15, damage: 6,
+    biomes: ['plain', 'forest', 'desert', 'savanna', 'badlands'], weight: 9, nocturnal: true,
+    loot: [{ blockId: 2, amount: 1 }],
+    description: 'Walks until the sun stops it.',
+  },
+  {
+    id: 'bone_archer', name: 'Bone Archer', emoji: '💀', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#d8d4c4', head: '#e8e4d4', limb: '#b8b4a4', accent: '#5a5648' },
+    scale: 0.98, health: 26, speed: 1.35, damage: 7,
+    biomes: ['plain', 'forest', 'cave', 'mountain', 'badlands'], weight: 8, nocturnal: true,
+    loot: [{ blockId: 3, amount: 1 }],
+    description: 'Keeps its distance. Rarely misses.',
+  },
+  {
+    id: 'creep_bloom', name: 'Creep Bloom', emoji: '🌵', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#4aa83a', head: '#5ab84a', limb: '#2a6a22', accent: '#1a4a18' },
+    scale: 0.92, health: 22, speed: 1.25, damage: 14,
+    biomes: ['plain', 'forest', 'meadow', 'jungle'], weight: 6, nocturnal: true,
+    loot: [{ blockId: 8, amount: 1 }],
+    description: 'Swells before it bursts. Back away.',
+  },
+  {
+    id: 'hollow_stalker', name: 'Hollow Stalker', emoji: '👤', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#2a2432', head: '#352c3e', limb: '#1a1620', accent: '#8a5cf6' },
+    scale: 1.4, health: 48, speed: 1.9, damage: 11,
+    biomes: ['forest', 'haunted', 'cave', 'badlands'], weight: 3, nocturnal: true,
+    loot: [{ blockId: 12, amount: 1 }],
+    description: 'It is closer than it was a moment ago.',
+  },
+
+  /* ---- Caves ---- */
+  {
+    id: 'glow_moth', name: 'Glow Moth', emoji: '🦋', bodyPlan: 'insect', habitat: 'air', temperament: 'passive',
+    palette: { body: '#7a6ad8', head: '#8a7ae8', limb: '#4a3a98', accent: '#d8f0ff' },
+    scale: 0.4, health: 6, speed: 2.0, damage: 0,
+    biomes: ['cave', 'mushroom', 'jungle', 'swamp'], weight: 9,
+    loot: [{ blockId: 106, amount: 1 }],
+    description: 'Drifts through cavern light like a lantern.',
+  },
+  {
+    id: 'cave_lurker', name: 'Cave Lurker', emoji: '🕷️', bodyPlan: 'insect', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#3a2a2a', head: '#4a3232', limb: '#241818', accent: '#c83a2a' },
+    scale: 0.75, health: 20, speed: 1.85, damage: 6,
+    biomes: ['cave', 'cavern', 'deep', 'mineshaft'], weight: 10,
+    loot: [{ blockId: 8, amount: 1 }],
+    description: 'Comes down the wall, not along the floor.',
+  },
+  {
+    id: 'crystal_crawler', name: 'Crystal Crawler', emoji: '💠', bodyPlan: 'insect', habitat: 'land', temperament: 'neutral',
+    palette: { body: '#5ad0e8', head: '#7ae0f8', limb: '#2a8aa8', accent: '#e8faff' },
+    scale: 0.55, health: 24, speed: 1.2, damage: 4,
+    biomes: ['cave', 'crystal', 'cavern', 'mountain'], weight: 5,
+    loot: [{ blockId: 16, amount: 1 }],
+    description: 'Its shell rings when struck.',
+  },
+  {
+    id: 'magma_slug', name: 'Magma Slug', emoji: '🔥', bodyPlan: 'serpent', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#c8401a', head: '#e8601a', limb: '#8a2a10', accent: '#ffc040' },
+    scale: 0.9, health: 40, speed: 0.7, damage: 9,
+    biomes: ['cave', 'volcanic', 'nether', 'deep'], weight: 6,
+    loot: [{ blockId: 8, amount: 2 }],
+    description: 'Leaves the stone glowing behind it.',
+  },
+  {
+    id: 'deep_gazer', name: 'Deep Gazer', emoji: '👁️', bodyPlan: 'marine', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#1a2a3a', head: '#24384a', limb: '#101a28', accent: '#40e0d0' },
+    scale: 0.5, health: 55, speed: 0.9, damage: 13,
+    biomes: ['cave', 'deep', 'abyss', 'cavern'], weight: 2,
+    loot: [{ blockId: 16, amount: 2 }],
+    description: 'It has been watching the whole time.',
+  },
+
+  /* ---- Nether / volcanic ---- */
+  {
+    id: 'ember_imp', name: 'Ember Imp', emoji: '👺', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#8a2a1a', head: '#a83a24', limb: '#5a1a10', accent: '#ffb03a' },
+    scale: 0.6, health: 18, speed: 2.1, damage: 7,
+    biomes: ['nether', 'volcanic', 'basalt', 'soul'], weight: 10,
+    loot: [{ blockId: 8, amount: 1 }],
+    description: 'Small, fast, and delighted about it.',
+  },
+  {
+    id: 'ash_walker', name: 'Ash Walker', emoji: '🌋', bodyPlan: 'quadruped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#4a3a38', head: '#5a4642', limb: '#2a201e', accent: '#ff6a2a' },
+    scale: 1.3, health: 70, speed: 1.2, damage: 12,
+    biomes: ['nether', 'volcanic', 'basalt', 'toxic'], weight: 5,
+    loot: [{ blockId: 8, amount: 2 }],
+    description: 'Cracked hide with fire underneath.',
+  },
+  {
+    id: 'soul_wisp', name: 'Soul Wisp', emoji: '🕯️', bodyPlan: 'insect', habitat: 'air', temperament: 'neutral',
+    palette: { body: '#5ad8d0', head: '#7af0e8', limb: '#2a8a88', accent: '#e8ffff' },
+    scale: 0.35, health: 10, speed: 2.4, damage: 3,
+    biomes: ['nether', 'soul', 'spirit', 'haunted'], weight: 8,
+    loot: [{ blockId: 106, amount: 1 }],
+    description: 'Someone, once. Still humming.',
+  },
+
+  /* ---- End / void ---- */
+  {
+    id: 'void_drifter', name: 'Void Drifter', emoji: '🌌', bodyPlan: 'marine', habitat: 'air', temperament: 'neutral',
+    palette: { body: '#241838', head: '#32224a', limb: '#140e22', accent: '#a879ff' },
+    scale: 1.1, health: 44, speed: 1.5, damage: 8,
+    biomes: ['end', 'void', 'astral', 'cosmic'], weight: 7,
+    loot: [{ blockId: 12, amount: 1 }],
+    description: 'Swims through vacuum as if it were water.',
+  },
+  {
+    id: 'shard_sentinel', name: 'Shard Sentinel', emoji: '🔷', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#3a2a5a', head: '#4a3670', limb: '#241a3a', accent: '#c8a8ff' },
+    scale: 1.5, health: 90, speed: 1.0, damage: 15,
+    biomes: ['end', 'crystal', 'astral', 'void'], weight: 4,
+    loot: [{ blockId: 16, amount: 2 }],
+    description: 'Assembled from the pieces of something older.',
+  },
+  {
+    id: 'star_minnow', name: 'Star Minnow', emoji: '✨', bodyPlan: 'fish', habitat: 'air', temperament: 'passive',
+    palette: { body: '#8ad8ff', head: '#b8ecff', limb: '#4a98c8', accent: '#ffffff' },
+    scale: 0.3, health: 5, speed: 2.6, damage: 0,
+    biomes: ['end', 'astral', 'cosmic', 'void', 'sky'], weight: 11,
+    loot: [{ blockId: 16, amount: 1 }],
+    description: 'Shoals of them drift between the islands.',
+  },
+
+  /* ---- Sky ---- */
+  {
+    id: 'cloud_ray', name: 'Cloud Ray', emoji: '🪁', bodyPlan: 'marine', habitat: 'air', temperament: 'passive',
+    palette: { body: '#c8dcf0', head: '#dceaf8', limb: '#8aa8c8', accent: '#ffffff' },
+    scale: 1.6, health: 34, speed: 1.4, damage: 0,
+    biomes: ['sky', 'alpine', 'mountain', 'aether'], weight: 6,
+    loot: [{ blockId: 106, amount: 1 }],
+    description: 'Glides the high thermals in silence.',
+  },
+  {
+    id: 'storm_harrier', name: 'Storm Harrier', emoji: '⚡', bodyPlan: 'bird', habitat: 'air', temperament: 'hostile',
+    palette: { body: '#3a4a6a', head: '#4a5a80', limb: '#e8d040', accent: '#a8d8ff' },
+    scale: 0.7, health: 26, speed: 3.4, damage: 8,
+    biomes: ['sky', 'storm', 'mountain', 'alpine'], weight: 5,
+    loot: [{ blockId: 114, amount: 1 }],
+    description: 'Dives out of the cloud layer.',
+  },
+
+  /* ---- Swamp / toxic ---- */
+  {
+    id: 'bog_shambler', name: 'Bog Shambler', emoji: '🪵', bodyPlan: 'biped', habitat: 'amphibious', temperament: 'hostile',
+    palette: { body: '#3a4a2a', head: '#4a5a34', limb: '#242e1a', accent: '#8aaa4a' },
+    scale: 1.25, health: 52, speed: 0.95, damage: 9,
+    biomes: ['swamp', 'mangrove', 'bog', 'marsh'], weight: 7,
+    loot: [{ blockId: 108, amount: 2 }],
+    description: 'Rises out of the water with the water still on it.',
+  },
+  {
+    id: 'spore_hopper', name: 'Spore Hopper', emoji: '🍄', bodyPlan: 'quadruped', habitat: 'land', temperament: 'passive',
+    palette: { body: '#c85a7a', head: '#d86a8a', limb: '#8a3a52', accent: '#f0d0e0' },
+    scale: 0.5, health: 14, speed: 1.7, damage: 0,
+    biomes: ['mushroom', 'swamp', 'cave', 'jungle'], weight: 8,
+    loot: [{ blockId: 108, amount: 1 }],
+    description: 'Puffs a cloud of spores when startled.',
+  },
+  {
+    id: 'toxin_hound', name: 'Toxin Hound', emoji: '☣️', bodyPlan: 'quadruped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#5a7a2a', head: '#6a8a34', limb: '#3a5218', accent: '#c8ff4a' },
+    scale: 0.85, health: 32, speed: 2.2, damage: 8,
+    biomes: ['toxic', 'swamp', 'badlands', 'wasteland'], weight: 6,
+    loot: [{ blockId: 108, amount: 1 }],
+    description: 'Hunts by smell through the haze.',
+  },
+
+  /* ---- Frozen ---- */
+  {
+    id: 'frost_stag', name: 'Frost Stag', emoji: '🦌', bodyPlan: 'quadruped', habitat: 'land', temperament: 'skittish',
+    palette: { body: '#c8dce8', head: '#dceaf4', limb: '#8aa0b0', accent: '#6ac8f0' },
+    scale: 1.15, health: 30, speed: 2.0, damage: 0,
+    biomes: ['snow', 'frozen', 'tundra', 'taiga', 'ice'], weight: 6,
+    loot: [{ blockId: 112, amount: 2 }],
+    description: 'Antlers rimed with frost. Gone before you focus.',
+  },
+  {
+    id: 'rime_lurker', name: 'Rime Lurker', emoji: '🧊', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#7ab8d8', head: '#8ac8e8', limb: '#4a80a0', accent: '#e8f8ff' },
+    scale: 1.1, health: 44, speed: 1.3, damage: 10,
+    biomes: ['snow', 'frozen', 'ice', 'tundra'], weight: 5, nocturnal: true,
+    loot: [{ blockId: 16, amount: 1 }],
+    description: 'Indistinguishable from the ice until it moves.',
+  },
+
+  /* ---- Ancient / machine ---- */
+  {
+    id: 'rune_golem', name: 'Rune Golem', emoji: '🗿', bodyPlan: 'biped', habitat: 'land', temperament: 'neutral',
+    palette: { body: '#7a7a72', head: '#8a8a80', limb: '#5a5a54', accent: '#6ad0c0' },
+    scale: 1.7, health: 110, speed: 0.85, damage: 14,
+    biomes: ['ancient', 'desert', 'mountain', 'ruins', 'cave'], weight: 3,
+    loot: [{ blockId: 3, amount: 3 }],
+    description: 'Stands still for centuries. Then does not.',
+  },
+  {
+    id: 'scrap_drone', name: 'Scrap Drone', emoji: '🛸', bodyPlan: 'insect', habitat: 'air', temperament: 'hostile',
+    palette: { body: '#6a7080', head: '#7a8090', limb: '#454a56', accent: '#ff8a2a' },
+    scale: 0.5, health: 22, speed: 2.7, damage: 7,
+    biomes: ['machine', 'ancient', 'toxic', 'ruins'], weight: 7,
+    loot: [{ blockId: 3, amount: 1 }],
+    description: 'Still running a patrol nobody ordered.',
+  },
+
+  /* ---- Prehistoric ---- */
+  {
+    id: 'raptor', name: 'Raptor', emoji: '🦖', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#6a7a3a', head: '#7a8a48', limb: '#4a5424', accent: '#d8a83a' },
+    scale: 1.0, health: 42, speed: 2.6, damage: 11,
+    biomes: ['prehistoric', 'jungle', 'savanna', 'forest'], weight: 6,
+    loot: [{ blockId: 112, amount: 2 }],
+    description: 'Hunts in threes. You have seen one.',
+  },
+  {
+    id: 'shell_grazer', name: 'Shell Grazer', emoji: '🦕', bodyPlan: 'quadruped', habitat: 'land', temperament: 'neutral',
+    palette: { body: '#5a6a4a', head: '#6a7a58', limb: '#3a4632', accent: '#8a7a5a' },
+    scale: 2.4, health: 140, speed: 0.75, damage: 10,
+    biomes: ['prehistoric', 'jungle', 'swamp', 'plain'], weight: 3,
+    loot: [{ blockId: 112, amount: 4 }],
+    description: 'Enormous, slow, and entirely uninterested in you.',
+  },
+
+  /* ---- Ocean natives ---- */
+  {
+    id: 'reef_darter', name: 'Reef Darter', emoji: '🐠', bodyPlan: 'fish', habitat: 'water', temperament: 'passive',
+    palette: { body: '#f0a02a', head: '#ffb84a', limb: '#c07018', accent: '#2a4a8a' },
+    scale: 0.32, health: 6, speed: 2.3, damage: 0,
+    biomes: ['coral', 'ocean', 'warm_beach', 'beach'], weight: 12, depthRange: [1, 16],
+    loot: [{ blockId: 102, amount: 1 }],
+    description: 'Never more than a body length from cover.',
+  },
+  {
+    id: 'abyss_lantern', name: 'Abyss Lantern', emoji: '🏮', bodyPlan: 'fish', habitat: 'water', temperament: 'neutral',
+    palette: { body: '#1a1a2e', head: '#26263e', limb: '#101020', accent: '#6affd8' },
+    scale: 0.6, health: 20, speed: 1.1, damage: 6,
+    biomes: ['deep_ocean', 'abyss', 'ocean'], weight: 6, depthRange: [30, 80],
+    loot: [{ blockId: 106, amount: 1 }],
+    description: 'The light is the lure.',
+  },
+  {
+    id: 'tide_serpent', name: 'Tide Serpent', emoji: '🐍', bodyPlan: 'serpent', habitat: 'water', temperament: 'hostile',
+    palette: { body: '#2a6a7a', head: '#347a8a', limb: '#1a4a58', accent: '#8ae0d0' },
+    scale: 1.5, health: 60, speed: 1.7, damage: 12,
+    biomes: ['ocean', 'deep_ocean', 'coral'], weight: 4, depthRange: [4, 40],
+    loot: [{ blockId: 102, amount: 2 }],
+    description: 'Longer than your boat.',
+  },
+];
+
+export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS, ...EAOIN_NATIVES];
 
 export const SPECIES_BY_ID: Record<string, SpeciesDefinition> = ALL_SPECIES.reduce(
   (acc, s) => {
@@ -411,6 +675,39 @@ export const SPECIES_BY_ID: Record<string, SpeciesDefinition> = ALL_SPECIES.redu
   },
   {} as Record<string, SpeciesDefinition>
 );
+
+/**
+ * Maps an informal species habitat tag onto the biome-id tokens that should
+ * satisfy it. Keeps `WildlifeRegistry` readable while matching the 150-entry
+ * biome vocabulary in `Biomes.ts`.
+ */
+const TAG_SYNONYMS: Record<string, string[]> = {
+  plain: ['plain', 'plains', 'meadow', 'grassland'],
+  snow: ['snow', 'snowy', 'frozen', 'ice', 'tundra', 'glacial'],
+  ice: ['ice', 'frozen', 'iceberg', 'glacial'],
+  arctic: ['arctic', 'frozen', 'snowy', 'tundra'],
+  tundra: ['tundra', 'snowy', 'frozen'],
+  jungle: ['jungle', 'rainforest', 'bamboo'],
+  rainforest: ['rainforest', 'jungle'],
+  mountain: ['mountain', 'alpine', 'highland', 'peaks', 'stony', 'jagged'],
+  alpine: ['alpine', 'mountain', 'peaks'],
+  highland: ['highland', 'mountain', 'alpine'],
+  forest: ['forest', 'woods', 'grove', 'taiga'],
+  taiga: ['taiga', 'spruce', 'pine'],
+  swamp: ['swamp', 'mangrove', 'bog', 'marsh'],
+  ocean: ['ocean', 'sea'],
+  beach: ['beach', 'coast', 'shore'],
+  desert: ['desert', 'badlands', 'dune'],
+  cave: ['cave', 'cavern', 'caverns', 'underground'],
+};
+
+const COLD_QUALIFIERS = new Set(['snowy', 'frozen', 'ice', 'tundra', 'glacial', 'arctic']);
+const WARM_QUALIFIERS = new Set(['desert', 'savanna', 'jungle', 'rainforest', 'tropical', 'warm']);
+
+/** Tags whose species must not appear in a cold variant of that biome. */
+const WARM_ONLY_TAGS = new Set(['savanna', 'jungle', 'rainforest', 'desert', 'oasis', 'bamboo']);
+/** Tags whose species must not appear in a warm variant of that biome. */
+const COLD_ONLY_TAGS = new Set(['snow', 'ice', 'arctic', 'tundra', 'frozen', 'iceberg']);
 
 /**
  * Every species that can spawn in a biome, respecting habitat and time of day.
@@ -433,9 +730,68 @@ export function speciesForBiome(
     // but is not hard-gated, so the world never feels empty.
     if (s.nocturnal && !isNight) return false;
     if (s.biomes.length === 0) return true;
-    return s.biomes.some((b) => key.includes(b) || b.includes(key));
+    // Climate veto is decided per SPECIES, not per tag. A lion lists both
+    // 'savanna' and 'plain'; checking tags individually let the neutral
+    // 'plain' tag sneak it into `snowy_plains` even though 'savanna' was
+    // vetoed. What matters is whether the animal as a whole belongs here.
+    if (!climateAllows(key, s)) return false;
+    return s.biomes.some((tag) => biomeMatches(key, tag));
   });
 }
+
+/**
+ * Reject a species whose overall climate is incompatible with the biome.
+ *
+ * A species is "warm" if any of its habitat tags is warm-only and none is
+ * cold-only, and vice versa. Animals that list both (or neither) are
+ * climate-agnostic and always pass.
+ */
+function climateAllows(biomeId: string, species: SpeciesDefinition): boolean {
+  const tokens = biomeId.split(/[^a-z]+/).filter(Boolean);
+  const biomeIsCold = tokens.some((t) => COLD_QUALIFIERS.has(t));
+  const biomeIsWarm = tokens.some((t) => WARM_QUALIFIERS.has(t));
+
+  const wantsWarm = species.biomes.some((t) => WARM_ONLY_TAGS.has(t));
+  const wantsCold = species.biomes.some((t) => COLD_ONLY_TAGS.has(t));
+
+  if (wantsWarm && !wantsCold && biomeIsCold) return false;
+  if (wantsCold && !wantsWarm && biomeIsWarm) return false;
+  return true;
+}
+
+/**
+ * Does a biome id match a species' habitat tag?
+ *
+ * ## Why this is not a plain substring test
+ *
+ * It used to be `key.includes(tag) || tag.includes(key)`, which put **savanna
+ * lions and elephants into `snowy_plains`** — because `'snowy_plains'`
+ * contains the substring `'plain'`. Every `*_plains` and `*_forest` biome
+ * inherited the fauna of its warm counterpart, so snowfields had lions in them.
+ *
+ * Matching is now on whole underscore-separated tokens, with an explicit
+ * exclusion list for climate words that invert a biome's meaning. A tag only
+ * matches if it appears as a token AND the biome is not disqualified.
+ */
+function biomeMatches(biomeId: string, tag: string): boolean {
+  const tokens = biomeId.split(/[^a-z]+/).filter(Boolean);
+
+  // Species tags are written in the singular and informally ('snow', 'jungle',
+  // 'mountain'), while biome ids are specific ('snowy_plains', 'rainforest',
+  // 'alpine_biome'). Synonyms bridge the two vocabularies so a tag matches the
+  // biomes a reader would expect it to.
+  const synonyms = TAG_SYNONYMS[tag] ?? [tag];
+  const present = synonyms.some((syn) =>
+    syn.split(/[^a-z]+/).filter(Boolean).every((t) => tokens.includes(t))
+  );
+  if (!present) return false;
+
+  // NOTE: the climate veto lives in `climateAllows`, which reasons about the
+  // species as a whole. Doing it here, per tag, let an animal with one neutral
+  // tag ('plain') bypass a veto earned by another ('savanna').
+  return true;
+}
+
 
 /** Weighted pick from a candidate list using a deterministic 0-1 roll. */
 export function pickSpecies(candidates: SpeciesDefinition[], roll: number): SpeciesDefinition | null {

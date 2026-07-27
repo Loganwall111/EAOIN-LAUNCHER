@@ -17,35 +17,74 @@ const ROOF_FRACTION = 0.18;
 const GLOW_BLOCKS = new Set([106, 107, 16, 49, 14]);
 const MOLTEN_BLOCKS = new Set([227, 219]);
 
-function survey(seed: string, chunkFrom = 40, chunkTo = 43) {
+/**
+ * Survey the underground across **widely scattered regions**.
+ *
+ * Sampling a handful of adjacent chunks (as this helper used to) only measures
+ * a single spot: the regional cave fields have wavelengths of hundreds of
+ * blocks, so a 3-chunk window reports 0% air in one place and 99% a few
+ * hundred blocks away. Averaging over spread-out regions is the only way to
+ * make an assertion about the world as a whole.
+ */
+const REGIONS: Array<[number, number]> = [
+  [8, 8], [60, -40], [-120, 75], [200, 210], [-300, -260], [420, -510],
+];
+
+interface Survey {
+  airRatio: number;
+  surfaceAirRatio: number;
+  glow: number;
+  molten: number;
+  /** Water blocks with nothing solid beneath them. Must always be 0. */
+  floatingWater: number;
+  /** Vertical air runs of 3+ blocks — space a player can actually stand in. */
+  walkablePockets: number;
+  /** Air ratio for each surveyed region, to catch "one region is hollow". */
+  perRegion: number[];
+}
+
+function survey(seed: string, regions: Array<[number, number]> = REGIONS): Survey {
   const gen = new AdvancedTerrainGenerator({ seed });
   let air = 0, solid = 0, glow = 0, molten = 0, surfaceAir = 0, surfaceTotal = 0;
+  let floatingWater = 0, walkablePockets = 0;
+  const perRegion: number[] = [];
 
-  for (let cx = chunkFrom; cx < chunkTo; cx += 1) {
-    for (let cz = chunkFrom; cz < chunkTo; cz += 1) {
-      const chunk = gen.generateChunk(cx, cz);
-      for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
-          const wx = cx * CHUNK_SIZE + lx;
-          const wz = cz * CHUNK_SIZE + lz;
-          const surface = gen.getTerrainHeight(wx, wz);
-          const roof = Math.max(5, Math.round((surface - BEDROCK) * ROOF_FRACTION));
+  for (const [rx, rz] of regions) {
+    let regionAir = 0, regionTotal = 0;
 
-          for (let y = BEDROCK; y < surface - roof; y += 1) {
-            const b = chunk.getBlock(lx, y, lz);
-            if (b === 0) air += 1; else solid += 1;
-            if (GLOW_BLOCKS.has(b)) glow += 1;
-            if (MOLTEN_BLOCKS.has(b)) molten += 1;
-          }
+    for (let cx = rx; cx < rx + 2; cx += 1) {
+      for (let cz = rz; cz < rz + 2; cz += 1) {
+        const chunk = gen.generateChunk(cx, cz);
+        for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
+          for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
+            const wx = cx * CHUNK_SIZE + lx;
+            const wz = cz * CHUNK_SIZE + lz;
+            const surface = gen.getTerrainHeight(wx, wz);
+            const roof = Math.max(5, Math.round((surface - BEDROCK) * ROOF_FRACTION));
 
-          // The four blocks at and just below the surface.
-          for (let y = surface - 3; y <= surface; y += 1) {
-            surfaceTotal += 1;
-            if (chunk.getBlock(lx, y, lz) === 0) surfaceAir += 1;
+            let run = 0;
+            for (let y = BEDROCK; y < surface - roof; y += 1) {
+              const b = chunk.getBlock(lx, y, lz);
+              regionTotal += 1;
+              if (b === 0) { air += 1; regionAir += 1; run += 1; }
+              else { solid += 1; if (run >= 3) walkablePockets += 1; run = 0; }
+              if (GLOW_BLOCKS.has(b)) glow += 1;
+              if (MOLTEN_BLOCKS.has(b)) molten += 1;
+              // Water must always rest on something.
+              if (b === 5 && chunk.getBlock(lx, y - 1, lz) === 0) floatingWater += 1;
+            }
+
+            // The four blocks at and just below the surface.
+            for (let y = surface - 3; y <= surface; y += 1) {
+              surfaceTotal += 1;
+              if (chunk.getBlock(lx, y, lz) === 0) surfaceAir += 1;
+            }
           }
         }
       }
     }
+
+    perRegion.push(regionTotal > 0 ? regionAir / regionTotal : 0);
   }
 
   return {
@@ -53,15 +92,44 @@ function survey(seed: string, chunkFrom = 40, chunkTo = 43) {
     surfaceAirRatio: surfaceAir / Math.max(1, surfaceTotal),
     glow,
     molten,
+    floatingWater,
+    walkablePockets,
+    perRegion,
   };
 }
 
 describe('DeepCaveGenerator', () => {
-  it('carves genuinely large caverns underground', () => {
-    // The old thin-tunnel pass alone produced only a few percent air. Real
-    // caverns should open up a large fraction of the rock column.
+  it('carves caves without hollowing out the underground', () => {
+    // The shipped build measured 52% air below the surface: the underground
+    // read as an empty shell rather than as rock with caves in it. Real
+    // Minecraft sits around 10%. Both bounds matter — too low means there is
+    // nothing to explore, too high means the world is hollow.
     const { airRatio } = survey('cavetest');
-    expect(airRatio).toBeGreaterThan(0.20);
+    expect(airRatio).toBeGreaterThan(0.02);
+    expect(airRatio).toBeLessThan(0.35);
+  });
+
+  it('leaves solid rock between cave systems in every region', () => {
+    // Guards the specific failure mode where one region opens up completely.
+    const { perRegion } = survey('cavetest');
+    for (const ratio of perRegion) {
+      expect(ratio).toBeLessThan(0.75);
+    }
+  });
+
+  it('produces caves you can actually stand up in', () => {
+    // Air alone is not enough: it has to form connected vertical space.
+    const { walkablePockets } = survey('cavetest');
+    expect(walkablePockets).toBeGreaterThan(100);
+  });
+
+  it('never leaves water floating with nothing underneath it', () => {
+    // The reported "pool of water just randomly floated" bug. A fixed-Y water
+    // band was written over already-carved caverns; 3,738 such blocks were
+    // measured in a four-chunk sample before the fix.
+    for (const seed of ['cavetest', 'eaoin_seed_2026', 'alpha', 'beta']) {
+      expect(survey(seed).floatingWater, `${seed}`).toBe(0);
+    }
   });
 
   it('leaves the surface intact', () => {
@@ -78,9 +146,13 @@ describe('DeepCaveGenerator', () => {
   });
 
   it('is stable across seeds', () => {
-    for (const seed of ['alpha', 'beta']) {
-      const { airRatio, surfaceAirRatio } = survey(seed, 20, 22);
-      expect(airRatio, `${seed} air`).toBeGreaterThan(0.10);
+    // Cave density must not swing wildly with the seed. An earlier attempt
+    // thresholded low-frequency fbm directly, which has a seed-dependent DC
+    // offset, and gave 3% air on one seed against 82% on another.
+    for (const seed of ['alpha', 'beta', 'cavetest', 'eaoin_seed_2026']) {
+      const { airRatio, surfaceAirRatio } = survey(seed);
+      expect(airRatio, `${seed} air`).toBeGreaterThan(0.02);
+      expect(airRatio, `${seed} air`).toBeLessThan(0.35);
       expect(surfaceAirRatio, `${seed} surface`).toBeLessThan(0.40);
     }
   });

@@ -1,10 +1,28 @@
 /**
- * CreatureManager — visible passive creatures with lightweight wander AI.
+ * CreatureManager — spawns, builds, animates and despawns the wildlife.
  *
- * This is intentionally runtime-only and does not replace the deeper creature
- * architecture skeleton. It gives the playable world obvious life right now:
- * cell-based spawning, safe surface placement, simple mesh bodies, wandering,
- * and despawn outside the active area.
+ * ## What changed
+ *
+ * This used to hard-code four animals (`'sheep' | 'deer' | 'goat' | 'hare'`)
+ * with flat-colour boxes, while `WildlifeRegistry.ts` sat in the repo with 41
+ * fully-specified species that **nothing imported** — a dead file. So the
+ * world had four mobs in it and the data for forty-one.
+ *
+ * The manager is now a thin, generic spawner driven entirely by that registry:
+ *
+ *   - **Every species in the roster can spawn**, filtered by biome, habitat
+ *     and time of day via `speciesForBiome`.
+ *   - **Every species has colour variants** from `SpeciesVariants.ts`, themed
+ *     on the animal itself (a wolf rolls timber/tundra/black/dire, never
+ *     something unrelated), plus a size tier. Variants are deterministic per
+ *     spawn id, so an animal looks the same each time it streams back in.
+ *   - **Seven body plans** are built procedurally: quadruped, biped, bird,
+ *     serpent, fish, marine and insect.
+ *   - **Textures** come from the shared painter, with eyes drawn into the head
+ *     texture rather than glued on as emissive cubes.
+ *   - **Hostile species attack**, so the world has actual danger in it.
+ *
+ * Adding an animal is still a single entry in `WildlifeRegistry.ts`.
  */
 import {
   AbstractMesh,
@@ -12,18 +30,35 @@ import {
   MeshBuilder,
   Scene,
   StandardMaterial,
+  Texture,
+  RawTexture,
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
-import { BiomeID, TerrainGenerator } from '../world/TerrainGenerator';
-
-export type CreatureKind = 'sheep' | 'deer' | 'goat' | 'hare';
+import { TerrainGenerator } from '../world/TerrainGenerator';
+import {
+  buildMobTextureFromPalette,
+  CoatStyle,
+  MOB_TEXTURE_SIZE,
+  MobPart,
+} from './CreatureTextures';
+import {
+  ALL_SPECIES,
+  BodyPlan,
+  pickSpecies,
+  SpeciesDefinition,
+  speciesForBiome,
+  SPECIES_BY_ID,
+} from './WildlifeRegistry';
+import { ResolvedVariant, resolveVariant } from './SpeciesVariants';
 
 export interface CreatureStats {
   count: number;
   cap: number;
   spawned: number;
   despawned: number;
+  /** Distinct species currently alive — surfaced in the HUD. */
+  species: number;
 }
 
 export interface CreatureDamageResult {
@@ -34,23 +69,168 @@ export interface CreatureDamageResult {
   drops?: Array<{ blockId: number; amount: number }>;
 }
 
+/** Damage the player takes from a hostile creature this tick. */
+export interface CreatureAttack {
+  amount: number;
+  source: string;
+}
+
 interface CreatureEntity {
   id: string;
-  kind: CreatureKind;
+  species: SpeciesDefinition;
+  variant: ResolvedVariant;
   health: number;
   maxHealth: number;
   root: TransformNode;
   meshes: AbstractMesh[];
+  /** Limbs driven by the walk cycle (legs, wings, or serpent segments). */
+  limbs: AbstractMesh[];
+  head: AbstractMesh | null;
   target: Vector3;
   speed: number;
   nextDecisionAt: number;
   randomState: number;
+  walkPhase: number;
+  moving: boolean;
+  /** Timestamp of this creature's last attack, for its cooldown. */
+  lastAttackAt: number;
 }
 
 const SPAWN_CELL_SIZE = 18;
 const SPAWN_RADIUS = 54;
 const DESPAWN_RADIUS = 74;
-const CREATURE_CAP = 22;
+const CREATURE_CAP = 26;
+/** Seconds between attacks from one hostile creature. */
+const ATTACK_COOLDOWN_MS = 1200;
+/** How close a hostile has to be to land a hit. */
+const ATTACK_REACH = 2.4;
+/** Hostiles inside this range will approach the player instead of wandering. */
+const AGGRO_RANGE = 16;
+
+/**
+ * Base dimensions per body plan, in world units, before the species' own
+ * `scale` and its variant's size tier are applied.
+ */
+interface PlanShape {
+  bodyWidth: number; bodyHeight: number; bodyDepth: number; bodyY: number;
+  headSize: number; headY: number; headZ: number;
+  legThickness: number; legHeight: number; legSpreadX: number; legSpreadZ: number;
+  /** Number of legs to build. 0 for legless plans. */
+  legCount: 0 | 2 | 4 | 6;
+  earWidth: number; earHeight: number; earDepth: number;
+  tailLength: number;
+  /** Wing planes, for birds and insects. */
+  wings: boolean;
+  /** Tail fin, for fish and marine animals. */
+  fin: boolean;
+  /** Chain of body segments, for serpents. */
+  segments: number;
+}
+
+const PLAN_SHAPES: Record<BodyPlan, PlanShape> = {
+  quadruped: {
+    bodyWidth: 0.72, bodyHeight: 0.64, bodyDepth: 1.12, bodyY: 0.86,
+    headSize: 0.42, headY: 1.02, headZ: 0.70,
+    legThickness: 0.17, legHeight: 0.52, legSpreadX: 0.25, legSpreadZ: 0.38,
+    legCount: 4, earWidth: 0.14, earHeight: 0.10, earDepth: 0.08,
+    tailLength: 0.18, wings: false, fin: false, segments: 0,
+  },
+  biped: {
+    bodyWidth: 0.42, bodyHeight: 0.72, bodyDepth: 0.40, bodyY: 0.74,
+    headSize: 0.34, headY: 1.24, headZ: 0.12,
+    legThickness: 0.13, legHeight: 0.40, legSpreadX: 0.13, legSpreadZ: 0,
+    legCount: 2, earWidth: 0.08, earHeight: 0.06, earDepth: 0.06,
+    tailLength: 0.20, wings: true, fin: false, segments: 0,
+  },
+  bird: {
+    bodyWidth: 0.34, bodyHeight: 0.34, bodyDepth: 0.46, bodyY: 0.44,
+    headSize: 0.24, headY: 0.70, headZ: 0.22,
+    legThickness: 0.07, legHeight: 0.22, legSpreadX: 0.10, legSpreadZ: 0,
+    legCount: 2, earWidth: 0.05, earHeight: 0.05, earDepth: 0.05,
+    tailLength: 0.22, wings: true, fin: false, segments: 0,
+  },
+  fish: {
+    bodyWidth: 0.22, bodyHeight: 0.34, bodyDepth: 0.62, bodyY: 0.30,
+    headSize: 0.24, headY: 0.30, headZ: 0.40,
+    legThickness: 0, legHeight: 0, legSpreadX: 0, legSpreadZ: 0,
+    legCount: 0, earWidth: 0, earHeight: 0, earDepth: 0,
+    tailLength: 0.26, wings: false, fin: true, segments: 0,
+  },
+  marine: {
+    bodyWidth: 0.68, bodyHeight: 0.74, bodyDepth: 2.10, bodyY: 0.60,
+    headSize: 0.56, headY: 0.62, headZ: 1.28,
+    legThickness: 0, legHeight: 0, legSpreadX: 0, legSpreadZ: 0,
+    legCount: 0, earWidth: 0, earHeight: 0, earDepth: 0,
+    tailLength: 0.7, wings: false, fin: true, segments: 0,
+  },
+  serpent: {
+    bodyWidth: 0.24, bodyHeight: 0.22, bodyDepth: 0.34, bodyY: 0.16,
+    headSize: 0.26, headY: 0.20, headZ: 0.42,
+    legThickness: 0, legHeight: 0, legSpreadX: 0, legSpreadZ: 0,
+    legCount: 0, earWidth: 0, earHeight: 0, earDepth: 0,
+    tailLength: 0, wings: false, fin: false, segments: 6,
+  },
+  insect: {
+    bodyWidth: 0.26, bodyHeight: 0.20, bodyDepth: 0.42, bodyY: 0.20,
+    headSize: 0.18, headY: 0.22, headZ: 0.28,
+    legThickness: 0.045, legHeight: 0.14, legSpreadX: 0.16, legSpreadZ: 0.12,
+    legCount: 6, earWidth: 0.04, earHeight: 0.10, earDepth: 0.03,
+    tailLength: 0.16, wings: false, fin: false, segments: 0,
+  },
+};
+
+/** Surface treatment per body plan, when the species has no better hint. */
+const PLAN_COAT: Record<BodyPlan, CoatStyle> = {
+  quadruped: 'fur',
+  biped: 'feather',
+  bird: 'feather',
+  fish: 'scale',
+  marine: 'slick',
+  serpent: 'scale',
+  insect: 'chitin',
+};
+
+/** Species that should use a specific coat regardless of their body plan. */
+const SPECIES_COAT: Record<string, CoatStyle> = {
+  sheep: 'wool',
+  cow: 'hide',
+  pig: 'hide',
+  elephant: 'hide',
+  crocodile: 'scale',
+  frog: 'slick',
+  whale: 'slick',
+  dolphin: 'slick',
+  orca: 'slick',
+};
+
+/** Marking style per species; anything unlisted gets none. */
+const SPECIES_MARKINGS: Record<string, 'patches' | 'dapples' | 'tufts' | 'stripes' | 'belly'> = {
+  cow: 'patches',
+  deer: 'dapples',
+  sheep: 'tufts',
+  giraffe: 'patches',
+  clownfish: 'stripes',
+  shark: 'belly',
+  dolphin: 'belly',
+  orca: 'patches',
+  whale: 'belly',
+  penguin: 'belly',
+  crocodile: 'stripes',
+  python: 'patches',
+  rattlesnake: 'stripes',
+  cobra: 'stripes',
+  sea_snake: 'stripes',
+  tiger: 'stripes',
+};
+
+/** Rotate `current` toward `target` by at most `maxDelta`, wrapping at ±π. */
+function approachAngle(current: number, target: number, maxDelta: number): number {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  if (Math.abs(diff) <= maxDelta) return target;
+  return current + Math.sign(diff) * maxDelta;
+}
 
 export class CreatureManager {
   private readonly creatures = new Map<string, CreatureEntity>();
@@ -58,12 +238,21 @@ export class CreatureManager {
   private spawnAccumulator = 0;
   private spawned = 0;
   private despawned = 0;
+  /** Set by the engine; receives contact damage from hostile creatures. */
+  onPlayerDamage?: (attack: CreatureAttack) => void;
+  /** World clock hour, so nocturnal species only appear at night. */
+  private timeOfDay = 12;
 
   constructor(
     private readonly scene: Scene,
     private readonly terrain: TerrainGenerator,
     private readonly seed: string
   ) {}
+
+  /** Keep the spawner in step with the world clock. */
+  setTimeOfDay(hour: number): void {
+    this.timeOfDay = hour;
+  }
 
   update(playerPosition: Vector3, deltaSeconds: number): void {
     this.spawnAccumulator += deltaSeconds;
@@ -74,7 +263,7 @@ export class CreatureManager {
 
     const now = performance.now();
     for (const creature of this.creatures.values()) {
-      this.updateCreature(creature, now, deltaSeconds);
+      this.updateCreature(creature, now, deltaSeconds, playerPosition);
     }
   }
 
@@ -83,49 +272,97 @@ export class CreatureManager {
     if (!creature) return { hit: false, dead: false, message: 'No creature hit' };
 
     creature.health = Math.max(0, creature.health - damage);
+    const name = creature.variant.displayName;
+
     if (creature.health > 0) {
+      // Squash-and-stretch hit feedback.
       creature.root.scaling = new Vector3(1.05, 0.94, 1.05);
       window.setTimeout(() => {
         if (!creature.root.isDisposed()) creature.root.scaling = Vector3.One();
       }, 90);
+      // Being hit provokes neutral animals and panics skittish ones.
+      if (creature.species.temperament === 'skittish') {
+        creature.nextDecisionAt = 0;
+        creature.speed = creature.variant.speed * 1.8;
+      }
       return {
         hit: true,
         dead: false,
-        message: `${this.creatureName(creature.kind)} hit (${Math.ceil(creature.health)}/${creature.maxHealth})`,
+        message: `${name} hit (${Math.ceil(creature.health)}/${creature.maxHealth})`,
       };
     }
 
     const position = creature.root.position.clone();
-    const drops = this.lootFor(creature.kind);
+    const drops = creature.species.loot;
     creature.root.dispose(false, true);
     this.creatures.delete(creatureId);
     this.despawned += 1;
-    return {
-      hit: true,
-      dead: true,
-      position,
-      drops,
-      message: `${this.creatureName(creature.kind)} defeated`,
-    };
+    return { hit: true, dead: true, position, drops, message: `${name} defeated` };
+  }
+
+  /** Remove every loaded creature. Backs `/kill @e`. */
+  clearAll(): number {
+    const removed = this.creatures.size;
+    for (const creature of this.creatures.values()) creature.root.dispose(false, true);
+    this.creatures.clear();
+    this.despawned += removed;
+    return removed;
+  }
+
+  /**
+   * Spawn one creature near a position. Backs `/summon`.
+   *
+   * Accepts any species id from the registry, so `/summon wolf`, `/summon
+   * elephant` and `/summon shark` all work.
+   */
+  spawnNear(position: Vector3, requested: string): string | null {
+    const wanted = requested.toLowerCase().trim();
+    const species = SPECIES_BY_ID[wanted]
+      ?? ALL_SPECIES.find((s) => s.name.toLowerCase() === wanted)
+      ?? SPECIES_BY_ID.sheep;
+    if (!species) return null;
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const angle = (attempt / 20) * Math.PI * 2;
+      const radius = 3 + (attempt % 5);
+      const x = position.x + Math.cos(angle) * radius;
+      const z = position.z + Math.sin(angle) * radius;
+      const safe = this.safeGroundPosition(x, z);
+      if (!safe) continue;
+      const id = `summon:${this.spawned}:${attempt}`;
+      const creature = this.createCreature(id, species, safe);
+      this.creatures.set(id, creature);
+      this.spawned += 1;
+      return creature.variant.displayName;
+    }
+    return null;
   }
 
   getStats(): CreatureStats {
+    const species = new Set<string>();
+    for (const creature of this.creatures.values()) species.add(creature.species.id);
     return {
       count: this.creatures.size,
       cap: CREATURE_CAP,
       spawned: this.spawned,
       despawned: this.despawned,
+      species: species.size,
     };
   }
 
   dispose(): void {
-    for (const creature of this.creatures.values()) {
-      creature.root.dispose(false, true);
-    }
+    for (const creature of this.creatures.values()) creature.root.dispose(false, true);
     this.creatures.clear();
-    for (const material of this.materials.values()) material.dispose();
+    for (const material of this.materials.values()) {
+      material.diffuseTexture?.dispose();
+      material.dispose();
+    }
     this.materials.clear();
   }
+
+  /* ---------------------------------------------------------------- */
+  /* population                                                        */
+  /* ---------------------------------------------------------------- */
 
   private updatePopulation(playerPosition: Vector3): void {
     for (const [id, creature] of Array.from(this.creatures.entries())) {
@@ -160,162 +397,30 @@ export class CreatureManager {
     const position = this.safeCreaturePosition(worldX, worldZ, playerPosition);
     if (!position) return;
 
-    const biome = this.terrain.getBiomeAt(worldX, worldZ);
-    const kind = this.chooseCreatureKind(biome, id);
-    const creature = this.createCreature(id, kind, position);
+    // Pick from everything the registry allows here, rather than a hard-coded
+    // four-way switch. Land habitats only: aquatic species need water volumes.
+    const biome = String(this.terrain.getBiomeAt(worldX, worldZ));
+    const isNight = this.timeOfDay < 6 || this.timeOfDay >= 19;
+    const candidates = speciesForBiome(biome, { habitat: 'land', isNight })
+      .filter((s) => s.habitat === 'land' || s.habitat === 'amphibious');
+    if (candidates.length === 0) return;
+
+    const species = pickSpecies(candidates, this.hashToUnit(`species:${id}`));
+    if (!species) return;
+
+    const creature = this.createCreature(id, species, position);
     this.creatures.set(id, creature);
     this.spawned += 1;
   }
 
   private safeCreaturePosition(worldX: number, worldZ: number, playerPosition: Vector3): Vector3 | null {
     if (Math.hypot(worldX - playerPosition.x, worldZ - playerPosition.z) < 11) return null;
-    if (this.terrain.getBiomeAt(worldX, worldZ) === 'Lake') return null;
-
-    const x = Math.floor(worldX);
-    const z = Math.floor(worldZ);
-    const groundY = this.terrain.getHeightAt(x, z);
-    if (groundY < 1) return null;
-    if (this.terrain.getBlockAt(x, groundY, z) === 5) return null;
-    if (this.terrain.getBlockAt(x, groundY + 1, z) !== 0) return null;
-    if (this.terrain.getBlockAt(x, groundY + 2, z) !== 0) return null;
-
-    return new Vector3(x + 0.5, groundY + 1, z + 0.5);
-  }
-
-  private createCreature(id: string, kind: CreatureKind, position: Vector3): CreatureEntity {
-    const root = new TransformNode(`creature_${kind}_${id}`, this.scene);
-    root.position = position.clone();
-
-    const meshes = this.createCreatureMeshes(kind, root);
-    const speed = kind === 'hare' ? 2.2 : kind === 'deer' ? 1.45 : 1.05;
-    const maxHealth = kind === 'deer' ? 26 : kind === 'goat' ? 24 : kind === 'sheep' ? 20 : 12;
-    const randomState = this.hashToInt(`creature-state:${id}`);
-    const creature: CreatureEntity = {
-      id,
-      kind,
-      health: maxHealth,
-      maxHealth,
-      root,
-      meshes,
-      target: position.clone(),
-      speed,
-      nextDecisionAt: 0,
-      randomState,
-    };
-    this.chooseNewTarget(creature, performance.now());
-    return creature;
-  }
-
-  private createCreatureMeshes(kind: CreatureKind, root: TransformNode): AbstractMesh[] {
-    const materials = this.creatureMaterials(kind);
-    const body = MeshBuilder.CreateBox(`creature_${kind}_body`, { width: 0.9, height: 0.62, depth: 1.25 }, this.scene);
-    body.parent = root;
-    body.position.y = 0.62;
-    body.material = materials.body;
-
-    const head = MeshBuilder.CreateBox(`creature_${kind}_head`, { width: 0.46, height: 0.42, depth: 0.46 }, this.scene);
-    head.parent = root;
-    head.position = new Vector3(0, 0.84, 0.78);
-    head.material = materials.head;
-
-    const meshes: AbstractMesh[] = [body, head];
-    for (const x of [-0.32, 0.32]) {
-      for (const z of [-0.42, 0.42]) {
-        const leg = MeshBuilder.CreateBox(`creature_${kind}_leg`, { width: 0.16, height: 0.5, depth: 0.16 }, this.scene);
-        leg.parent = root;
-        leg.position = new Vector3(x, 0.25, z);
-        leg.material = materials.leg;
-        meshes.push(leg);
-      }
-    }
-
-    if (kind === 'goat') {
-      for (const x of [-0.18, 0.18]) {
-        const horn = MeshBuilder.CreateCylinder(`creature_${kind}_horn`, { height: 0.34, diameterTop: 0.03, diameterBottom: 0.09 }, this.scene);
-        horn.parent = root;
-        horn.position = new Vector3(x, 1.14, 0.82);
-        horn.material = this.getMaterial('horn', new Color3(0.93, 0.87, 0.72));
-        meshes.push(horn);
-      }
-    }
-
-    if (kind === 'hare') {
-      for (const x of [-0.12, 0.12]) {
-        const ear = MeshBuilder.CreateBox(`creature_${kind}_ear`, { width: 0.1, height: 0.44, depth: 0.08 }, this.scene);
-        ear.parent = root;
-        ear.position = new Vector3(x, 1.2, 0.78);
-        ear.material = materials.head;
-        meshes.push(ear);
-      }
-    }
-
-    // 2.0 — every mob gets emissive eyes so creatures are visible at night and
-    // read as alive rather than as unlit boxes.
-    const eyeMaterial = this.getEyeMaterial(kind);
-    for (const x of [-0.13, 0.13]) {
-      const eye = MeshBuilder.CreateBox(`creature_${kind}_eye`, { width: 0.075, height: 0.075, depth: 0.05 }, this.scene);
-      eye.parent = root;
-      eye.position = new Vector3(x, 0.9, 1.0);
-      eye.material = eyeMaterial;
-      meshes.push(eye);
-    }
-
-    for (const mesh of meshes) {
-      mesh.isPickable = true;
-      mesh.checkCollisions = false;
-      mesh.metadata = { creatureId: root.name.replace(/^creature_[^_]+_/, '') };
-    }
-
-    return meshes;
-  }
-
-  private updateCreature(creature: CreatureEntity, now: number, deltaSeconds: number): void {
-    const toTarget = creature.target.subtract(creature.root.position);
-    const horizontalDistance = Math.hypot(toTarget.x, toTarget.z);
-    if (horizontalDistance < 0.35 || now >= creature.nextDecisionAt) {
-      this.chooseNewTarget(creature, now);
-      return;
-    }
-
-    const direction = new Vector3(toTarget.x, 0, toTarget.z).normalize();
-    const step = Math.min(horizontalDistance, creature.speed * deltaSeconds);
-    const nextX = creature.root.position.x + direction.x * step;
-    const nextZ = creature.root.position.z + direction.z * step;
-    const safe = this.safeGroundPosition(nextX, nextZ);
-    if (!safe) {
-      this.chooseNewTarget(creature, now);
-      return;
-    }
-
-    creature.root.position = safe;
-    creature.root.rotation.y = Math.atan2(direction.x, direction.z);
-    const bob = Math.sin(now * 0.008 + creature.randomState) * 0.035;
-    creature.root.position.y += bob;
-  }
-
-  private chooseNewTarget(creature: CreatureEntity, now: number): void {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const angle = this.nextRandom(creature) * Math.PI * 2;
-      const distance = 4 + this.nextRandom(creature) * 10;
-      const candidateX = creature.root.position.x + Math.cos(angle) * distance;
-      const candidateZ = creature.root.position.z + Math.sin(angle) * distance;
-      const safe = this.safeGroundPosition(candidateX, candidateZ);
-      if (safe) {
-        creature.target = safe;
-        creature.nextDecisionAt = now + 2500 + this.nextRandom(creature) * 4500;
-        return;
-      }
-    }
-
-    creature.target = creature.root.position.clone();
-    creature.nextDecisionAt = now + 1500;
+    return this.safeGroundPosition(worldX, worldZ);
   }
 
   private safeGroundPosition(worldX: number, worldZ: number): Vector3 | null {
     const x = Math.floor(worldX);
     const z = Math.floor(worldZ);
-    if (this.terrain.getBiomeAt(x, z) === 'Lake') return null;
-
     const groundY = this.terrain.getHeightAt(x, z);
     if (groundY < 1) return null;
     if (this.terrain.getBlockAt(x, groundY, z) === 5) return null;
@@ -324,94 +429,424 @@ export class CreatureManager {
     return new Vector3(worldX, groundY + 1, worldZ);
   }
 
-  private chooseCreatureKind(biome: BiomeID, salt: string): CreatureKind {
-    const roll = this.hashToUnit(`kind:${salt}`);
-    if (biome === 'Forest') return roll > 0.4 ? 'deer' : 'sheep';
-    if (biome === 'Highlands') return roll > 0.28 ? 'goat' : 'sheep';
-    if (biome === 'Desert') return 'hare';
-    return roll > 0.7 ? 'deer' : 'sheep';
-  }
+  /* ---------------------------------------------------------------- */
+  /* construction                                                      */
+  /* ---------------------------------------------------------------- */
 
+  private createCreature(id: string, species: SpeciesDefinition, position: Vector3): CreatureEntity {
+    // Two independent deterministic rolls: coat and size.
+    const variant = resolveVariant(
+      species,
+      this.hashToUnit(`morph:${id}:${species.id}`),
+      this.hashToUnit(`size:${id}:${species.id}`)
+    );
 
-  private lootFor(kind: CreatureKind): Array<{ blockId: number; amount: number }> {
-    if (kind === 'goat') return [{ blockId: 3, amount: 1 }];
-    if (kind === 'hare') return [{ blockId: 4, amount: 1 }];
-    if (kind === 'deer') return [{ blockId: 6, amount: 1 }];
-    return [{ blockId: 7, amount: 1 }];
-  }
+    const root = new TransformNode(`creature_${species.id}_${id}`, this.scene);
+    root.position = position.clone();
 
-  private creatureName(kind: CreatureKind): string {
-    return kind.charAt(0).toUpperCase() + kind.slice(1);
-  }
+    const { meshes, limbs, head } = this.buildBody(species, variant, root, id);
 
-  private creatureMaterials(kind: CreatureKind): { body: StandardMaterial; head: StandardMaterial; leg: StandardMaterial } {
-    if (kind === 'deer') {
-      return {
-        body: this.getMaterial('deer_body', new Color3(0.5, 0.28, 0.12)),
-        head: this.getMaterial('deer_head', new Color3(0.42, 0.22, 0.09)),
-        leg: this.getMaterial('deer_leg', new Color3(0.24, 0.13, 0.06)),
-      };
-    }
-    if (kind === 'goat') {
-      return {
-        body: this.getMaterial('goat_body', new Color3(0.72, 0.72, 0.68)),
-        head: this.getMaterial('goat_head', new Color3(0.82, 0.82, 0.78)),
-        leg: this.getMaterial('goat_leg', new Color3(0.42, 0.42, 0.4)),
-      };
-    }
-    if (kind === 'hare') {
-      return {
-        body: this.getMaterial('hare_body', new Color3(0.76, 0.58, 0.32)),
-        head: this.getMaterial('hare_head', new Color3(0.86, 0.68, 0.42)),
-        leg: this.getMaterial('hare_leg', new Color3(0.54, 0.38, 0.2)),
-      };
-    }
-    return {
-      body: this.getMaterial('sheep_body', new Color3(0.88, 0.86, 0.76)),
-      head: this.getMaterial('sheep_head', new Color3(0.18, 0.18, 0.16)),
-      leg: this.getMaterial('sheep_leg', new Color3(0.1, 0.1, 0.09)),
+    const creature: CreatureEntity = {
+      id,
+      species,
+      variant,
+      health: variant.health,
+      maxHealth: variant.health,
+      root,
+      meshes,
+      limbs,
+      head,
+      target: position.clone(),
+      speed: variant.speed,
+      nextDecisionAt: 0,
+      randomState: this.hashToInt(`creature-state:${id}`),
+      walkPhase: 0,
+      moving: false,
+      lastAttackAt: 0,
     };
+    this.chooseNewTarget(creature, performance.now());
+    return creature;
   }
 
-  /**
-   * Emissive eye material, cached per species.
-   *
-   * Predators get a harder, hotter eyeshine than prey — the same trick real
-   * animals' tapetum lucidum produces, and it makes a wolf at the treeline
-   * instantly readable as a threat.
-   */
-  private getEyeMaterial(kind: CreatureKind): StandardMaterial {
-    const name = `eye_${kind}`;
+  /** Build the mesh set for a species' body plan. */
+  private buildBody(
+    species: SpeciesDefinition,
+    variant: ResolvedVariant,
+    root: TransformNode,
+    id: string
+  ): { meshes: AbstractMesh[]; limbs: AbstractMesh[]; head: AbstractMesh | null } {
+    const plan = PLAN_SHAPES[species.bodyPlan];
+    const s = variant.scale;
+    const meshes: AbstractMesh[] = [];
+    const limbs: AbstractMesh[] = [];
+
+    const bodyMat = this.partMaterial(species, variant, 'body');
+    const headMat = this.partMaterial(species, variant, 'head');
+    const legMat = this.partMaterial(species, variant, 'leg');
+
+    // --- torso -----------------------------------------------------------
+    const body = MeshBuilder.CreateBox(`creature_${species.id}_body`, {
+      width: plan.bodyWidth * s, height: plan.bodyHeight * s, depth: plan.bodyDepth * s,
+    }, this.scene);
+    body.parent = root;
+    body.position.y = plan.bodyY * s;
+    body.material = bodyMat;
+    meshes.push(body);
+
+    // --- serpent segments -------------------------------------------------
+    if (plan.segments > 0) {
+      const segMat = this.partMaterial(species, variant, 'segment');
+      for (let i = 1; i <= plan.segments; i += 1) {
+        // Each segment tapers toward the tail.
+        const taper = 1 - (i / (plan.segments + 2)) * 0.55;
+        const seg = MeshBuilder.CreateBox(`creature_${species.id}_seg`, {
+          width: plan.bodyWidth * s * taper,
+          height: plan.bodyHeight * s * taper,
+          depth: plan.bodyDepth * s,
+        }, this.scene);
+        seg.parent = root;
+        seg.position = new Vector3(0, plan.bodyY * s, -plan.bodyDepth * s * i);
+        seg.material = segMat;
+        meshes.push(seg);
+        // Segments are the "limbs" a serpent animates — they slither.
+        limbs.push(seg);
+      }
+    }
+
+    // --- head -------------------------------------------------------------
+    const head = MeshBuilder.CreateBox(`creature_${species.id}_head`, {
+      width: plan.headSize * s, height: plan.headSize * s, depth: plan.headSize * s,
+    }, this.scene);
+    head.parent = root;
+    head.position = new Vector3(0, plan.headY * s, plan.headZ * s);
+    head.material = headMat;
+    meshes.push(head);
+
+    // Snout / beak, so the head is not a featureless cube in profile.
+    const snout = MeshBuilder.CreateBox(`creature_${species.id}_snout`, {
+      width: plan.headSize * s * 0.5,
+      height: plan.headSize * s * 0.42,
+      depth: plan.headSize * s * 0.44,
+    }, this.scene);
+    snout.parent = head;
+    snout.position = new Vector3(0, -plan.headSize * s * 0.18, plan.headSize * s * 0.62);
+    snout.material = headMat;
+    meshes.push(snout);
+
+    // Ears — small, but they carry a lot of the silhouette.
+    if (plan.earWidth > 0) {
+      for (const side of [-1, 1]) {
+        const ear = MeshBuilder.CreateBox(`creature_${species.id}_ear`, {
+          width: plan.earWidth * s, height: plan.earHeight * s, depth: plan.earDepth * s,
+        }, this.scene);
+        ear.parent = head;
+        ear.position = new Vector3(side * plan.headSize * s * 0.34, plan.headSize * s * 0.6, 0);
+        ear.material = headMat;
+        meshes.push(ear);
+      }
+    }
+
+    // --- legs -------------------------------------------------------------
+    if (plan.legCount > 0) {
+      const rows = plan.legCount === 2 ? [0] : plan.legCount === 6 ? [-1, 0, 1] : [-1, 1];
+      for (const sx of [-1, 1]) {
+        for (const sz of rows) {
+          const leg = MeshBuilder.CreateBox(`creature_${species.id}_leg`, {
+            width: plan.legThickness * s, height: plan.legHeight * s, depth: plan.legThickness * s,
+          }, this.scene);
+          leg.parent = root;
+          leg.setPivotPoint(new Vector3(0, (plan.legHeight * s) / 2, 0));
+          leg.position = new Vector3(
+            sx * plan.legSpreadX * s,
+            (plan.legHeight * s) / 2,
+            sz * plan.legSpreadZ * s
+          );
+          leg.material = legMat;
+          meshes.push(leg);
+          limbs.push(leg);
+        }
+      }
+    }
+
+    // --- wings ------------------------------------------------------------
+    if (plan.wings) {
+      const wingMat = this.partMaterial(species, variant, 'wing');
+      for (const side of [-1, 1]) {
+        const wing = MeshBuilder.CreateBox(`creature_${species.id}_wing`, {
+          width: plan.bodyWidth * s * 1.5, height: plan.bodyHeight * s * 0.14, depth: plan.bodyDepth * s * 0.8,
+        }, this.scene);
+        wing.parent = root;
+        wing.setPivotPoint(new Vector3(-side * plan.bodyWidth * s * 0.75, 0, 0));
+        wing.position = new Vector3(side * plan.bodyWidth * s * 0.8, plan.bodyY * s * 1.05, 0);
+        wing.material = wingMat;
+        meshes.push(wing);
+        limbs.push(wing);
+      }
+    }
+
+    // --- tail fin ---------------------------------------------------------
+    if (plan.fin) {
+      const finMat = this.partMaterial(species, variant, 'fin');
+      const fin = MeshBuilder.CreateBox(`creature_${species.id}_fin`, {
+        width: plan.bodyWidth * s * 0.22, height: plan.bodyHeight * s * 1.3, depth: plan.tailLength * s,
+      }, this.scene);
+      fin.parent = root;
+      fin.setPivotPoint(new Vector3(0, 0, plan.tailLength * s * 0.5));
+      fin.position = new Vector3(0, plan.bodyY * s, -plan.bodyDepth * s * 0.62);
+      fin.material = finMat;
+      meshes.push(fin);
+      limbs.push(fin);
+
+      // Dorsal fin, which is most of a shark's silhouette.
+      const dorsal = MeshBuilder.CreateBox(`creature_${species.id}_dorsal`, {
+        width: plan.bodyWidth * s * 0.14, height: plan.bodyHeight * s * 0.7, depth: plan.bodyDepth * s * 0.3,
+      }, this.scene);
+      dorsal.parent = root;
+      dorsal.position = new Vector3(0, plan.bodyY * s + plan.bodyHeight * s * 0.75, 0);
+      dorsal.material = finMat;
+      meshes.push(dorsal);
+    } else if (plan.tailLength > 0 && plan.segments === 0) {
+      const tail = MeshBuilder.CreateBox(`creature_${species.id}_tail`, {
+        width: plan.legThickness * s * 0.8,
+        height: plan.legThickness * s * 0.8,
+        depth: plan.tailLength * s,
+      }, this.scene);
+      tail.parent = root;
+      tail.position = new Vector3(0, (plan.bodyY + plan.bodyHeight * 0.25) * s, -plan.bodyDepth * s * 0.55);
+      tail.material = bodyMat;
+      meshes.push(tail);
+    }
+
+    // --- horns ------------------------------------------------------------
+    if (species.id === 'goat' || species.id === 'deer' || species.id === 'cow') {
+      for (const side of [-1, 1]) {
+        const horn = MeshBuilder.CreateCylinder(`creature_${species.id}_horn`, {
+          height: 0.3 * s, diameterTop: 0.03 * s, diameterBottom: 0.08 * s, tessellation: 6,
+        }, this.scene);
+        horn.parent = head;
+        horn.position = new Vector3(side * plan.headSize * s * 0.3, plan.headSize * s * 0.7, -0.02);
+        horn.rotation.z = side * 0.35;
+        horn.material = this.solidMaterial('horn', new Color3(0.9, 0.86, 0.74));
+        meshes.push(horn);
+      }
+    }
+
+    for (const mesh of meshes) {
+      mesh.isPickable = true;
+      mesh.checkCollisions = false;
+      mesh.receiveShadows = true;
+      // The engine picks by this id, so every part must carry it.
+      mesh.metadata = { creatureId: id };
+    }
+
+    return { meshes, limbs, head };
+  }
+
+  /** Cached textured material for one part of one species variant. */
+  private partMaterial(
+    species: SpeciesDefinition,
+    variant: ResolvedVariant,
+    part: MobPart
+  ): StandardMaterial {
+    const name = `${variant.key}_${part}`;
     const existing = this.materials.get(name);
     if (existing) return existing;
 
-    const glow = kind === 'goat'
-      ? new Color3(1.0, 0.82, 0.28)
-      : kind === 'deer'
-        ? new Color3(0.62, 0.92, 1.0)
-        : kind === 'hare'
-          ? new Color3(1.0, 0.44, 0.44)
-          : new Color3(0.86, 0.96, 1.0);
-
     const material = new StandardMaterial(`creature_material_${name}`, this.scene);
-    material.diffuseColor = Color3.Black();
-    material.emissiveColor = glow;
-    material.specularColor = Color3.Black();
-    material.disableLighting = true;
+    const texels = buildMobTextureFromPalette(
+      {
+        coat: part === 'head' ? variant.palette.head
+          : part === 'leg' ? variant.palette.limb
+          : variant.palette.body,
+        accent: variant.palette.accent ?? variant.palette.limb,
+        eye: '#1c1610',
+        style: SPECIES_COAT[species.id] ?? PLAN_COAT[species.bodyPlan],
+        seed: variant.key,
+        markings: SPECIES_MARKINGS[species.id] ?? 'none',
+      },
+      part
+    );
+
+    const texture = RawTexture.CreateRGBATexture(
+      texels, MOB_TEXTURE_SIZE, MOB_TEXTURE_SIZE, this.scene,
+      true, false, Texture.NEAREST_NEAREST_MIPLINEAR
+    );
+    texture.name = `creature_tex_${name}`;
+    material.diffuseTexture = texture;
+    material.specularColor = new Color3(0.03, 0.03, 0.03);
+    material.ambientColor = new Color3(1, 1, 1);
     this.materials.set(name, material);
     return material;
   }
 
-  private getMaterial(name: string, color: Color3): StandardMaterial {
+  private solidMaterial(name: string, color: Color3): StandardMaterial {
     const existing = this.materials.get(name);
     if (existing) return existing;
-
     const material = new StandardMaterial(`creature_material_${name}`, this.scene);
     material.diffuseColor = color;
     material.specularColor = new Color3(0.04, 0.04, 0.04);
     this.materials.set(name, material);
     return material;
   }
+
+  /* ---------------------------------------------------------------- */
+  /* behaviour                                                         */
+  /* ---------------------------------------------------------------- */
+
+  private updateCreature(
+    creature: CreatureEntity,
+    now: number,
+    deltaSeconds: number,
+    playerPosition: Vector3
+  ): void {
+    const distanceToPlayer = Vector3.Distance(creature.root.position, playerPosition);
+    const hostile = creature.species.temperament === 'hostile';
+    const skittish = creature.species.temperament === 'skittish';
+
+    // --- hostiles hunt, skittish animals flee ----------------------------
+    // Before this, every animal wandered aimlessly and nothing could hurt you.
+    if (hostile && distanceToPlayer < AGGRO_RANGE) {
+      creature.target = playerPosition.clone();
+      creature.nextDecisionAt = now + 400;
+
+      if (distanceToPlayer <= ATTACK_REACH && now - creature.lastAttackAt >= ATTACK_COOLDOWN_MS) {
+        creature.lastAttackAt = now;
+        this.onPlayerDamage?.({
+          amount: creature.species.damage,
+          source: creature.variant.displayName,
+        });
+        // Lunge, so the hit is legible.
+        creature.root.scaling = new Vector3(1.1, 0.92, 1.12);
+        window.setTimeout(() => {
+          if (!creature.root.isDisposed()) creature.root.scaling = Vector3.One();
+        }, 110);
+      }
+    } else if (skittish && distanceToPlayer < 9) {
+      // Run directly away from the player.
+      const away = creature.root.position.subtract(playerPosition);
+      away.y = 0;
+      if (away.lengthSquared() > 0.001) {
+        away.normalize().scaleInPlace(12);
+        creature.target = creature.root.position.add(away);
+        creature.nextDecisionAt = now + 900;
+      }
+    }
+
+    const toTarget = creature.target.subtract(creature.root.position);
+    const horizontalDistance = Math.hypot(toTarget.x, toTarget.z);
+    if (horizontalDistance < 0.35 || now >= creature.nextDecisionAt) {
+      creature.moving = false;
+      this.animateCreature(creature, now, deltaSeconds, 0);
+      this.chooseNewTarget(creature, now);
+      return;
+    }
+
+    const direction = new Vector3(toTarget.x, 0, toTarget.z).normalize();
+    const step = Math.min(horizontalDistance, creature.speed * deltaSeconds);
+    const safe = this.safeGroundPosition(
+      creature.root.position.x + direction.x * step,
+      creature.root.position.z + direction.z * step
+    );
+    if (!safe) {
+      creature.moving = false;
+      this.animateCreature(creature, now, deltaSeconds, 0);
+      this.chooseNewTarget(creature, now);
+      return;
+    }
+
+    creature.root.position = safe;
+    creature.root.rotation.y = approachAngle(
+      creature.root.rotation.y,
+      Math.atan2(direction.x, direction.z),
+      deltaSeconds * 6
+    );
+    creature.moving = true;
+    this.animateCreature(creature, now, deltaSeconds, step);
+  }
+
+  /**
+   * Animate the body plan.
+   *
+   * Quadrupeds and bipeds swing legs in diagonal pairs, birds and insects flap,
+   * serpents undulate their segments, fish sweep their tail fin. Phase is
+   * advanced by distance travelled so nothing ever moonwalks.
+   */
+  private animateCreature(
+    creature: CreatureEntity,
+    now: number,
+    deltaSeconds: number,
+    distance: number
+  ): void {
+    const plan = PLAN_SHAPES[creature.species.bodyPlan];
+    const flying = creature.species.bodyPlan === 'bird' || creature.species.bodyPlan === 'insect';
+    const swimming = creature.species.bodyPlan === 'fish' || creature.species.bodyPlan === 'marine';
+    const slithering = plan.segments > 0;
+
+    if (slithering) {
+      // A travelling sine wave down the body: each segment lags the one ahead.
+      creature.walkPhase += (creature.moving ? distance * 3 : deltaSeconds * 1.6);
+      creature.limbs.forEach((segment, index) => {
+        segment.position.x = Math.sin(creature.walkPhase - index * 0.7) * 0.16 * creature.variant.scale;
+      });
+      return;
+    }
+
+    if (flying || swimming) {
+      // Wings and fins beat continuously, faster while moving.
+      creature.walkPhase += deltaSeconds * (creature.moving ? 11 : 5);
+      const beat = Math.sin(creature.walkPhase);
+      for (const limb of creature.limbs) {
+        if (swimming) limb.rotation.y = beat * 0.5;
+        else limb.rotation.z = beat * 0.85;
+      }
+      // A gentle hover bob, so airborne animals never look pinned in place.
+      creature.root.position.y += Math.sin(creature.walkPhase * 0.5) * 0.006;
+      return;
+    }
+
+    if (creature.moving) {
+      creature.walkPhase += distance / Math.max(0.2, plan.legHeight * creature.variant.scale * 1.6);
+      const swing = Math.sin(creature.walkPhase * Math.PI * 2) * 0.7;
+      creature.limbs.forEach((leg, index) => {
+        // Diagonal pairs, which is how quadrupeds actually walk.
+        leg.rotation.x = swing * (index === 0 || index === 3 ? 1 : -1);
+      });
+      creature.root.position.y +=
+        Math.abs(Math.sin(creature.walkPhase * Math.PI * 2)) * plan.legHeight * creature.variant.scale * 0.06;
+      if (creature.head) creature.head.rotation.x = 0.06;
+    } else {
+      for (const leg of creature.limbs) {
+        leg.rotation.x += (0 - leg.rotation.x) * Math.min(1, deltaSeconds * 8);
+      }
+      // Grazing: dip the head on a slow cycle, offset per animal.
+      if (creature.head) {
+        const graze = Math.sin(now * 0.0011 + creature.randomState * 0.001);
+        creature.head.rotation.x = graze > 0.4 ? 0.62 : 0.06;
+      }
+    }
+  }
+
+  private chooseNewTarget(creature: CreatureEntity, now: number): void {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const angle = this.nextRandom(creature) * Math.PI * 2;
+      const distance = 4 + this.nextRandom(creature) * 10;
+      const safe = this.safeGroundPosition(
+        creature.root.position.x + Math.cos(angle) * distance,
+        creature.root.position.z + Math.sin(angle) * distance
+      );
+      if (safe) {
+        creature.target = safe;
+        creature.nextDecisionAt = now + 2500 + this.nextRandom(creature) * 4500;
+        return;
+      }
+    }
+    creature.target = creature.root.position.clone();
+    creature.nextDecisionAt = now + 1500;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* deterministic randomness                                          */
+  /* ---------------------------------------------------------------- */
 
   private nextRandom(creature: CreatureEntity): number {
     creature.randomState = (Math.imul(1664525, creature.randomState) + 1013904223) >>> 0;

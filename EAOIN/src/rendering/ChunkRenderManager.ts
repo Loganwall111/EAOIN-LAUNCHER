@@ -9,8 +9,9 @@
 import { Mesh, Scene, Vector3, VertexData } from '@babylonjs/core';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
-import { BlockMaterialMap } from './BlockMaterials';
-import { greedyMesh } from './GreedyMesher';
+import { BlockMaterialMap, materialForSurface } from './BlockMaterials';
+import { faceVariantFor } from './BlockTextureSource';
+import { decodeSurfaceKey, greedyMesh, SurfaceKey } from './GreedyMesher';
 
 export interface ChunkRenderStats {
   loadedChunks: number;
@@ -40,6 +41,16 @@ export interface StreamUpdateOptions {
    * screen for minutes, so callers spread the work over several frames.
    */
   budget?: number;
+  /**
+   * Maximum wall-clock milliseconds to spend generating + meshing.
+   *
+   * A fixed chunk count is the wrong unit: chunk cost varies by an order of
+   * magnitude between a flat plain and a mountain riddled with caverns, so
+   * "2 chunks" was comfortably under budget in one place and a 40ms frame
+   * spike in another. Stopping on elapsed time keeps the frame rate steady
+   * and simply streams a little slower where the terrain is expensive.
+   */
+  timeBudgetMs?: number;
 }
 
 interface MutableMeshData {
@@ -47,6 +58,8 @@ interface MutableMeshData {
   normals: number[];
   uvs: number[];
   indices: number[];
+  /** Baked ambient-occlusion vertex colours; empty when AO is disabled. */
+  colors: number[];
 }
 
 interface FaceDefinition {
@@ -72,6 +85,12 @@ const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
   [0, 0, -1],
 ];
 
+/** Monotonic clock, falling back to Date.now in non-browser test environments. */
+const now = (): number =>
+  (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
+
 const NEIGHBOR_CHUNKS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
   [1, 0],
@@ -88,12 +107,25 @@ export class ChunkRenderManager {
   private rebuildCount = 0;
   /** Greedy face merging. Kept switchable so the old path stays testable. */
   private greedyEnabled = true;
+  /** Baked contact shading. See `setAmbientOcclusion`. */
+  private ambientOcclusionEnabled = true;
 
   constructor(private readonly scene: Scene, private readonly materials: BlockMaterialMap) {}
 
   /** Toggle greedy meshing. Disabling forces the naive one-quad-per-face path. */
   setGreedyMeshing(enabled: boolean): void {
     this.greedyEnabled = enabled;
+  }
+
+  /**
+   * Toggle baked per-vertex ambient occlusion.
+   *
+   * AO is baked at mesh time, so changing this only affects chunks meshed
+   * afterwards; the engine calls `clearAll()` when the player flips the
+   * setting so the visible world rebuilds.
+   */
+  setAmbientOcclusion(enabled: boolean): void {
+    this.ambientOcclusionEnabled = enabled;
   }
 
   /**
@@ -152,8 +184,13 @@ export class ChunkRenderManager {
     }
 
     let loaded = 0;
+    const timeBudgetMs = options.timeBudgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Number.isFinite(timeBudgetMs) ? now() : 0;
     for (const entry of missing) {
       if (loaded >= budget) break;
+      // Always allow the first chunk through, so progress is guaranteed even
+      // if a single chunk exceeds the whole budget.
+      if (loaded > 0 && Number.isFinite(timeBudgetMs) && now() - startedAt >= timeBudgetMs) break;
       const chunk = generateChunk(entry.cx, entry.cz);
       this.chunks.set(this.key(entry.cx, entry.cz), chunk);
       dirty.add(this.key(entry.cx, entry.cz));
@@ -234,33 +271,51 @@ export class ChunkRenderManager {
 
     const chunkMeshes: Mesh[] = [];
     let triangleCount = 0;
-    for (const [blockId, data] of groups) {
+    for (const [surfaceKey, data] of groups) {
       if (data.positions.length === 0) continue;
 
-      const blockName = getBlock(blockId).name.toLowerCase().replace(/\s+/g, '_');
-      const mesh = new Mesh(`voxel_world_chunk_${cx}_${cz}_${blockName}`, this.scene);
-      const vertexData = new VertexData();
-      vertexData.positions = data.positions;
-      vertexData.normals = data.normals;
-      vertexData.uvs = data.uvs;
-      vertexData.indices = data.indices;
-      vertexData.applyToMesh(mesh, true);
-
+      const { blockId, variant } = decodeSurfaceKey(surfaceKey);
       const block = getBlock(blockId);
-      mesh.material = this.materials.get(blockId) ?? null;
+      const blockName = block.name.toLowerCase().replace(/\s+/g, '_');
+      const mesh = new Mesh(`voxel_world_chunk_${cx}_${cz}_${blockName}_${variant}`, this.scene);
+      const vertexData = new VertexData();
+      // Typed arrays avoid Babylon re-boxing these multi-thousand-element
+      // number[]s on every chunk rebuild, which was a real allocation spike
+      // while streaming.
+      vertexData.positions = new Float32Array(data.positions);
+      vertexData.normals = new Float32Array(data.normals);
+      vertexData.uvs = new Float32Array(data.uvs);
+      vertexData.indices = data.positions.length / 3 > 65535
+        ? new Uint32Array(data.indices)
+        : new Uint16Array(data.indices);
+      const hasAo = data.colors.length > 0;
+      if (hasAo) vertexData.colors = new Float32Array(data.colors);
+      // `false` = do not keep a CPU-side copy updatable; chunk meshes are
+      // rebuilt wholesale rather than mutated in place.
+      vertexData.applyToMesh(mesh, false);
+
+      mesh.useVertexColors = hasAo;
+      mesh.material = materialForSurface(this.materials, surfaceKey);
       mesh.checkCollisions = block.solid;
       mesh.isPickable = true;
-      mesh.receiveShadows = true;
+      // Only opaque terrain receives shadows; transparent water/glass
+      // receiving them caused dark banding across lakes.
+      mesh.receiveShadows = !block.transparent;
+      // Terrain is the shadow caster set; registering happens in the engine.
+      mesh.metadata = { voxelChunk: true, blockId };
 
       // --- per-mesh render cost controls ---------------------------------
       // Chunk geometry never moves, so Babylon can skip its world-matrix and
       // bounding-box recomputation every frame.
       mesh.freezeWorldMatrix();
-      mesh.doNotSyncBoundingInfo = true;
+      // NOTE: bounding info must stay in sync or frustum culling silently
+      // keeps every chunk active. We refresh it once here, then freeze.
+      mesh.refreshBoundingInfo();
+      mesh.cullingStrategy = Mesh.CULLINGSTRATEGY_BOUNDINGSPHERE_ONLY;
       // Static geometry: let Babylon skip per-frame vertex-buffer rebinding.
       mesh.alwaysSelectAsActiveMesh = false;
-      // Materials are shared per block id and never change after bake, so the
-      // engine can cache the effect instead of re-evaluating it each frame.
+      // Materials are shared per surface key and never change after bake, so
+      // the engine can cache the effect instead of re-evaluating it per frame.
       mesh.material?.freeze();
 
       chunkMeshes.push(mesh);
@@ -274,7 +329,7 @@ export class ChunkRenderManager {
   }
 
   /** Merged-quad geometry. Same visual result, far fewer triangles. */
-  private buildGreedyGroups(chunk: Chunk): Map<BlockID, MutableMeshData> {
+  private buildGreedyGroups(chunk: Chunk): Map<SurfaceKey, MutableMeshData> {
     const originX = chunk.x * CHUNK_SIZE;
     const originZ = chunk.z * CHUNK_SIZE;
 
@@ -284,6 +339,7 @@ export class ChunkRenderManager {
       sizeZ: CHUNK_SIZE,
       offsetX: originX,
       offsetZ: originZ,
+      ambientOcclusion: this.ambientOcclusionEnabled,
       getBlock: (x, y, z) => chunk.getBlock(x, y, z),
       // Neighbour lookups must cross the chunk seam, otherwise every chunk
       // border would be walled off with faces the player can see through.
@@ -297,12 +353,18 @@ export class ChunkRenderManager {
         if (neighborId === blockId) return false;
         return getBlock(blockId).transparent || getBlock(neighborId).transparent;
       },
-    }) as Map<BlockID, MutableMeshData>;
+      // Grass/log get distinct top and bottom materials; everything else
+      // stays a single group so we do not multiply draw calls.
+      faceVariantOf: (blockId, direction) => faceVariantFor(blockId, direction),
+      // Transparent blocks must not cast ambient occlusion, or a leaf canopy
+      // shadows itself into the unreadable black the player reported.
+      isOccluder: (blockId) => blockId !== 0 && !getBlock(blockId).transparent,
+    }) as Map<SurfaceKey, MutableMeshData>;
   }
 
   /** The original one-quad-per-face path, kept for comparison and fallback. */
-  private buildNaiveGroups(chunk: Chunk): Map<BlockID, MutableMeshData> {
-    const groups = new Map<BlockID, MutableMeshData>();
+  private buildNaiveGroups(chunk: Chunk): Map<SurfaceKey, MutableMeshData> {
+    const groups = new Map<SurfaceKey, MutableMeshData>();
     this.appendChunkFaces(chunk, groups);
     return groups;
   }
@@ -348,7 +410,7 @@ export class ChunkRenderManager {
     this.naiveTriangles.delete(key);
   }
 
-  private appendChunkFaces(chunk: Chunk, groups: Map<BlockID, MutableMeshData>): void {
+  private appendChunkFaces(chunk: Chunk, groups: Map<SurfaceKey, MutableMeshData>): void {
     for (let x = 0; x < CHUNK_SIZE; x += 1) {
       for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
         for (let z = 0; z < CHUNK_SIZE; z += 1) {
@@ -395,10 +457,10 @@ export class ChunkRenderManager {
     data.indices.push(baseIndex, baseIndex + 1, baseIndex + 2, baseIndex, baseIndex + 2, baseIndex + 3);
   }
 
-  private dataFor(groups: Map<BlockID, MutableMeshData>, blockId: BlockID): MutableMeshData {
+  private dataFor(groups: Map<SurfaceKey, MutableMeshData>, blockId: SurfaceKey): MutableMeshData {
     const existing = groups.get(blockId);
     if (existing) return existing;
-    const data: MutableMeshData = { positions: [], normals: [], uvs: [], indices: [] };
+    const data: MutableMeshData = { positions: [], normals: [], uvs: [], indices: [], colors: [] };
     groups.set(blockId, data);
     return data;
   }

@@ -36,6 +36,7 @@ type BootPhase =
   | 'WARNING'
   | 'ENGINE'
   | 'STUDIO'
+  | 'CREDITS'
   | 'PRESENTS'
   | 'LOGO'
   | 'TITLE'
@@ -53,11 +54,36 @@ const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
   { phase: 'WARNING', durationMs: 3400 },
   { phase: 'ENGINE', durationMs: 3200 },
   { phase: 'STUDIO', durationMs: 3800 },
+  // The film-style billing block. This is the piece the boot was missing: a
+  // retail title card sequence names its production roles before the logo,
+  // which is what separates "a loading screen" from "an intro".
+  { phase: 'CREDITS', durationMs: 8600 },
   { phase: 'PRESENTS', durationMs: 1800 },
   // Long enough for every letter to land plus the chime tail.
   { phase: 'LOGO', durationMs: 4200 },
   { phase: 'TITLE', durationMs: 3600 },
   { phase: 'READY', durationMs: 0 }, // waits for input
+];
+
+/**
+ * Opening billing block, in film order.
+ *
+ * Each card holds the screen on its own, fading through, exactly like the
+ * title sequence of a retail game. Timings are relative to the start of the
+ * CREDITS phase.
+ */
+interface CreditCard {
+  role: string;
+  names: string[];
+  atMs: number;
+}
+
+const CREDIT_CARDS: CreditCard[] = [
+  { role: 'A ONBLOCKAWAY STUDIOS PRODUCTION', names: [], atMs: 0 },
+  { role: 'ENGINE & RENDERING', names: ['EAOIN Voxel Runtime', 'WebGPU · Vulkan'], atMs: 1700 },
+  { role: 'WORLD GENERATION', names: ['Continental Terrain', 'Deep Cave Systems'], atMs: 3400 },
+  { role: 'ART DIRECTION', names: ['Procedural Texture Forge'], atMs: 5100 },
+  { role: 'IN ASSOCIATION WITH', names: ['Every Block You Have Not Placed Yet'], atMs: 6800 },
 ];
 
 /** Rotating hint cards shown on the READY card. */
@@ -80,6 +106,8 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
   const chime = useMemo(() => new BootChime(), []);
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const [skipHintVisible, setSkipHintVisible] = useState(false);
+  /** Index of the billing card currently on screen during CREDITS. */
+  const [creditIndex, setCreditIndex] = useState(0);
   const completedRef = useRef(false);
 
   const finish = useCallback(() => {
@@ -185,6 +213,18 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     return () => window.clearInterval(timer);
   }, [phase]);
 
+  /* ------------------------- credits card choreography -------------------- */
+
+  useEffect(() => {
+    if (phase !== 'CREDITS') return;
+    setCreditIndex(0);
+    const timers = CREDIT_CARDS.map((card, index) => window.setTimeout(
+      () => setCreditIndex(index),
+      reducedMotion ? index * 220 : card.atMs
+    ));
+    return () => { for (const timer of timers) window.clearTimeout(timer); };
+  }, [phase, reducedMotion]);
+
   /* --------------------------- decorative particles ----------------------- */
 
   const embers = useMemo(
@@ -260,6 +300,47 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
         <div className="cb-studio-name">ONBLOCKAWAY</div>
         <div className="cb-studio-sub">STUDIOS</div>
         <div className="cb-studio-rule" />
+        {skipHint}
+      </div>
+    );
+  }
+
+  /* =============================== CREDITS ================================ */
+  // The billing block: one role per card, cross-fading on a film cadence.
+  if (phase === 'CREDITS') {
+    const card = CREDIT_CARDS[Math.min(creditIndex, CREDIT_CARDS.length - 1)];
+    return (
+      <div className="cinematic-boot cb-credits">
+        <div className="cb-vignette" />
+        <div className="cb-ember-field" aria-hidden="true">
+          {embers.slice(0, 10).map((ember) => (
+            <span
+              key={ember.id}
+              className="cb-ember"
+              style={{
+                left: `${ember.left}%`,
+                width: ember.size,
+                height: ember.size,
+                animationDelay: `${ember.delay}s`,
+                animationDuration: `${ember.duration}s`,
+              }}
+            />
+          ))}
+        </div>
+        {/* `key` forces a remount per card so the fade-in animation replays. */}
+        <div className="cb-credit-card" key={creditIndex}>
+          <div className="cb-credit-role">{card.role}</div>
+          {card.names.length > 0 && (
+            <div className="cb-credit-names">
+              {card.names.map((name) => <div key={name} className="cb-credit-name">{name}</div>)}
+            </div>
+          )}
+        </div>
+        <div className="cb-credit-progress" aria-hidden="true">
+          {CREDIT_CARDS.map((entry, index) => (
+            <span key={entry.role} className={index <= creditIndex ? 'on' : ''} />
+          ))}
+        </div>
         {skipHint}
       </div>
     );
