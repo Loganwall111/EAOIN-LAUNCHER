@@ -2,10 +2,11 @@
  * Dedicated Server — EAOIN Multiplayer Replication Backend
  * Server-authoritative simulation with persistent snapshots.
  */
-import { Server } from 'http';
+import { IncomingMessage, Server, ServerResponse } from 'http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { ReplicationManager } from './replication/ReplicationManager';
 import { MarketplacePublishingBackend } from './marketplace/MarketplacePublishingBackend';
+import { createPaymentsFromEnv, PaymentsBundle } from './payments/createPaymentsFromEnv';
 
 export class EAOINServer {
   private readonly httpServer = new Server();
@@ -13,12 +14,45 @@ export class EAOINServer {
   private readonly clients = new Map<string, WebSocket>();
   private readonly replication = new ReplicationManager();
   private readonly marketplace = new MarketplacePublishingBackend();
+  /** Null when PayPal credentials are absent; the game then runs sandbox coins. */
+  private readonly payments: PaymentsBundle | null;
   private tickInterval: NodeJS.Timeout | null = null;
   private readonly tickRate = 20; // 20 TPS
 
   constructor(private readonly port = 8080) {
     this.wss = new WebSocketServer({ server: this.httpServer });
+    this.payments = createPaymentsFromEnv();
+    this.setupHttpRoutes();
     this.setupEvents();
+  }
+
+  /**
+   * Real-money endpoints ride on the same http server as the websocket
+   * backend, so a deployment needs one process and one port.
+   */
+  private setupHttpRoutes(): void {
+    this.httpServer.on('request', (req: IncomingMessage, res: ServerResponse) => {
+      void (async () => {
+        try {
+          if (this.payments && (await this.payments.handleRequest(req, res))) return;
+          if (req.url === '/healthz') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ok: true,
+              players: this.clients.size,
+              payments: this.payments ? this.payments.environment : 'disabled',
+            }));
+            return;
+          }
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Not found' }));
+        } catch (error) {
+          console.error('[Server] Request handling failed', error);
+          if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Internal error' }));
+        }
+      })();
+    });
   }
 
   private setupEvents(): void {
@@ -88,6 +122,11 @@ export class EAOINServer {
     this.httpServer.listen(this.port, () => {
       console.log(`[Server] EAOIN Dedicated Server listening on port ${this.port}`);
       console.log(`[Server] Tick rate: ${this.tickRate} TPS`);
+      if (this.payments) {
+        console.log(`[Server] PayPal payments ENABLED (${this.payments.environment}) at /api/payments`);
+      } else {
+        console.log('[Server] PayPal payments disabled — set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to enable.');
+      }
     });
     this.tickInterval = setInterval(() => this.tick(), 1000 / this.tickRate);
   }

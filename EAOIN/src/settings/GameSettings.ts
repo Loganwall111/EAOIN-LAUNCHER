@@ -1,4 +1,10 @@
-export type RendererPreference = 'auto' | 'webgpu' | 'webgl';
+/**
+ * `vulkan` is an explicit request for the Vulkan path. In the browser that
+ * means WebGPU (which is backed by Vulkan on Windows-with-flag/Linux/Android);
+ * the desktop build routes it to the native Vulkan renderer in `native/vulkan`.
+ * `RendererBackend.describeVulkanPath()` reports which one you actually got.
+ */
+export type RendererPreference = 'auto' | 'vulkan' | 'webgpu' | 'webgl';
 export type QualityPreset = 'performance' | 'balanced' | 'quality' | 'cinematic';
 export type TexturePackID = 'classic' | 'soft' | 'vibrant' | 'noir';
 
@@ -22,7 +28,31 @@ export interface GameSettings {
   multiplayerServersEnabled: boolean;
   texturePack: TexturePackID;
   cameraSpeed: number;
+  /**
+   * Let the engine trade resolution/effects/view distance automatically to
+   * hold a steady framerate. This is what stops the game feeling laggy on
+   * mixed hardware; turn it off for a fixed, predictable image.
+   */
+  adaptivePerformance: boolean;
+  /** Framerate the adaptive tuner aims for. */
+  targetFps: number;
+  /** Merge coplanar voxel faces into large quads. Huge triangle-count win. */
+  greedyMeshing: boolean;
+  /** Show the live performance overlay (frame time, triangles, backend). */
+  showPerformanceOverlay: boolean;
+  /**
+   * Screen-space ray tracing quality. This is real per-pixel ray marching
+   * against the depth buffer — not hardware RT, which WebGPU cannot expose.
+   * See `rendering/ScreenSpaceRayTracing.ts` for the honest limitations.
+   */
+  rayTracingQuality: RayTracingQuality;
+  rayTracedReflections: boolean;
+  rayTracedShadows: boolean;
+  rayTracedAO: boolean;
 }
+
+/** Mirrors `RayTracingQuality` without importing the renderer into settings. */
+export type RayTracingQuality = 'off' | 'low' | 'medium' | 'high' | 'ultra';
 
 export function createDefaultSettings(): GameSettings {
   return {
@@ -47,6 +77,15 @@ export function createDefaultSettings(): GameSettings {
     // Babylon camera speed is world-units per frame; 0.42 feels sluggish
     // against the voxel scale, so use a comfortable survival-walk default.
     cameraSpeed: 0.78,
+    adaptivePerformance: true,
+    targetFps: 60,
+    greedyMeshing: true,
+    showPerformanceOverlay: false,
+    // Off by default: it is genuinely expensive, and the player should opt in.
+    rayTracingQuality: 'off',
+    rayTracedReflections: true,
+    rayTracedShadows: true,
+    rayTracedAO: true,
   };
 }
 
@@ -58,7 +97,7 @@ export function clampSettings(settings: GameSettings): GameSettings {
     showObjectives: settings.showObjectives,
     highContrast: settings.highContrast,
     reducedMotion: settings.reducedMotion,
-    rendererPreference: ['auto', 'webgpu', 'webgl'].includes(settings.rendererPreference) ? settings.rendererPreference : 'auto',
+    rendererPreference: ['auto', 'vulkan', 'webgpu', 'webgl'].includes(settings.rendererPreference) ? settings.rendererPreference : 'auto',
     renderScale: Math.max(0.5, Math.min(1.5, settings.renderScale)),
     qualityPreset: ['performance', 'balanced', 'quality', 'cinematic'].includes(settings.qualityPreset) ? settings.qualityPreset : 'balanced',
     fogEnabled: settings.fogEnabled,
@@ -71,6 +110,15 @@ export function clampSettings(settings: GameSettings): GameSettings {
     multiplayerServersEnabled: settings.multiplayerServersEnabled,
     texturePack: ['classic', 'soft', 'vibrant', 'noir'].includes(settings.texturePack) ? settings.texturePack : 'classic',
     cameraSpeed: Math.max(0.35, Math.min(1.6, settings.cameraSpeed)),
+    adaptivePerformance: settings.adaptivePerformance ?? true,
+    targetFps: Math.max(30, Math.min(240, settings.targetFps ?? 60)),
+    greedyMeshing: settings.greedyMeshing ?? true,
+    showPerformanceOverlay: settings.showPerformanceOverlay ?? false,
+    rayTracingQuality: (['off', 'low', 'medium', 'high', 'ultra'] as const)
+      .includes(settings.rayTracingQuality) ? settings.rayTracingQuality : 'off',
+    rayTracedReflections: settings.rayTracedReflections ?? true,
+    rayTracedShadows: settings.rayTracedShadows ?? true,
+    rayTracedAO: settings.rayTracedAO ?? true,
   };
 }
 

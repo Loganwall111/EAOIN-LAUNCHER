@@ -1,48 +1,45 @@
 /**
  * PaymentProvider — checkout flow for buying coin packs with real money.
  *
- * ============================ READ THIS FIRST ============================
- * This module deliberately CANNOT take a payment on its own, and that is a
- * security requirement, not a limitation to be "fixed" later.
+ * ============================ HOW THIS WORKS =============================
+ * The client CANNOT take a payment on its own, and that is a security
+ * property, not a gap. Rules that hold in every deployment:
  *
- * Rules that must hold in any real deployment:
+ *  1. The client never holds a PayPal secret. Only the public client id may
+ *     ever reach a browser.
+ *  2. The client never decides that a payment succeeded — otherwise a player
+ *     could call `wallet.creditPurchase(...)` from devtools. Coins are
+ *     credited only after the SERVER has captured the order with PayPal.
+ *  3. Prices are authoritative on the server. `priceCents` here is for display
+ *     only; `server/src/payments` re-derives the real charge from the pack id
+ *     via the shared table, so a tampered client cannot buy 7,000 coins for 1¢.
  *
- *  1. The client NEVER holds a PayPal/Stripe secret key. Anything shipped to a
- *     browser is public. Only the publishable/client id may appear here.
- *  2. The client NEVER decides that a payment succeeded. A malicious user can
- *     trivially call `wallet.creditPurchase(...)` from the devtools console.
- *     Coins must only be credited after YOUR SERVER has verified the payment
- *     with the provider (PayPal webhook / order-capture API).
- *  3. Prices are authoritative on the server. The `priceCents` in COIN_PACKS is
- *     for display; the server must re-derive the real price from the pack id so
- *     a tampered client cannot buy 7,000 coins for $0.01.
+ * The implemented flow:
  *
- * The flow implemented here is the correct one:
- *
- *     client                    your server                 PayPal
+ *     client                    EAOIN server                PayPal
  *       │  createCheckout(pack)      │                         │
  *       ├───────────────────────────>│  create order (secret)  │
  *       │                            ├────────────────────────>│
  *       │   { orderRef, approveUrl } │<────────────────────────┤
  *       │<───────────────────────────┤                         │
- *       │  open approveUrl ─────────────────────────────────────>│
+ *       │  open approveUrl ────────── buyer approves ─────────>│
  *       │                            │   webhook: captured     │
  *       │                            │<────────────────────────┤
- *       │  confirmCheckout(orderRef) │  (verifies + credits)   │
+ *       │  confirmCheckout(orderRef) │  (captures + credits)   │
  *       ├───────────────────────────>│                         │
  *       │   { status, coins }        │                         │
  *       │<───────────────────────────┤                         │
  *
- * Until a backend is wired up, `MockPaymentProvider` is used so the whole
- * marketplace is playable offline. It is clearly labelled in the UI and grants
- * only sandbox coins.
+ * `PayPalPaymentProvider` drives that. When no backend is configured,
+ * `MockPaymentProvider` keeps the marketplace playable offline and says so
+ * plainly in the UI.
  * ========================================================================
  */
 import { CoinPack, CoinPackID } from './CoinEconomy';
 
 export type PaymentMethod = 'paypal' | 'card';
 
-export type CheckoutStatus = 'created' | 'pending' | 'completed' | 'failed' | 'cancelled';
+export type CheckoutStatus = 'created' | 'approved' | 'pending' | 'completed' | 'failed' | 'cancelled';
 
 export interface CheckoutSession {
   /** Server-side order reference; the only id the client should trust. */
@@ -52,6 +49,9 @@ export interface CheckoutSession {
   status: CheckoutStatus;
   /** URL the player is sent to in order to approve the payment. */
   approveUrl?: string;
+  /** Amount the server says it will charge, in cents. Display only. */
+  amountCents?: number;
+  currency?: string;
   /** Human-readable failure reason when status is 'failed'. */
   error?: string;
 }
@@ -64,6 +64,11 @@ export interface CheckoutResult {
   error?: string;
 }
 
+/** Progress callbacks so the UI can narrate a multi-second PayPal round trip. */
+export interface CheckoutProgress {
+  onStatus?: (message: string) => void;
+}
+
 export interface PaymentProvider {
   readonly id: string;
   readonly label: string;
@@ -72,27 +77,34 @@ export interface PaymentProvider {
   /** Ask the backend to open a checkout session for a pack. */
   createCheckout(pack: CoinPack, method: PaymentMethod): Promise<CheckoutSession>;
   /** Poll/confirm the session; the backend reports the authoritative outcome. */
-  confirmCheckout(session: CheckoutSession): Promise<CheckoutResult>;
+  confirmCheckout(session: CheckoutSession, progress?: CheckoutProgress): Promise<CheckoutResult>;
 }
 
 /* -------------------------------------------------------------------------- */
-/*                          Live (backend-backed) provider                     */
+/*                        Live PayPal (backend-backed)                         */
 /* -------------------------------------------------------------------------- */
 
 export interface ServerPaymentConfig {
-  /** Base URL of YOUR backend, e.g. '/api/payments'. Not the provider's API. */
+  /** Base URL of YOUR backend, e.g. '/api/payments'. Not PayPal's API. */
   baseUrl: string;
-  /** Optional bearer token for the signed-in player. */
+  /** Bearer token for the signed-in player. */
   authToken?: string;
+  /** How long to wait for the buyer to finish approving, in ms. */
+  approvalTimeoutMs?: number;
+  /** Gap between confirm polls, in ms. */
+  pollIntervalMs?: number;
 }
 
 /**
- * Talks to your own backend, which in turn talks to PayPal with the secret key.
- * Drop this in once `server/` exposes the two endpoints below.
+ * Talks to the EAOIN backend, which in turn talks to PayPal with the secret.
+ *
+ * Confirmation is a poll loop rather than a single request because the buyer
+ * approves in a separate window on paypal.com; the order isn't capturable
+ * until they finish, and the webhook may land first.
  */
-export class ServerPaymentProvider implements PaymentProvider {
-  readonly id = 'server';
-  readonly label = 'PayPal / Card';
+export class PayPalPaymentProvider implements PaymentProvider {
+  readonly id = 'paypal';
+  readonly label = 'PayPal';
   readonly isLive = true;
 
   constructor(private readonly config: ServerPaymentConfig) {}
@@ -104,41 +116,92 @@ export class ServerPaymentProvider implements PaymentProvider {
   }
 
   async createCheckout(pack: CoinPack, method: PaymentMethod): Promise<CheckoutSession> {
-    // NOTE: only the pack *id* is sent. The server re-derives the price so a
-    // tampered client cannot dictate what it pays.
-    const response = await fetch(`${this.config.baseUrl}/checkout`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({ packId: pack.id, method }),
-    });
-    if (!response.ok) {
+    try {
+      // Only the pack *id* is sent. The server re-derives the price.
+      const response = await fetch(`${this.config.baseUrl}/checkout`, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ packId: pack.id, method }),
+      });
+      const body = (await response.json().catch(() => null)) as (CheckoutSession & { error?: string }) | null;
+
+      if (!response.ok || !body || !body.orderRef) {
+        return {
+          orderRef: '',
+          packId: pack.id,
+          method,
+          status: 'failed',
+          error: body?.error ?? `Checkout could not be started (HTTP ${response.status}).`,
+        };
+      }
+      return { ...body, packId: pack.id, method };
+    } catch (error) {
       return {
         orderRef: '',
         packId: pack.id,
         method,
         status: 'failed',
-        error: `Checkout could not be started (HTTP ${response.status}).`,
+        error: `Could not reach the payment server: ${errorText(error)}`,
       };
     }
-    return (await response.json()) as CheckoutSession;
   }
 
-  async confirmCheckout(session: CheckoutSession): Promise<CheckoutResult> {
-    const response = await fetch(
-      `${this.config.baseUrl}/checkout/${encodeURIComponent(session.orderRef)}`,
-      { headers: this.headers() }
-    );
-    if (!response.ok) {
-      return {
-        status: 'failed',
-        orderRef: session.orderRef,
-        coinsCredited: 0,
-        error: `Could not confirm payment (HTTP ${response.status}).`,
-      };
+  async confirmCheckout(session: CheckoutSession, progress?: CheckoutProgress): Promise<CheckoutResult> {
+    const timeoutMs = this.config.approvalTimeoutMs ?? 5 * 60_000;
+    const intervalMs = this.config.pollIntervalMs ?? 2_000;
+    const deadline = Date.now() + timeoutMs;
+    let announcedWait = false;
+
+    while (Date.now() < deadline) {
+      const attempt = await this.pollOnce(session.orderRef);
+
+      if (attempt.status === 'completed' || attempt.status === 'failed' || attempt.status === 'cancelled') {
+        return attempt;
+      }
+
+      if (!announcedWait) {
+        announcedWait = true;
+        progress?.onStatus?.('Waiting for you to approve the payment in the PayPal window…');
+      }
+      await delay(intervalMs);
     }
-    return (await response.json()) as CheckoutResult;
+
+    return {
+      status: 'pending',
+      orderRef: session.orderRef,
+      coinsCredited: 0,
+      error: 'Timed out waiting for PayPal approval. If you completed the payment, your coins will appear shortly.',
+    };
+  }
+
+  private async pollOnce(orderRef: string): Promise<CheckoutResult> {
+    try {
+      const response = await fetch(
+        `${this.config.baseUrl}/checkout/${encodeURIComponent(orderRef)}`,
+        { headers: this.headers() }
+      );
+      const body = (await response.json().catch(() => null)) as (CheckoutResult & { error?: string }) | null;
+
+      if (!response.ok || !body) {
+        return {
+          status: 'failed',
+          orderRef,
+          coinsCredited: 0,
+          error: body?.error ?? `Could not confirm payment (HTTP ${response.status}).`,
+        };
+      }
+      // An un-approved order comes back as 'created'/'approved'; keep polling.
+      return { ...body, orderRef };
+    } catch (error) {
+      // A transient network blip should not abort a payment that may have
+      // succeeded — report it as still pending and let the loop retry.
+      return { status: 'pending', orderRef, coinsCredited: 0, error: errorText(error) };
+    }
   }
 }
+
+/** Kept as an alias so older imports keep working. */
+export const ServerPaymentProvider = PayPalPaymentProvider;
 
 /* -------------------------------------------------------------------------- */
 /*                          Mock (offline sandbox) provider                    */
@@ -163,6 +226,8 @@ export class MockPaymentProvider implements PaymentProvider {
       packId: pack.id,
       method,
       status: 'pending',
+      amountCents: pack.priceCents,
+      currency: 'USD',
       approveUrl: undefined, // nothing to approve in the sandbox
     };
   }
@@ -175,7 +240,7 @@ export class MockPaymentProvider implements PaymentProvider {
       // The caller looks the coin count up from the pack id; the sandbox simply
       // reports success. Real providers return the server-authoritative amount.
       coinsCredited: -1,
-      };
+    };
   }
 }
 
@@ -184,14 +249,21 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
- * Chooses the provider for this build. Set `VITE_PAYMENTS_BASE_URL` to enable
- * real checkout; otherwise the sandbox provider keeps everything playable.
+ * Chooses the provider for this build.
+ *
+ * Set `VITE_PAYMENTS_BASE_URL` (e.g. `/api/payments`) to enable real PayPal
+ * checkout; otherwise the sandbox provider keeps everything playable and the
+ * UI labels itself as such.
  */
-export function createPaymentProvider(): PaymentProvider {
+export function createPaymentProvider(authToken?: string): PaymentProvider {
   const baseUrl = readEnv('VITE_PAYMENTS_BASE_URL');
   if (baseUrl) {
-    return new ServerPaymentProvider({ baseUrl });
+    return new PayPalPaymentProvider({ baseUrl, authToken });
   }
   return new MockPaymentProvider();
 }

@@ -86,15 +86,39 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                     <option value="cinematic">Cinematic</option>
                   </select>
                 </Row>
-                <Row label="Renderer" hint="WebGPU falls back to WebGL automatically">
+                <Row label="Renderer" hint="Vulkan uses WebGPU, which is Vulkan-backed on Windows/Linux. Falls back to WebGL automatically.">
                   <select className="ui-input" value={settings.rendererPreference} onChange={(e) => patch({ rendererPreference: e.target.value as GameSettings['rendererPreference'] })}>
-                    <option value="auto">Auto</option>
+                    <option value="auto">Auto (recommended)</option>
+                    <option value="vulkan">Vulkan / WebGPU</option>
                     <option value="webgpu">Prefer WebGPU</option>
                     <option value="webgl">Force WebGL</option>
                   </select>
                 </Row>
-                <Row label="Render scale" hint={`${Math.round(settings.renderScale * 100)}%`}>
-                  <input type="range" min={0.5} max={1.5} step={0.1} value={settings.renderScale} onChange={(e) => patch({ renderScale: Number(e.target.value) })} aria-label="Render scale" />
+                <Row
+                  label="Adaptive performance"
+                  hint="Automatically trades resolution, effects and view distance to hold your target framerate. The main fix for stutter."
+                >
+                  <Toggle checked={settings.adaptivePerformance} onChange={(v) => patch({ adaptivePerformance: v })} label="Adaptive performance" />
+                </Row>
+                <Row label="Target framerate" hint={`${settings.targetFps} FPS`}>
+                  <input type="range" min={30} max={144} step={10} value={settings.targetFps} onChange={(e) => patch({ targetFps: Number(e.target.value) })} aria-label="Target framerate" />
+                </Row>
+                <Row
+                  label="Render scale"
+                  hint={settings.adaptivePerformance
+                    ? 'Managed automatically while adaptive performance is on'
+                    : `${Math.round(settings.renderScale * 100)}%`}
+                >
+                  <input type="range" min={0.5} max={1.5} step={0.1} value={settings.renderScale} disabled={settings.adaptivePerformance} onChange={(e) => patch({ renderScale: Number(e.target.value) })} aria-label="Render scale" />
+                </Row>
+                <Row
+                  label="Greedy meshing"
+                  hint="Merges flat voxel faces into large quads. Typically 60-85% fewer triangles."
+                >
+                  <Toggle checked={settings.greedyMeshing} onChange={(v) => patch({ greedyMeshing: v })} label="Greedy meshing" />
+                </Row>
+                <Row label="Performance overlay" hint="Live frame time, triangle count and graphics backend">
+                  <Toggle checked={settings.showPerformanceOverlay} onChange={(v) => patch({ showPerformanceOverlay: v })} label="Performance overlay" />
                 </Row>
                 <Row label="Texture pack">
                   <select className="ui-input" value={settings.texturePack} onChange={(e) => patch({ texturePack: e.target.value as GameSettings['texturePack'] })}>
@@ -114,6 +138,37 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                 </Row>
                 <Row label="Particles">
                   <Toggle checked={settings.particlesEnabled} onChange={(v) => patch({ particlesEnabled: v })} label="Particles" />
+                </Row>
+
+                <div className="opt-subhead">Screen-space ray tracing</div>
+                <p className="opt-note">
+                  Real per-pixel ray marching against the depth buffer. This is genuine ray
+                  tracing, but <strong>screen-space</strong> — anything off-screen or behind the
+                  camera cannot be reflected. Hardware ray tracing (DXR / Vulkan RT) needs a
+                  ray-tracing pipeline that WebGPU does not expose; that lives in the native
+                  Vulkan build.
+                </p>
+                <Row label="Ray tracing quality" hint="Off by default — it is genuinely expensive">
+                  <select
+                    className="ui-input"
+                    value={settings.rayTracingQuality}
+                    onChange={(e) => patch({ rayTracingQuality: e.target.value as GameSettings['rayTracingQuality'] })}
+                  >
+                    <option value="off">Off</option>
+                    <option value="low">Low (12 steps)</option>
+                    <option value="medium">Medium (24 steps)</option>
+                    <option value="high">High (40 steps)</option>
+                    <option value="ultra">Ultra (64 steps)</option>
+                  </select>
+                </Row>
+                <Row label="RT reflections" hint="Traced reflections off water, ice and metal">
+                  <Toggle checked={settings.rayTracedReflections} onChange={(v) => patch({ rayTracedReflections: v })} label="RT reflections" />
+                </Row>
+                <Row label="RT contact shadows" hint="Short shadow rays toward the sun">
+                  <Toggle checked={settings.rayTracedShadows} onChange={(v) => patch({ rayTracedShadows: v })} label="RT contact shadows" />
+                </Row>
+                <Row label="RT ambient occlusion" hint="Hemisphere rays for contact darkening">
+                  <Toggle checked={settings.rayTracedAO} onChange={(v) => patch({ rayTracedAO: v })} label="RT ambient occlusion" />
                 </Row>
               </>
             )}

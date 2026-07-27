@@ -120,6 +120,12 @@ function createBlockTexture(scene: Scene, blockId: BlockID, entry: BlockPaletteE
   const texture = new DynamicTexture(`tex_block_${blockId}`, { width: size, height: size }, scene, false);
   texture.updateSamplingMode(Texture.NEAREST_SAMPLINGMODE);
   texture.hasAlpha = entry.alpha !== undefined;
+  // Greedy meshing merges coplanar faces into large quads whose UVs span the
+  // quad in *blocks* (a 6×3 quad has UVs 0..6 by 0..3). WRAP addressing makes
+  // that tile the texture once per block; the default CLAMP would stretch one
+  // texel across the whole merged quad and the terrain would look smeared.
+  texture.wrapU = Texture.WRAP_ADDRESSMODE;
+  texture.wrapV = Texture.WRAP_ADDRESSMODE;
 
   const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
   ctx.imageSmoothingEnabled = false;

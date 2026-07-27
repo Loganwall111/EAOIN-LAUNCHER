@@ -30,6 +30,14 @@ import { DeepCaveGenerator } from './DeepCaves';
 import { editKey, WorldBlockEdit } from './WorldSave';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
 import { getBiome, BiomeDefinition } from './Biomes';
+import {
+  buildSubBedrockLayers,
+  farLandsCorruption,
+  invertHeight,
+  sampleFarLands,
+  subBedrockBlockAt,
+  SubBedrockLayer,
+} from './ExoticWorldGen';
 
 export interface SpawnPoint { x: number; y: number; z: number; }
 
@@ -68,6 +76,20 @@ export interface WorldGenConfig {
   volcanoes: boolean;
   /** Generate glaciers. */
   glaciers: boolean;
+  /**
+   * Distance from origin at which Far Lands corruption begins. 0 disables it.
+   * Past this the terrain noise saturates into vertical walls and stretched
+   * tunnels — the classic Minecraft overflow bug, here on purpose.
+   */
+  farLandsThreshold: number;
+  /** Number of stacked dimension layers generated below bedrock. 0 disables. */
+  subBedrockLayers: number;
+  /** Flip terrain density so caverns become spires. */
+  inverted: boolean;
+  /** Remove the surface entirely — the whole world is cave. */
+  caveWorld: boolean;
+  /** Force a perfectly flat world at this Y. */
+  flatGroundY: number | null;
 }
 
 export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
@@ -88,6 +110,11 @@ export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
   sinkholes: true,
   volcanoes: true,
   glaciers: true,
+  farLandsThreshold: 0,
+  subBedrockLayers: 0,
+  inverted: false,
+  caveWorld: false,
+  flatGroundY: null,
 };
 
 export const FLOATING_ISLANDS_CONFIG: WorldGenConfig = {
@@ -183,6 +210,10 @@ export class AdvancedTerrainGenerator {
   private readonly deepCaves: DeepCaveGenerator;
   private readonly heightCache = new Map<string, number>();
   private readonly rawHeightCache = new Map<string, number>();
+  /** Noise reserved for the exotic (Far Lands / sub-bedrock) passes. */
+  private readonly exoticNoise: AdvancedNoise;
+  /** Stacked worlds below bedrock. Empty unless the preset asks for them. */
+  private readonly subBedrock: SubBedrockLayer[];
   public readonly config: WorldGenConfig;
 
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
@@ -194,6 +225,8 @@ export class AdvancedTerrainGenerator {
     this.riverNoise = new AdvancedNoise(this.config.seed + ':river');
     this.biomeNoise = new AdvancedNoise(this.config.seed + ':biome');
     this.oreNoise = new AdvancedNoise(this.config.seed + ':ore');
+    this.exoticNoise = new AdvancedNoise(this.config.seed + ':exotic');
+    this.subBedrock = buildSubBedrockLayers(this.config.subBedrockLayers, this.config.bedrockThickness);
     this.deepCaves = new DeepCaveGenerator({
       seed: this.config.seed,
       bedrockThickness: this.config.bedrockThickness,
@@ -230,6 +263,11 @@ export class AdvancedTerrainGenerator {
     this.applyVegetation(chunk);
     this.applyStructures(chunk);
     this.applyBedrockFoundation(chunk);
+    // 5.0 — the exotic presets that used to be config-only. These run after
+    // bedrock so they can legitimately replace it: in a Sub-Bedrock world the
+    // floor is no longer the end of the world.
+    this.applyCaveWorldPass(chunk);
+    this.applySubBedrockPass(chunk);
     this.applyPlayableSpawnPatch(chunk);
     this.applyObjectiveClearings(chunk);
     this.applySavedEdits(chunk);
@@ -299,12 +337,31 @@ export class AdvancedTerrainGenerator {
 
   /** Composes the raw heightmap, erosion and valley smoothing for one column. */
   private computeTerrainHeight(worldX: number, worldZ: number): number {
+    if (this.config.flatGroundY !== null) return this.config.flatGroundY;
     if (this.config.floatingIslands || this.config.skyIslands) return this.getFloatingIslandHeight(worldX, worldZ);
     if (Math.hypot(worldX, worldZ) < SPAWN_PROTECTED_RADIUS + 2) return this.config.seaLevel - 6;
 
     let h = this.getRawTerrainHeight(worldX, worldZ);
     h = this.applyHydraulicErosion(h, worldX, worldZ);
     h -= this.getValleyHeight(worldX, worldZ);
+
+    // --- Far Lands -------------------------------------------------------
+    // Past the threshold the terrain stops being terrain and becomes
+    // architecture: sheer walls hundreds of blocks tall with stretched
+    // tunnels between them.
+    const corruption = farLandsCorruption(worldX, worldZ, this.config.farLandsThreshold);
+    if (corruption > 0) {
+      const far = sampleFarLands(this.exoticNoise, worldX, worldZ, corruption, this.config.worldDepth);
+      // Blend from normal terrain into the wall structure as corruption ramps.
+      h = h * (1 - corruption) + (h + far.heightBoost) * corruption;
+      if (far.tunnel) h = Math.min(h, this.config.seaLevel - 10);
+    }
+
+    // --- Inverted --------------------------------------------------------
+    if (this.config.inverted) {
+      h = invertHeight(h, this.config.seaLevel, this.config.worldDepth);
+    }
+
     return h;
   }
 
@@ -788,6 +845,53 @@ export class AdvancedTerrainGenerator {
         chunk.setBlock(lx, y, lz, BEDROCK_MIX[Math.min(BEDROCK_MIX.length - 1, y)]);
       }
     }
+  }
+
+  /* ============= SUB-BEDROCK STACK ============= */
+
+  /**
+   * Replace the region below the surface with stacked world layers.
+   *
+   * Bedrock stops being a floor and becomes a ceiling: break through and you
+   * drop into The Underdark, then the Crystal Vault, then the Ashen Deep, and
+   * finally the Molten Core. Each layer has its own obsidian floor, so you
+   * descend one deliberate hole at a time rather than falling to the bottom.
+   */
+  private applySubBedrockPass(chunk: Chunk): void {
+    if (this.subBedrock.length === 0) return;
+    const top = this.subBedrock[0].ceilingY;
+
+    this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
+      // Never carve the protected spawn column out from under the player.
+      if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
+      for (let y = 1; y <= top; y++) {
+        const block = subBedrockBlockAt(this.exoticNoise, this.subBedrock, wx, y, wz);
+        if (block !== null) chunk.setBlock(lx, y, lz, block);
+      }
+    });
+  }
+
+  /* ============= CAVE WORLD ============= */
+
+  /**
+   * Cave World: seal the sky with a stone shell so the entire world is
+   * interior. The cave passes have already hollowed the underground, so this
+   * only needs to fill the space above the surface and cap it.
+   */
+  private applyCaveWorldPass(chunk: Chunk): void {
+    if (!this.config.caveWorld) return;
+    const ceiling = Math.min(CHUNK_HEIGHT - 1, this.config.worldDepth - 10);
+
+    this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
+      if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
+      const surface = this.getTerrainHeight(wx, wz);
+      // Fill from just above the surface up to the shell, leaving a generous
+      // air gap so the surface itself stays walkable.
+      const gapTop = Math.min(ceiling - 6, surface + 26);
+      for (let y = gapTop; y < ceiling; y++) chunk.setBlock(lx, y, lz, BLOCK.STONE);
+      // A solid roof so there is genuinely no sky.
+      for (let y = ceiling; y < CHUNK_HEIGHT; y++) chunk.setBlock(lx, y, lz, BLOCK.STONE);
+    });
   }
 
   /* ============= SPAWN PATCH ============= */
