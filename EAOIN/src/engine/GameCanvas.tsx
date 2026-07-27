@@ -808,7 +808,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const collectedDrops = itemDrops.update(camera.position, deltaSeconds);
         if (collectedDrops.length > 0) {
           let nextInv = inventoryRef.current; let c = 0;
-          for (const drop of collectedDrops) { nextInv = addToInventory(nextInv, drop.blockId, drop.amount); c += drop.amount; }
+          for (const drop of collectedDrops) {
+            nextInv = addToInventory(nextInv, drop.blockId, drop.amount);
+            c += drop.amount;
+            if (drop.blockId === 301) {
+              onGameplayEvent('shardsCollected', drop.amount);
+            }
+          }
           publishInventory(nextInv); onGameplayEvent('dropsCollected', c); audio.play('pickup', settingsRef.current);
         }
         camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
@@ -1061,6 +1067,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         publishRenderStats(); return true;
       };
       const placeSelectedBlock = (): void => {
+        const blockToPlace = selectedBlockRef.current;
+        if (blockToPlace === 302) {
+          // The Omni Creator — trigger the Final Journey
+          audio.play('ui', settingsRef.current);
+          showActionMessage('Hidden coordinates revealed: UNKNOWN REGION — Reality unstable.');
+          setTimeout(() => {
+            dimensionRuntime.setDimension('corrupted_lands');
+            atmosphere.setDimension('corrupted_lands');
+            activeDimension = 'corrupted_lands';
+            showActionMessage('Reality distortion detected. You have reached The Corrupted Lands.');
+          }, 2000);
+          return;
+        }
+
         const picked = pickTargetBlock(); if (!picked) { showActionMessage('No block face'); return; }
         const placeTarget = toBlockCoordinate(picked.point.add(picked.normal.scale(0.01)));
         if (terrain.getBlockAt(placeTarget.x, placeTarget.y, placeTarget.z) !== 0) { showActionMessage('Occupied'); return; }
@@ -1197,6 +1217,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // Swap the whole atmosphere to the destination's sky and fog.
         atmosphere.setDimension(dimensionId);
         activeDimension = dimensionId;
+
+        if (dimensionId === 'corrupted_lands') {
+            showActionMessage('Reality begins to bend...');
+            setTimeout(() => {
+                showActionMessage('A mysterious figure with a large mustache appears.');
+            }, 3000);
+        }
 
         // Dimensions with their own generator need the world rebuilt, not
         // merely re-lit. Entering or leaving one discards every loaded chunk.

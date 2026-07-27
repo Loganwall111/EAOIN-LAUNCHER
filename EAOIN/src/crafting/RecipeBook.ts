@@ -22,7 +22,8 @@ export type RecipeID =
   | 'wooden_door'
   | 'dimensional_door'
   | 'rocket_core'
-  | 'moon_rock';
+  | 'moon_rock'
+  | 'omni_creator';
 
 export interface RecipeCost {
   blockId: BlockID;
@@ -192,6 +193,18 @@ export const RECIPES: Recipe[] = [
     description: 'Recover emergency wood from settlement crates.',
     costs: [{ blockId: 17, amount: 1 }],
     output: { type: 'block', blockId: 6, amount: 2 },
+  },
+  {
+    id: 'omni_creator',
+    name: 'The Omni Creator',
+    description: 'The ultimate key to reality. Restores the true timeline.',
+    costs: [
+      { blockId: 301, amount: 71 }, // Memory Shards
+      { blockId: 16, amount: 64 },  // Crystal Shards
+      { blockId: 12, amount: 64 },  // Obsidian
+      { blockId: 215, amount: 8 },  // Black Hole Fragments
+    ],
+    output: { type: 'block', blockId: 302, amount: 1 },
   },
 ];
 

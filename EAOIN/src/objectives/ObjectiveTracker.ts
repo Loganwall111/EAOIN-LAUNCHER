@@ -9,6 +9,7 @@ export interface GameplayCounters {
   dropsCollected: number;
   craftedItems: number;
   inventoryOpened: boolean;
+  shardsCollected: number;
 }
 
 export type GameplayCounterKey = Exclude<keyof GameplayCounters, 'inventoryOpened'>;
@@ -28,6 +29,7 @@ export function createGameplayCounters(): GameplayCounters {
     dropsCollected: 0,
     craftedItems: 0,
     inventoryOpened: false,
+    shardsCollected: 0,
   };
 }
 
@@ -164,6 +166,12 @@ export function buildObjectives(
       label: 'Unlock or start the ending credits with C',
       complete: runtime?.nextGen.creditsActive ?? false,
       progress: runtime?.nextGen.endingUnlocked ? 'ending unlocked' : 'bosses remain',
+    },
+    {
+      id: 'memory_shards',
+      label: 'Collect 71 Memory Shards to restore the Journal',
+      complete: counters.shardsCollected >= 71,
+      progress: `${counters.shardsCollected}/71 shards`,
     },
   ];
 }
