@@ -10,12 +10,20 @@ import { Mesh, Scene, Vector3, VertexData } from '@babylonjs/core';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
 import { BlockMaterialMap } from './BlockMaterials';
+import { greedyMesh } from './GreedyMesher';
 
 export interface ChunkRenderStats {
   loadedChunks: number;
   meshCount: number;
   triangleCount: number;
   rebuildCount: number;
+  /**
+   * Triangles the naive one-quad-per-face mesher would have produced. The gap
+   * between this and `triangleCount` is what greedy meshing saved.
+   */
+  naiveTriangleCount: number;
+  /** 0-1 fraction of triangles eliminated by face merging. */
+  meshingSavings: number;
 }
 
 export interface StreamUpdateResult {
@@ -76,9 +84,31 @@ export class ChunkRenderManager {
   private readonly chunks = new Map<string, Chunk>();
   private readonly meshes = new Map<string, Mesh[]>();
   private readonly triangles = new Map<string, number>();
+  private readonly naiveTriangles = new Map<string, number>();
   private rebuildCount = 0;
+  /** Greedy face merging. Kept switchable so the old path stays testable. */
+  private greedyEnabled = true;
 
   constructor(private readonly scene: Scene, private readonly materials: BlockMaterialMap) {}
+
+  /** Toggle greedy meshing. Disabling forces the naive one-quad-per-face path. */
+  setGreedyMeshing(enabled: boolean): void {
+    this.greedyEnabled = enabled;
+  }
+
+  /**
+   * Drop every loaded chunk and its meshes.
+   *
+   * Used when travelling between dimensions: the Aether and the Backrooms
+   * generate completely different geometry, so the overworld chunks must go
+   * rather than being blended with the destination.
+   */
+  clearAll(): void {
+    for (const key of Array.from(this.meshes.keys())) this.disposeChunkMeshes(key);
+    this.chunks.clear();
+    this.triangles.clear();
+    this.naiveTriangles.clear();
+  }
 
   updateVisibleChunks(
     centerChunkX: number,
@@ -162,13 +192,17 @@ export class ChunkRenderManager {
   getStats(): ChunkRenderStats {
     let meshCount = 0;
     let triangleCount = 0;
+    let naiveTriangleCount = 0;
     for (const chunkMeshes of this.meshes.values()) meshCount += chunkMeshes.length;
     for (const count of this.triangles.values()) triangleCount += count;
+    for (const count of this.naiveTriangles.values()) naiveTriangleCount += count;
     return {
       loadedChunks: this.chunks.size,
       meshCount,
       triangleCount,
       rebuildCount: this.rebuildCount,
+      naiveTriangleCount,
+      meshingSavings: naiveTriangleCount > 0 ? 1 - triangleCount / naiveTriangleCount : 0,
     };
   }
 
@@ -176,6 +210,7 @@ export class ChunkRenderManager {
     for (const key of Array.from(this.meshes.keys())) this.disposeChunkMeshes(key);
     this.chunks.clear();
     this.triangles.clear();
+    this.naiveTriangles.clear();
   }
 
   private markNeighborsDirty(dirty: Set<string>, cx: number, cz: number): void {
@@ -192,8 +227,10 @@ export class ChunkRenderManager {
     if (!chunk) return;
 
     this.disposeChunkMeshes(key);
-    const groups = new Map<BlockID, MutableMeshData>();
-    this.appendChunkFaces(chunk, groups);
+
+    const groups = this.greedyEnabled
+      ? this.buildGreedyGroups(chunk)
+      : this.buildNaiveGroups(chunk);
 
     const chunkMeshes: Mesh[] = [];
     let triangleCount = 0;
@@ -214,14 +251,80 @@ export class ChunkRenderManager {
       mesh.checkCollisions = block.solid;
       mesh.isPickable = true;
       mesh.receiveShadows = true;
+
+      // --- per-mesh render cost controls ---------------------------------
+      // Chunk geometry never moves, so Babylon can skip its world-matrix and
+      // bounding-box recomputation every frame.
       mesh.freezeWorldMatrix();
+      mesh.doNotSyncBoundingInfo = true;
+      // Static geometry: let Babylon skip per-frame vertex-buffer rebinding.
+      mesh.alwaysSelectAsActiveMesh = false;
+      // Materials are shared per block id and never change after bake, so the
+      // engine can cache the effect instead of re-evaluating it each frame.
+      mesh.material?.freeze();
+
       chunkMeshes.push(mesh);
       triangleCount += data.indices.length / 3;
     }
 
     this.meshes.set(key, chunkMeshes);
     this.triangles.set(key, triangleCount);
+    this.naiveTriangles.set(key, this.countNaiveTriangles(chunk));
     this.rebuildCount += 1;
+  }
+
+  /** Merged-quad geometry. Same visual result, far fewer triangles. */
+  private buildGreedyGroups(chunk: Chunk): Map<BlockID, MutableMeshData> {
+    const originX = chunk.x * CHUNK_SIZE;
+    const originZ = chunk.z * CHUNK_SIZE;
+
+    return greedyMesh({
+      sizeX: CHUNK_SIZE,
+      sizeY: CHUNK_HEIGHT,
+      sizeZ: CHUNK_SIZE,
+      offsetX: originX,
+      offsetZ: originZ,
+      getBlock: (x, y, z) => chunk.getBlock(x, y, z),
+      // Neighbour lookups must cross the chunk seam, otherwise every chunk
+      // border would be walled off with faces the player can see through.
+      getNeighbor: (x, y, z) => {
+        if (y < 0 || y >= CHUNK_HEIGHT) return 0;
+        if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) return chunk.getBlock(x, y, z);
+        return this.getLoadedBlockAt(originX + x, y, originZ + z);
+      },
+      isFaceVisible: (blockId, neighborId) => {
+        if (neighborId === 0) return true;
+        if (neighborId === blockId) return false;
+        return getBlock(blockId).transparent || getBlock(neighborId).transparent;
+      },
+    }) as Map<BlockID, MutableMeshData>;
+  }
+
+  /** The original one-quad-per-face path, kept for comparison and fallback. */
+  private buildNaiveGroups(chunk: Chunk): Map<BlockID, MutableMeshData> {
+    const groups = new Map<BlockID, MutableMeshData>();
+    this.appendChunkFaces(chunk, groups);
+    return groups;
+  }
+
+  /** How many triangles the naive mesher would emit, for the savings stat. */
+  private countNaiveTriangles(chunk: Chunk): number {
+    let faces = 0;
+    for (let x = 0; x < CHUNK_SIZE; x += 1) {
+      for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
+        for (let z = 0; z < CHUNK_SIZE; z += 1) {
+          const blockId = chunk.getBlock(x, y, z);
+          if (blockId === 0) continue;
+          const worldX = chunk.x * CHUNK_SIZE + x;
+          const worldZ = chunk.z * CHUNK_SIZE + z;
+          for (let faceIndex = 0; faceIndex < FACE_OFFSETS.length; faceIndex += 1) {
+            const [dx, dy, dz] = FACE_OFFSETS[faceIndex];
+            if (this.shouldDrawFace(blockId, worldX + dx, y + dy, worldZ + dz)) faces += 1;
+          }
+        }
+      }
+    }
+    return faces * 2;
   }
 
   private disposeChunk(cx: number, cz: number): void {
@@ -233,10 +336,16 @@ export class ChunkRenderManager {
   private disposeChunkMeshes(key: string): void {
     const existing = this.meshes.get(key);
     if (existing) {
-      for (const mesh of existing) mesh.dispose();
+      // Materials are shared between chunks, so unfreeze before disposing the
+      // mesh — a frozen material on a disposed mesh leaks its cached effect.
+      for (const mesh of existing) {
+        mesh.material?.unfreeze();
+        mesh.dispose();
+      }
     }
     this.meshes.delete(key);
     this.triangles.delete(key);
+    this.naiveTriangles.delete(key);
   }
 
   private appendChunkFaces(chunk: Chunk, groups: Map<BlockID, MutableMeshData>): void {

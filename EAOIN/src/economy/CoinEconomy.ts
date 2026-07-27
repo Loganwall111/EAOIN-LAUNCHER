@@ -10,77 +10,27 @@
  * the wallet from whatever the backend reports. See `PaymentProvider.ts`.
  */
 
-export type CoinPackID = 'starter' | 'plus' | 'mega';
-
-export interface CoinPack {
-  id: CoinPackID;
-  /** Coins credited on successful purchase. */
-  coins: number;
-  /** Price in USD cents — integer maths only, never floats for money. */
-  priceCents: number;
-  label: string;
-  blurb: string;
-  /** Marketing badge, if any. */
-  badge?: string;
-  /** Bonus coins over the linear rate of the starter pack, for display. */
-  bonusCoins: number;
-}
-
 /**
- * The three published coin packs.
+ * Coin pack data now lives in `shared/src/economy/CoinPacks.ts` so the client
+ * and the payment server import the *same* table. This is what makes
+ * server-side price authority real rather than aspirational: there is exactly
+ * one definition of "the mega pack costs $19.00 and grants 7,000 coins".
  *
- *   1,000 coins → $5
- *   1,600 coins → $15
- *   7,000 coins → $19
+ * Re-exported here so every existing import site keeps working unchanged.
  */
-export const COIN_PACKS: CoinPack[] = [
-  {
-    id: 'starter',
-    coins: 1_000,
-    priceCents: 500,
-    label: 'Starter Pouch',
-    blurb: 'A handful of coins to grab your first skin pack.',
-    bonusCoins: 0,
-  },
-  {
-    id: 'plus',
-    coins: 1_600,
-    priceCents: 1_500,
-    label: 'Adventurer Chest',
-    blurb: 'More coins for mods, worlds and cosmetics.',
-    bonusCoins: 0,
-  },
-  {
-    id: 'mega',
-    coins: 7_000,
-    priceCents: 1_900,
-    label: 'Creator Vault',
-    blurb: 'The best value — stock up and buy anything on the marketplace.',
-    badge: 'BEST VALUE',
-    bonusCoins: 3_200,
-  },
-];
+export type { CoinPack, CoinPackID } from '@shared/economy/CoinPacks';
+export {
+  COIN_CURRENCY,
+  COIN_PACKS,
+  bestValuePack,
+  centsToDecimalString,
+  coinsPerDollar,
+  formatPrice,
+  getCoinPack,
+  isCoinPackID,
+} from '@shared/economy/CoinPacks';
 
-export function getCoinPack(id: CoinPackID): CoinPack | undefined {
-  return COIN_PACKS.find((pack) => pack.id === id);
-}
-
-/** Format cents as a display price, e.g. 1900 → "$19.00". */
-export function formatPrice(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-/** Coins per dollar, used to show which pack is the better deal. */
-export function coinsPerDollar(pack: CoinPack): number {
-  return Math.round((pack.coins / pack.priceCents) * 100);
-}
-
-/** The pack with the highest coins-per-dollar rate. */
-export function bestValuePack(): CoinPack {
-  return COIN_PACKS.reduce((best, pack) =>
-    coinsPerDollar(pack) > coinsPerDollar(best) ? pack : best
-  );
-}
+import type { CoinPack } from '@shared/economy/CoinPacks';
 
 export type LedgerKind = 'purchase' | 'spend' | 'refund' | 'grant' | 'payout';
 

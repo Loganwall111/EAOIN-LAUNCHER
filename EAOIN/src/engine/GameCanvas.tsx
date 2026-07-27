@@ -20,7 +20,9 @@ import { NextGenRuntime } from '../nextgen/NextGenRuntime';
 import { GameplayCounterKey } from '../objectives/ObjectiveTracker';
 import { createBlockMaterials } from '../rendering/BlockMaterials';
 import { ChunkRenderManager, ChunkRenderStats } from '../rendering/ChunkRenderManager';
-import { applyRenderScale, createRuntimeEngine, RendererBackendInfo } from '../rendering/RendererBackend';
+import { Chunk } from '../world/Chunk';
+import { applyRenderScale, createRuntimeEngine, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
+import { AdaptivePerformance, BUDGET_PRESETS, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
@@ -37,6 +39,10 @@ import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
 import { CinematicLighting, DEFAULT_CINEMATIC } from '../rendering/CinematicLighting';
 import { getWorldLayout } from '../world/WorldDistribution';
 import { WorldSaveManager } from '../world/WorldSave';
+import { EndGameRuntime } from '../space/EndGameRuntime';
+import { ScreenSpaceRayTracer } from '../rendering/ScreenSpaceRayTracing';
+import { AetherTerrain, BackroomsTerrain } from '../dimensions/terrain/AetherBackroomsTerrain';
+import { implantChip, powerForKey, usePower } from '../space/RealityChip';
 
 /** Live world readouts pushed to the HUD each sampling tick. */
 export interface WorldLoadProgress {
@@ -90,7 +96,16 @@ interface GameCanvasProps {
 }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
-interface RuntimeRenderStats extends ChunkRenderStats { fps: number; streamCenter: string; creatures: CreatureStats; drops: number; renderer: RendererBackendInfo; }
+interface RuntimeRenderStats extends ChunkRenderStats {
+  fps: number; streamCenter: string; creatures: CreatureStats; drops: number; renderer: RendererBackendInfo;
+  /** 95th-percentile frame time in ms — the number that reflects felt stutter. */
+  frameTimeP95: number;
+  /** Live internal resolution scale chosen by the adaptive tuner. */
+  renderScale: number;
+  effectTier: EffectTier;
+  /** Why the tuner last changed something. */
+  adaptiveReason: string;
+}
 
 const BLOCK_REACH = 7;
 const GRAVITY_BASE = -20;
@@ -100,7 +115,7 @@ const TERMINAL_VELOCITY = -28;
 const INITIAL_CHUNK_RADIUS = 2;
 /** Chunks generated + meshed per frame while streaming the render radius in. */
 const CHUNKS_PER_FRAME = 2;
-const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
+const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required', vulkanStatus: 'Detecting graphics backend…' };
 /** Hard cap for the blocking loading overlay; remaining distant chunks stream while playing. */
 const WORLD_LOADING_MAX_MS = 18_000;
 
@@ -146,7 +161,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [chatText, setChatText] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{ text: string; system?: boolean }>>([{ text: 'Welcome — T to chat, / for commands, Q to cycle tools, SPACE to jump, clouds moving', system: true }]);
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
-  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO });
+  const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
 
   useEffect(() => { selectedBlockRef.current = selectedBlock; }, [selectedBlock]);
@@ -300,8 +315,30 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const ambience = new AmbienceEngine();
       ambience.setVolume(settingsRef.current.volume, settingsRef.current.muted);
       const renderer = new ChunkRenderManager(scene, materials);
+      renderer.setGreedyMeshing(settingsRef.current.greedyMeshing !== false);
       const itemDrops = new ItemDropManager(scene, materials);
-      const renderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+
+      // --- adaptive performance -------------------------------------------
+      // A fixed quality preset has to be tuned for the worst-case view, which
+      // leaves most frames slower than they need to be. This measures real
+      // frame times and steers resolution / effects / view distance to hold
+      // the target framerate. See performance/AdaptivePerformance.ts.
+      const perfBudget = {
+        ...(BUDGET_PRESETS[settingsRef.current.qualityPreset] ?? BUDGET_PRESETS.balanced),
+        targetFps: settingsRef.current.targetFps || 60,
+      };
+      const baseRenderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+      const perf = new AdaptivePerformance(perfBudget, {
+        renderScale: settingsRef.current.renderScale,
+        renderDistance: baseRenderRadius,
+        effectTier: settingsRef.current.qualityPreset === 'performance' ? 'low'
+          : settingsRef.current.qualityPreset === 'cinematic' ? 'ultra'
+          : settingsRef.current.qualityPreset === 'quality' ? 'high' : 'medium',
+      });
+      // Mutable because the tuner shrinks/grows it while playing.
+      let renderRadius = perf.getState().renderDistance;
+      let effectTier: EffectTier = perf.getState().effectTier;
+      let adaptiveReason = '';
       const startupChunkTotal = chunksInRadius(renderRadius);
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
@@ -317,7 +354,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // black screen while thousands of chunks are meshed.
       const initialChunkTotal = chunksInRadius(INITIAL_CHUNK_RADIUS);
       reportLoadingProgress(42, `Meshing spawn chunks 0/${initialChunkTotal}`, false, { loadedChunks: 0, totalChunks: initialChunkTotal });
-      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => terrain.generateChunk(cx, cz));
+      renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => generateChunkForDimension(cx, cz));
       const initialLoadedChunks = Math.min(renderer.getStats().loadedChunks, startupChunkTotal);
       reportLoadingProgress(55, `Meshed spawn chunks ${Math.min(initialLoadedChunks, initialChunkTotal)}/${initialChunkTotal}`, false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       const lighting = configureSceneLighting(scene, spawn);
@@ -357,6 +394,18 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           console.warn('[Render] Optional post-processing disabled to keep world visible.', error);
         }
       }
+      // 5.0 — screen-space ray tracing. Real per-pixel ray marching against
+      // the depth buffer for reflections, contact shadows and AO. It is NOT
+      // hardware RT and the UI says so; see ScreenSpaceRayTracing.ts.
+      const rayTracer = new ScreenSpaceRayTracer(scene, camera);
+      rayTracer.configure({
+        quality: settingsRef.current.rayTracingQuality,
+        reflections: settingsRef.current.rayTracedReflections,
+        contactShadows: settingsRef.current.rayTracedShadows,
+        ambientOcclusion: settingsRef.current.rayTracedAO,
+      });
+      let lastRayTracingQuality = settingsRef.current.rayTracingQuality;
+
       // 2.0 — ONE atmosphere system owns the sky dome, celestial bodies,
       // clouds, stars, aurora, fog and biome weather particles. Nothing else in
       // the engine writes scene.clearColor / fogColor, which is what keeps the
@@ -381,6 +430,52 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       portalSystem.spawnForDimension('nether', new Vector3(spawn.x + 18, spawn.y - 1, spawn.z + 12));
       portalSystem.spawnForDimension('crystal_realm', new Vector3(spawn.x - 22, spawn.y - 1, spawn.z + 18));
       const realityRifts = new RealityRiftSystem(scene);
+      // 5.0 — the end-game chain, finally driven from the frame loop:
+      // black hole → the void → Void Leviathan → Reality Chip. Also owns the
+      // ocean depth/wave/whirlpool/Bloop hookup, which previously existed as
+      // tested systems that nothing ever called.
+      // --- per-dimension chunk generation ---------------------------------
+      // The Aether and the Backrooms are real dimensions with their own
+      // generators, so travelling there must actually change the geometry
+      // rather than just repainting the sky.
+      const aetherTerrain = new AetherTerrain({ seed, floorY: 30, ceilingY: 112 });
+      const backroomsTerrain = new BackroomsTerrain({ seed, floorY: 14, roomHeight: 5, levels: 4 });
+      let activeDimension: string = 'overworld';
+
+      /** Generate a chunk with whichever generator the current dimension uses. */
+      const generateChunkForDimension = (cx: number, cz: number): Chunk => {
+        if (activeDimension === 'aether' || activeDimension === 'backrooms') {
+          const chunk = new Chunk(cx, cz, `${seed}:${activeDimension}`);
+          // Chunk's constructor lays down placeholder terrain; clear it so the
+          // dimension generator starts from genuine empty space.
+          for (let x = 0; x < 16; x += 1)
+            for (let y = 0; y < 128; y += 1)
+              for (let z = 0; z < 16; z += 1) chunk.setBlock(x, y, z, 0);
+
+          if (activeDimension === 'aether') aetherTerrain.generate(chunk);
+          else backroomsTerrain.generate(chunk);
+          return chunk;
+        }
+        return terrain.generateChunk(cx, cz);
+      };
+
+      const endGame = new EndGameRuntime(scene, camera, {
+        seed,
+        seaLevel: (terrain as unknown as { config?: { seaLevel?: number } }).config?.seaLevel ?? 18,
+      });
+      endGame.attach();
+      endGame.onMessage = (text) => showActionMessage?.(text);
+      endGame.onPlayerDamage = (amount, source) => {
+        const next = applyDamage(survivalStatsRef.current, amount);
+        survivalStatsRef.current = next;
+        publishSurvivalStats?.(next);
+        showActionMessage?.(`${source} hits you for ${amount}.`);
+      };
+      endGame.onEnterVoid = (arenaCenter) => {
+        camera.position.copyFrom(arenaCenter).addInPlace(new Vector3(0, 4, -40));
+        dimensionRuntime.setDimension('cosmic_void');
+        atmosphere.setDimension('cosmic_void');
+      };
       const physics = new AdvancedPhysicsRuntime();
       physics.attach(scene);
       const commandBlockSystem = new CommandBlockSystem();
@@ -423,7 +518,19 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       const publishRenderStats = (): void => {
         const s = renderer.getStats();
-        setRenderStats({ ...s, fps: Math.round(engine.getFps()), streamCenter: `${streamCenter.cx},${streamCenter.cz}`, creatures: creatureManager.getStats(), drops: itemDrops.getCount(), renderer: runtimeEngine.info });
+        const sample = perf.getSample();
+        setRenderStats({
+          ...s,
+          fps: Math.round(engine.getFps()),
+          streamCenter: `${streamCenter.cx},${streamCenter.cz}`,
+          creatures: creatureManager.getStats(),
+          drops: itemDrops.getCount(),
+          renderer: runtimeEngine.info,
+          frameTimeP95: sample.frameTimeP95,
+          renderScale: perf.getState().renderScale,
+          effectTier,
+          adaptiveReason,
+        });
       };
       const publishRuntimeStatus = (): void => {
         const dim = dimensionRuntime.getState(); const logic = logicRuntime.getStats(); const settlement = settlementRuntime.getStats(camera.position); const authority = authorityRuntime.getStatus(); const interactions = worldInteractions.getStats(); const modding = moddingRuntime.getStatus(settingsRef.current);
@@ -474,7 +581,41 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         return false;
       };
 
+      /**
+       * Push an effect tier into the live scene.
+       *
+       * Everything here is reversible and cheap to toggle, which is the whole
+       * point — the tuner may change tier several times a minute as the player
+       * moves between an open vista and a cave.
+       */
+      const applyEffectTier = (tier: EffectTier): void => {
+        const fx = effectSettingsFor(tier);
+        try {
+          // Shadows are the single most expensive light-side feature.
+          const shadowGenerator = lighting.shadowGenerator;
+          if (shadowGenerator) {
+            const map = shadowGenerator.getShadowMap();
+            if (map) map.refreshRate = fx.shadowsEnabled ? 1 : 0;
+            shadowGenerator.setDarkness(fx.shadowsEnabled ? 0.35 : 1);
+          }
+          glow.intensity = fx.bloomEnabled ? 0.22 : 0.0;
+          if (pipeline) {
+            pipeline.bloomEnabled = fx.bloomEnabled;
+            pipeline.depthOfFieldEnabled = fx.depthOfFieldEnabled;
+            pipeline.samples = fx.samples;
+          }
+          // Particles are pooled inside the atmosphere system.
+          atmosphere.setParticlesEnabled(
+            settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion && fx.particleScale > 0.25
+          );
+        } catch { /* effect tuning must never break the frame */ }
+      };
+
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
+      /** True when the previous frame meshed chunks, so the tuner can skip it. */
+      let chunkWorkLastFrame = false;
+      /** Tracks surface/submerged transitions so we only re-theme on change. */
+      let wasSubmerged = false;
       let startupLoadingComplete = !renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
       // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
       // the heat and you must find water (or an oasis) to top it back up.
@@ -515,7 +656,36 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           arm.rotation.x = 0; arm.rotation.z = -0.12;
         }
 
-        const deltaSeconds = Math.min(engine.getDeltaTime() / 1000, 0.05);
+        const rawDeltaMs = engine.getDeltaTime();
+        const deltaSeconds = Math.min(rawDeltaMs / 1000, 0.05);
+
+        // --- adaptive performance tick --------------------------------------
+        // `chunkWorkThisFrame` is set below when chunks were meshed, so those
+        // frames are excluded from the tuner's signal; otherwise flying into a
+        // new region would permanently degrade quality.
+        if (settingsRef.current.adaptivePerformance) {
+          perf.sample(rawDeltaMs, chunkWorkLastFrame);
+          const adjustment = perf.update(deltaSeconds);
+          if (adjustment.changed) {
+            adaptiveReason = adjustment.reason;
+            const next = adjustment.state;
+            applyRenderScale(engine, next.renderScale);
+            if (next.renderDistance !== renderRadius) {
+              renderRadius = next.renderDistance;
+              // The visible set changed, so any cached WebGPU draw list is stale.
+              invalidateRenderSnapshot(engine);
+            }
+            if (next.effectTier !== effectTier) {
+              effectTier = next.effectTier;
+              applyEffectTier(effectTier);
+            }
+            if (settingsRef.current.showPerformanceOverlay) {
+              showActionMessage(`Auto quality: ${adjustment.reason}`);
+            }
+          }
+        }
+        chunkWorkLastFrame = false;
+
         if (!timeState.frozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * 0.02) % 24 }; worldTimeRef.current = timeState; }
         else if (worldTimeRef.current !== timeState) timeState = worldTimeRef.current;
         // Wrapping past midnight advances the day counter shown in the HUD.
@@ -574,7 +744,54 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           pipeline.imageProcessing.exposure = Math.min(pipeline.imageProcessing.exposure, 0.80);
           pipeline.bloomWeight = Math.min(pipeline.bloomWeight, 0.18);
         }
+        // Keep ray-traced shadows pointing at the real sun, and re-configure
+        // the pass when the player changes the quality setting.
+        rayTracer.update(deltaSeconds);
+        if (atmosphereFrame.sunDirection) rayTracer.setSunDirection(atmosphereFrame.sunDirection);
+        if (settingsRef.current.rayTracingQuality !== lastRayTracingQuality) {
+          lastRayTracingQuality = settingsRef.current.rayTracingQuality;
+          rayTracer.configure({
+            quality: settingsRef.current.rayTracingQuality,
+            reflections: settingsRef.current.rayTracedReflections,
+            contactShadows: settingsRef.current.rayTracedShadows,
+            ambientOcclusion: settingsRef.current.rayTracedAO,
+          });
+        }
+
         nextGenRuntime.update(deltaSeconds, camera.position, settingsRef.current);
+
+        // --- end-game chain + ocean -----------------------------------------
+        // Drives the black hole's pull, the Void Leviathan fight, Reality Chip
+        // cooldowns, ocean depth zones, wave height, whirlpool drag and the
+        // Bloop. `camera.position` is passed by reference so the black hole
+        // and whirlpools genuinely move the player.
+        const eyeBlockId = terrain.getBlockAt(
+          Math.floor(camera.position.x),
+          Math.floor(camera.position.y),
+          Math.floor(camera.position.z)
+        );
+        const endGameFrame = endGame.update(deltaSeconds, camera.position, eyeBlockId);
+
+        // Underwater look: the ocean owns fog colour and density while you are
+        // submerged, so descending actually gets darker and bluer.
+        if (endGameFrame.ocean?.submerged) {
+          const zone = endGameFrame.ocean;
+          scene.fogMode = Scene.FOGMODE_EXP2;
+          scene.fogDensity = zone.fogDensity;
+          scene.fogColor = zone.tint;
+          scene.clearColor = new Color4(zone.tint.r, zone.tint.g, zone.tint.b, 1);
+          scene.environmentIntensity = 0.48 * zone.light;
+          if (!wasSubmerged) {
+            wasSubmerged = true;
+            showActionMessage(`${zone.zone.name} — ${zone.zone.description}`);
+          }
+        } else if (wasSubmerged) {
+          // Hand the sky back to the atmosphere system on surfacing.
+          wasSubmerged = false;
+          scene.environmentIntensity = 0.48;
+          atmosphere.setDimension(dimensionRuntime.getState().id);
+          showActionMessage('You break the surface.');
+        }
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
         // Wind from the atmosphere drives the advanced physics simulations.
@@ -596,7 +813,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
         camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
         scene.fogEnabled = settingsRef.current.fogEnabled;
-        applyRenderScale(engine, settingsRef.current.renderScale);
+        // Render scale is owned by the adaptive tuner while it is enabled;
+        // only honour the raw setting when the player has turned it off.
+        // (This call used to run unconditionally every frame, forcing a
+        // full render-target resize check 60 times a second.)
+        if (!settingsRef.current.adaptivePerformance) {
+          applyRenderScale(engine, settingsRef.current.renderScale);
+        }
         if (thirdPerson) {
           // Visual third-person model: keep the real camera/player collision at
           // the controlled position, and draw the avatar a few blocks in front
@@ -704,11 +927,27 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (centerChanged || renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
           const result = renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, renderRadius,
-            (cx, cz) => terrain.generateChunk(cx, cz),
+            (cx, cz) => generateChunkForDimension(cx, cz),
             { budget: CHUNKS_PER_FRAME }
           );
           if (result.loaded > 0 || result.unloaded > 0) {
-            try { const sg = lighting.shadowGenerator; for (const m of scene.meshes) if (m.name.startsWith('voxel_world_')) { sg.addShadowCaster(m as Mesh, true); (m as Mesh).receiveShadows = true; } } catch {}
+            // Meshing is expensive and bursty; tell the tuner to ignore this
+            // frame so streaming does not look like a sustained slowdown.
+            chunkWorkLastFrame = true;
+            // The drawn mesh set changed, so a cached WebGPU command bundle
+            // would be replaying stale draws. Force it to re-record.
+            invalidateRenderSnapshot(engine);
+            try {
+              const sg = lighting.shadowGenerator;
+              const fx = effectSettingsFor(effectTier);
+              for (const m of scene.meshes) {
+                if (!m.name.startsWith('voxel_world_')) continue;
+                // Only register shadow casters when the tier actually draws
+                // shadows — the shadow map cost scales with caster count.
+                if (fx.shadowsEnabled) sg.addShadowCaster(m as Mesh, true);
+                (m as Mesh).receiveShadows = fx.shadowsEnabled;
+              }
+            } catch {}
           }
           if (!startupLoadingComplete) {
             const loadedVisibleChunks = Math.max(0, Math.min(startupChunkTotal, startupChunkTotal - result.pending));
@@ -795,6 +1034,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         showActionMessage(`${getBlock(picked.blockId).name}: cracking… ${(estimate.durationMs / 1000).toFixed(1)}s`);
       };
       const attackCreature = (): boolean => {
+        // The Void Leviathan is picked first and with a much longer reach —
+        // it is enormous, and the fight would be unplayable at 7 blocks.
+        if (endGame.isLeviathanActive()) {
+          const bossPick = scene.pickWithRay(
+            camera.getForwardRay(90),
+            (mesh) => Boolean(mesh.metadata?.leviathanPart)
+          );
+          const part = bossPick?.pickedMesh?.metadata?.leviathanPart as
+            | 'core' | 'maw' | 'tentacle' | undefined;
+          if (bossPick?.hit && part) {
+            const tool = getTool(selectedToolRef.current);
+            const damage = 20 + tool.tier * 12;
+            const result = endGame.damageLeviathan(damage, part);
+            audio.play(result.kind === 'core_hit' ? 'creature_down' : 'hit', settingsRef.current);
+            authorityRuntime.recordAction();
+            return true;
+          }
+        }
         const pick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH), (mesh) => Boolean(mesh.metadata?.creatureId));
         const creatureId = pick?.pickedMesh?.metadata?.creatureId as string | undefined; if (!pick?.hit || !creatureId) return false;
         const tool = getTool(selectedToolRef.current); const damage = 5 + tool.tier * 4 + (tool.kind === 'axe' ? 3 : 0);
@@ -887,6 +1144,37 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (event.key.toLowerCase() === 'v') { event.preventDefault(); const settlement = settlementRuntime.getStats(camera.position); if (!settlement.discovered) { showActionMessage(`Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m away`); publishRuntimeStatus(); return; } let delivered = false; if (getStackCount(inventoryRef.current, 17) > 0) { publishInventory(removeFromInventory(inventoryRef.current, 17, 1)); showActionMessage(settlementRuntime.deliverSupplies('crate', 1)); delivered = true; } else if (getStackCount(inventoryRef.current, 6) > 0) { publishInventory(removeFromInventory(inventoryRef.current, 6, 1)); showActionMessage(settlementRuntime.deliverSupplies('wood', 1)); delivered = true; } else if (getStackCount(inventoryRef.current, 3) > 0) { publishInventory(removeFromInventory(inventoryRef.current, 3, 1)); showActionMessage(settlementRuntime.deliverSupplies('stone', 1)); delivered = true; } else showActionMessage('No supplies'); if (delivered) { authorityRuntime.recordAction(); audio.play('craft', settingsRef.current); } publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'l') { event.preventDefault(); const logic = logicRuntime.toggle(); audio.play('ui', settingsRef.current); showActionMessage(`Redstone ${logic.active ? 'ON' : 'OFF'}`); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'b') { event.preventDefault(); const settlement = settlementRuntime.getStats(camera.position); if (!settlement.discovered) { showActionMessage('Find settlement'); return; } if (getStackCount(inventoryRef.current, 8) > 0) { let ni = removeFromInventory(inventoryRef.current, 8, 1); ni = addToInventory(ni, 17, 1); publishInventory(ni); authorityRuntime.recordAction(); audio.play('craft', settingsRef.current); showActionMessage(`${settlementRuntime.completeTrade()} — Coal for Crate`); } else if (getStackCount(inventoryRef.current, 10) > 0) { let ni = removeFromInventory(inventoryRef.current, 10, 1); ni = addToInventory(ni, 16, 2); publishInventory(ni); authorityRuntime.recordAction(); audio.play('craft', settingsRef.current); showActionMessage(`${settlementRuntime.completeTrade()} — Gold for Shards`); } else showActionMessage('Need Coal or Gold'); publishRuntimeStatus(); return; }
+        // --- end-game: black hole, Void Leviathan, Reality Chip -------------
+        if (event.key.toLowerCase() === 'j') {
+          event.preventDefault();
+          const result = implantChip(endGame.getChip());
+          endGame.setChip(result.state);
+          showActionMessage(result.message);
+          return;
+        }
+        if (event.key === 'B' && event.shiftKey) {
+          // Shift+B summons the black hole, which is the entry to the end game.
+          event.preventDefault();
+          endGame.spawnBlackHole(camera.position.add(new Vector3(0, 90, 120)));
+          return;
+        }
+        if (event.key === 'L' && event.shiftKey) {
+          event.preventDefault();
+          endGame.summonLeviathan(camera.position);
+          return;
+        }
+        // Reality Chip powers fire on their own bound keys once implanted.
+        if (endGame.getChip().implanted) {
+          const power = powerForKey(event.key);
+          if (power) {
+            event.preventDefault();
+            const result = usePower(endGame.getChip(), power.id);
+            endGame.setChip(result.state);
+            showActionMessage(result.message);
+            if (result.ok) audio.play('ui', settingsRef.current);
+            return;
+          }
+        }
         if (event.key.toLowerCase() === 'o') { event.preventDefault(); document.exitPointerLock?.(); onToggleSettings(); return; }
       };
       const handleKeyUp = (event: KeyboardEvent): void => { pressedKeys.delete(event.code); };
@@ -903,10 +1191,29 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const handleTravelEvent = (event: Event): void => {
         const dimensionId = (event as CustomEvent<{ dimensionId: string }>).detail?.dimensionId;
         if (!dimensionId) return;
+        const previousDimension = activeDimension;
         dimensionRuntime.setDimension(dimensionId as RuntimeDimensionID);
         dimensionRuntime.triggerTransitionEffect(camera.position, true);
         // Swap the whole atmosphere to the destination's sky and fog.
         atmosphere.setDimension(dimensionId);
+        activeDimension = dimensionId;
+
+        // Dimensions with their own generator need the world rebuilt, not
+        // merely re-lit. Entering or leaving one discards every loaded chunk.
+        const usesOwnGenerator = (id: string) => id === 'aether' || id === 'backrooms';
+        if (usesOwnGenerator(dimensionId) || usesOwnGenerator(previousDimension)) {
+          renderer.clearAll();
+          invalidateRenderSnapshot(engine);
+          // Drop the player onto solid ground in the destination.
+          if (dimensionId === 'aether') camera.position.set(8, 96, 8);
+          else if (dimensionId === 'backrooms') camera.position.set(3, 16, 3);
+          streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+          renderer.updateVisibleChunks(
+            streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,
+            (cx, cz) => generateChunkForDimension(cx, cz)
+          );
+        }
+
         const state = dimensionRuntime.getState();
         audio.play('ui', settingsRef.current);
         showActionMessage(`Traveled to ${state.name}`);
@@ -941,7 +1248,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         if (crackMesh) crackMesh.dispose(); crackMaterial.dispose();
-        audio.stopMusic(); ambience.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     })();
     return () => { disposed = true; cleanupScene?.(); };
@@ -1146,6 +1453,14 @@ function updateWorldLighting(
  * description and this file owns the mapping onto whatever the generator's
  * current option names happen to be.
  */
+/**
+ * Translate a world-type preset into real generator settings.
+ *
+ * Every field here is now actually read by AdvancedTerrainGenerator. The
+ * exotic presets (Far Lands, Sub-Bedrock, Inverted, Cave World) used to be
+ * decorative — the card appeared on the create screen and generated an
+ * ordinary world. They are wired to real passes in `ExoticWorldGen.ts`.
+ */
 function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (config.floatingIslands) { out.floatingIslands = true; out.skyIslands = true; }
@@ -1153,6 +1468,7 @@ function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
   if (config.heightScale !== undefined) out.mountainIntensity = config.heightScale;
   // A superflat world has no relief, no caves and no erosion to run.
   if (config.flatGroundY !== undefined) {
+    out.flatGroundY = config.flatGroundY;
     out.mountainIntensity = 0;
     out.caveScale = 0;
     out.erosionIterations = 0;
@@ -1160,8 +1476,14 @@ function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
     out.sinkholes = false;
     out.volcanoes = false;
   }
-  // Cave worlds crank the carve rate right up.
-  if (config.caveWorld) out.caveScale = 3;
+  // Cave worlds crank the carve rate right up and seal the sky.
+  if (config.caveWorld) { out.caveScale = 3; out.caveWorld = true; }
+  // The Far Lands: terrain-noise saturation past a threshold distance.
+  if (config.farLandsThreshold !== undefined) out.farLandsThreshold = config.farLandsThreshold;
+  // Stacked worlds beneath the bedrock floor.
+  if (config.subBedrockLayers !== undefined) out.subBedrockLayers = config.subBedrockLayers;
+  // Density flip: caverns become spires.
+  if (config.inverted) out.inverted = true;
   return out;
 }
 

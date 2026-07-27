@@ -28,7 +28,12 @@ export default function CoinStoreModal({ store, balance, onClose, onPurchased }:
     setMessage(null);
     setError(false);
     try {
-      const result = await store.buyCoins(pack, method);
+      const result = await store.buyCoins(pack, {
+        method,
+        // A real PayPal approval takes as long as the buyer takes, so narrate
+        // each stage instead of leaving the button spinning silently.
+        onStatus: (text) => { setMessage(text); setError(false); },
+      });
       setMessage(result.message);
       setError(!result.ok);
       if (result.ok) onPurchased?.(result.coinsCredited);
@@ -73,6 +78,11 @@ export default function CoinStoreModal({ store, balance, onClose, onPurchased }:
             <span className="cs-method-mark card">💳</span> Card
           </button>
         </div>
+        <p className="cs-method-hint">
+          {method === 'paypal'
+            ? 'Pay with your PayPal balance or a linked account.'
+            : 'Card payments are processed securely through PayPal Guest Checkout — no PayPal account needed.'}
+        </p>
 
         <div className="cs-pack-grid">
           {COIN_PACKS.map((pack) => (
@@ -101,12 +111,18 @@ export default function CoinStoreModal({ store, balance, onClose, onPurchased }:
           <div className={`cs-message ${error ? 'is-error' : 'is-ok'}`} role="status">{message}</div>
         )}
 
-        {!store.isLivePayments() && (
+        {store.isLivePayments() ? (
+          <p className="cs-live-note">
+            🔒 <strong>Secure PayPal checkout.</strong> You will approve this payment on
+            paypal.com — EAOIN never sees or stores your card or PayPal password. Coins are
+            added only after PayPal confirms the payment to our server.
+          </p>
+        ) : (
           <p className="cs-sandbox-note">
             ⚠ <strong>Sandbox checkout.</strong> No real payment is taken and no card or PayPal
             details are collected. Coins granted here are for testing only. To accept real
-            payments, set <code>VITE_PAYMENTS_BASE_URL</code> to your backend — see{' '}
-            <code>src/economy/PaymentProvider.ts</code>.
+            payments, set <code>VITE_PAYMENTS_BASE_URL=/api/payments</code> and give the server
+            your PayPal credentials — see <code>docs/PAYMENTS.md</code>.
           </p>
         )}
 

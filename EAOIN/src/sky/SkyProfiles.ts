@@ -669,6 +669,43 @@ export const DIMENSION_SKY_PROFILES: Record<string, SkyProfile> = {
     showDeepSpace: true,
     hasSun: false,
   }),
+
+  // The Aether: perpetual bright golden hour above an endless fall. Very high
+  // ambient and near-zero fog, so the isles read as floating in open light.
+  aether: profile('aether', 'The Aether', {
+    zenithDay: c(0.38, 0.62, 0.92),
+    horizonDay: c(0.92, 0.94, 0.82),
+    zenithNight: c(0.16, 0.26, 0.48),
+    horizonNight: c(0.44, 0.50, 0.68),
+    sunsetGlow: c(1.0, 0.86, 0.58),
+    fogDay: c(0.86, 0.92, 1.0),
+    fogNight: c(0.40, 0.48, 0.66),
+    fogDensity: FOG_LOW,
+    cloudCoverage: 0.85,
+    auroraStrength: 0.12,
+    starDensity: 0.25,
+    ambientScale: 1.25,
+    weather: 'clear',
+  }),
+
+  // The Backrooms: no sky at all. A flat sickly yellow with heavy fog so you
+  // can never see more than a room or two ahead, which is the entire point.
+  backrooms: profile('backrooms', 'The Backrooms', {
+    zenithDay: c(0.74, 0.70, 0.42),
+    horizonDay: c(0.80, 0.76, 0.48),
+    zenithNight: c(0.66, 0.62, 0.36),
+    horizonNight: c(0.72, 0.68, 0.42),
+    sunsetGlow: c(0.84, 0.78, 0.46),
+    fogDay: c(0.76, 0.72, 0.46),
+    fogNight: c(0.70, 0.66, 0.40),
+    fogDensity: FOG_HEAVY,
+    cloudCoverage: 0,
+    auroraStrength: 0,
+    starDensity: 0,
+    ambientScale: 0.92,
+    weather: 'clear',
+    hasSun: false,
+  }),
 };
 
 /* ------------------------------------------------------------------ */

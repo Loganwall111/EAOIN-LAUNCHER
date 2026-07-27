@@ -8,6 +8,13 @@ import { CoinPack, CoinWallet, InsufficientCoinsError, getCoinPack } from './Coi
 import { PaymentProvider, PaymentMethod, CheckoutSession } from './PaymentProvider';
 import { MarketItem, MarketplaceLibrary } from '../marketplace/MarketplaceCatalog';
 
+/** Optional UI hooks so a slow PayPal round trip can narrate itself. */
+export interface BuyCoinsOptions {
+  method?: PaymentMethod;
+  /** Called with human-readable progress, e.g. "Waiting for approval…". */
+  onStatus?: (message: string) => void;
+}
+
 export interface BuyItemResult {
   ok: boolean;
   message: string;
@@ -107,7 +114,15 @@ export class StoreService {
    * of -1) we fall back to the pack's advertised amount, which is safe because
    * no money changed hands.
    */
-  async buyCoins(pack: CoinPack, method: PaymentMethod = 'paypal'): Promise<BuyCoinsResult> {
+  async buyCoins(
+    pack: CoinPack,
+    methodOrOptions: PaymentMethod | BuyCoinsOptions = 'paypal'
+  ): Promise<BuyCoinsResult> {
+    const options: BuyCoinsOptions =
+      typeof methodOrOptions === 'string' ? { method: methodOrOptions } : methodOrOptions;
+    const method = options.method ?? 'paypal';
+
+    options.onStatus?.('Opening checkout…');
     const session = await this.payments.createCheckout(pack, method);
 
     if (session.status === 'failed') {
@@ -121,11 +136,23 @@ export class StoreService {
     }
 
     // A live provider hands back a URL the player must approve on PayPal.
+    let approvalWindow: Window | null = null;
     if (session.approveUrl) {
-      openApprovalWindow(session.approveUrl);
+      approvalWindow = openApprovalWindow(session.approveUrl);
+      options.onStatus?.(
+        approvalWindow
+          ? 'Complete your payment in the PayPal window.'
+          : 'Popup blocked — open the PayPal link to finish paying.'
+      );
     }
 
-    const result = await this.payments.confirmCheckout(session);
+    let result;
+    try {
+      result = await this.payments.confirmCheckout(session, { onStatus: options.onStatus });
+    } finally {
+      // Always tidy up the popup, even if confirmation threw.
+      closeApprovalWindow(approvalWindow);
+    }
 
     if (result.status !== 'completed') {
       return {
@@ -154,12 +181,15 @@ export class StoreService {
   }
 
   /** Convenience overload used by the UI, which only knows the pack id. */
-  async buyCoinsById(packId: CoinPack['id'], method: PaymentMethod = 'paypal'): Promise<BuyCoinsResult> {
+  async buyCoinsById(
+    packId: CoinPack['id'],
+    methodOrOptions: PaymentMethod | BuyCoinsOptions = 'paypal'
+  ): Promise<BuyCoinsResult> {
     const pack = getCoinPack(packId);
     if (!pack) {
       return { ok: false, message: 'Unknown coin pack.', balance: this.wallet.getBalance(), coinsCredited: 0 };
     }
-    return this.buyCoins(pack, method);
+    return this.buyCoins(pack, methodOrOptions);
   }
 
   /**
@@ -174,11 +204,29 @@ export class StoreService {
 /** Share of each sale that goes to the creator. */
 export const CREATOR_REVENUE_SHARE = 0.7;
 
-function openApprovalWindow(url: string): void {
-  if (typeof window === 'undefined') return;
+/**
+ * Open PayPal's approval page.
+ *
+ * Note the absence of `noopener`: we deliberately keep the handle so the popup
+ * can be closed once the server confirms the capture. Nothing is read from the
+ * popup — cross-origin rules forbid it, and the outcome comes from our server
+ * either way.
+ */
+function openApprovalWindow(url: string): Window | null {
+  if (typeof window === 'undefined') return null;
   try {
-    window.open(url, 'eaoin_checkout', 'width=480,height=720,noopener,noreferrer');
-  } catch { /* popup blocked — the confirm step still polls the backend */ }
+    return window.open(url, 'eaoin_checkout', 'width=500,height=760');
+  } catch {
+    // Popup blocked — the confirm step still polls the backend.
+    return null;
+  }
+}
+
+function closeApprovalWindow(handle: Window | null): void {
+  if (!handle) return;
+  try {
+    if (!handle.closed) handle.close();
+  } catch { /* cross-origin close can throw; harmless */ }
 }
 
 export default StoreService;

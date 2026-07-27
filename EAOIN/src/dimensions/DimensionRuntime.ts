@@ -45,7 +45,9 @@ export type RuntimeDimensionID =
   | 'spirit_realm'
   | 'nature_dimension'
   | 'undead_realm'
-  | 'cosmic_void';
+  | 'cosmic_void'
+  | 'aether'
+  | 'backrooms';
 
 export interface RuntimeDimensionDefinition {
   id: RuntimeDimensionID;
@@ -586,6 +588,44 @@ const DIMENSIONS: RuntimeDimensionDefinition[] = [
     hazards: ['Instant death from void', 'Time stops', 'Insanity'],
     lore: 'The end of all dimensions. Beat the Void Emperor to "finish" the game — and start the new one.',
     message: 'Entered the Cosmic Void — do not look back',
+  },
+  {
+    id: 'aether',
+    name: 'The Aether',
+    emoji: '☁',
+    description: 'The bright mirror of the Nether. Floating isles of blue grass above an endless fall.',
+    sky: new Color4(0.72, 0.86, 0.98, 1),
+    fog: new Color3(0.80, 0.90, 1.0),
+    gravity: new Vector3(0, -0.30, 0),
+    tint: new Color3(0.85, 0.95, 1.0),
+    weather: 'Perpetual golden hour, drifting cloud banks',
+    music: 'Bright harp and choir, weightless',
+    exclusiveBlocks: ['aether_grass', 'skyroot_log', 'holystone', 'ambrosium_ore', 'zanite_ore', 'aercloud', 'golden_oak_leaves'],
+    exclusiveMobs: ['Moa', 'Aerbunny', 'Swet', 'Cockatrice', 'Aerwhale', 'Valkyrie'],
+    boss: 'Sun Spirit (dimension boss)',
+    structures: ['Bronze Dungeon', 'Silver Dungeon', 'Gold Dungeon', 'Skyroot Grove', 'Cloud Fortress'],
+    hazards: ['The endless fall', 'Cockatrice poison', 'Valkyrie duels'],
+    lore: 'Where the Nether burns downward, the Aether drifts upward. Everything here is lighter — including you. Fall off an isle and you fall forever, unless an Aercloud catches you.',
+    message: 'Ascended to the Aether — mind the edges',
+  },
+  {
+    id: 'backrooms',
+    name: 'The Backrooms',
+    emoji: '🚪',
+    description: 'Endless damp yellow rooms, buzzing fluorescent lights, and nobody else. Probably.',
+    sky: new Color4(0.86, 0.82, 0.55, 1),
+    fog: new Color3(0.78, 0.74, 0.48),
+    gravity: new Vector3(0, -0.52, 0),
+    tint: new Color3(0.92, 0.88, 0.58),
+    weather: 'None. The air does not move.',
+    music: 'Fluorescent hum, 60Hz, forever',
+    exclusiveBlocks: ['damp_carpet', 'yellow_wallpaper', 'ceiling_tile', 'fluorescent_light', 'wet_wall'],
+    exclusiveMobs: ['Hound', 'Smiler', 'Skin-Stealer', 'Partygoer'],
+    boss: 'The Smiler (dimension boss)',
+    structures: ['Level 0 — The Lobby', 'Level 1 — Habitable Zone', 'Level 2 — Pipe Dreams', 'The Manila Room'],
+    hazards: ['Getting lost permanently', 'Entity encounters', 'No exit'],
+    lore: 'You noclipped out of reality. Roughly six hundred million square miles of damp carpet, the smell of old moisture, and the buzz of fluorescent lights at maximum hum. If you hear something, you are not alone.',
+    message: 'You noclipped into the Backrooms. Good luck.',
   },
 ];
 
