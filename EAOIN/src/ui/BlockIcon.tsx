@@ -90,8 +90,13 @@ function renderCube(ctx: CanvasRenderingContext2D, id: BlockID, size: number): v
         u = (dx + dy + 1) / 2;
         v = (dy - dx + 1) / 2;
       } else {
-        // Side walls occupy the lower two thirds, split down the middle.
-        const wallTop = quarter + Math.abs(px + 0.5 - half) * 0.5;
+        // Side walls occupy the lower portion, split down the middle.
+        // wallTop forms an inverted V that meets the bottom vertex of the
+        // top diamond (at the center) and the left/right vertices (at the
+        // edges). The old formula was a upright V, which left a gap between
+        // the top face and the side walls — the "hovering block" glitch.
+        const distFromCenter = Math.abs(px + 0.5 - half);
+        const wallTop = (size / 2 - 0.5) - (quarter * distFromCenter) / (half - 0.5);
         const wallBottom = size * 0.98;
         if (py >= wallTop && py <= wallBottom) {
           if (px < half) {

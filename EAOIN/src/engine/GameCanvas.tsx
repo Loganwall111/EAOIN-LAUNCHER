@@ -306,6 +306,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
 
       const camera = new UniversalCamera('player_camera', new Vector3(spawn.x, spawn.y, spawn.z), scene);
+      // BUGFIX: explicitly set the active camera. Without this, Babylon can
+      // render a black screen on some browsers / GPUs because no camera is
+      // active even though one exists in the scene.
+      scene.activeCamera = camera;
       camera.attachControl(canvas, true);
       camera.setTarget(new Vector3(spawn.x + 8, spawn.y - 0.35, spawn.z + 8));
       camera.minZ = 0.05; camera.maxZ = 1500;
