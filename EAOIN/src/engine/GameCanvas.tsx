@@ -14,7 +14,7 @@ import DimensionRuntime, { RuntimeDimensionID } from '../dimensions/DimensionRun
 import { WorldInteractionRuntime } from '../effects/WorldInteractionRuntime';
 import { ItemDropManager } from '../items/ItemDropManager';
 import { LocalAuthorityRuntime } from '../networking/LocalAuthorityRuntime';
-import { GameMode } from '../modes/GameMode';
+import { GameMode, isCreativeMode } from '../modes/GameMode';
 import { ModdingRuntime } from '../modding/ModdingRuntime';
 import { NextGenRuntime } from '../nextgen/NextGenRuntime';
 import { GameplayCounterKey } from '../objectives/ObjectiveTracker';
@@ -1064,6 +1064,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
 
         survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
+
+        // --- death ------------------------------------------------------------
+        // Health could previously reach zero and simply stay there: starving,
+        // dehydrating or falling had no terminal consequence, so survival had
+        // no stakes. One check here covers every damage source, since they all
+        // funnel into `survivalStatsRef` above.
+        if (nextSurvival.health <= 0 && !isCreativeMode(gameModeRef.current)) {
+          showActionMessage(respawnPlayer('You died'));
+        }
         // Incremental world streaming — a small budget every frame so the world
         // keeps filling in without ever blocking the render loop.
         const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);

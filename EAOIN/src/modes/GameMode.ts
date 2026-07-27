@@ -36,6 +36,16 @@ export const GAME_MODES: ModeDefinition[] = [
   },
 ];
 
+/**
+ * True for modes where the player cannot be harmed.
+ *
+ * Used by the death check: dying in creative would be absurd, and the engine
+ * previously had no single place that answered this question.
+ */
+export function isCreativeMode(mode: GameMode): boolean {
+  return mode === 'creative' || mode === 'incredible';
+}
+
 export function modeLabel(mode: GameMode): string {
   return GAME_MODES.find((entry) => entry.id === mode)?.label ?? 'Survival';
 }
