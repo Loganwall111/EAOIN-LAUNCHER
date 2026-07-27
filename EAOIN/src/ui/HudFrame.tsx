@@ -6,7 +6,7 @@
  * panels (inventory, shaders, quests…) still live in HUD.tsx and are layered
  * above this frame.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { getStackCount, HOTBAR_BLOCKS, InventoryStacks } from '../player/InventoryState';
 import { SurvivalStats } from '../player/SurvivalState';
@@ -60,6 +60,28 @@ function formatClock(timeOfDay: number): string {
 }
 
 /** Repeating pip row (hearts / drumsticks) like the concept art. */
+
+function HotbarBlockCube({ id }: { id: BlockID }) {
+  const block = getBlock(id);
+  const top = block.accentColor ?? block.color;
+  return (
+    <span
+      className="hotbar-cube"
+      style={{
+        '--cube-top': top,
+        '--cube-left': block.color,
+        '--cube-right': top,
+        '--cube-edge': 'rgba(0,0,0,.75)',
+      } as CSSProperties}
+      aria-hidden="true"
+    >
+      <i className="cube-face top" />
+      <i className="cube-face left" />
+      <i className="cube-face right" />
+    </span>
+  );
+}
+
 function PipRow({ icon, value, max, count = 10 }: { icon: string; value: number; max: number; count?: number }) {
   const filled = Math.round((Math.max(0, Math.min(max, value)) / max) * count);
   return (
@@ -274,11 +296,7 @@ export default function HudFrame({
                 title={block.name}
               >
                 <span className="slot-num">{index + 1}</span>
-                <span style={{
-                  width: 26, height: 26, background: block.color,
-                  boxShadow: `inset -8px 0 ${block.accentColor ?? block.color}, inset 0 6px rgba(255,255,255,.24)`,
-                  border: '1px solid rgba(0,0,0,.6)',
-                }} />
+                <HotbarBlockCube id={blockId} />
                 {count > 0 && <span className="slot-count">{count}</span>}
               </button>
             );

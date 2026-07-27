@@ -130,9 +130,20 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
 
       {/* World List */}
       {view === 'list' && (
-        <div className="sp-body">
-          <div className="sp-world-list-panel ui-panel">
-            <div className="ui-panel-title">◈ Your Worlds ({worlds.length})</div>
+        <div className="sp-body worlds-page-body">
+          <aside className="worlds-sidebar ui-panel">
+            <div className="worlds-sidebar-logo">EAOIN</div>
+            <div className="worlds-sidebar-sub">Triple A Sandbox Experience</div>
+            <nav className="worlds-sidebar-nav">
+              <button className="active" onClick={() => selectedWorld && onStart(selectedWorld.seed, selectedWorld.mode)}>PLAY</button>
+              <button className="active-purple">WORLDS</button>
+              <button onClick={onBack}>MAIN MENU</button>
+              <button onClick={() => setView('create')}>CREATE</button>
+              <button onClick={onBack}>EXIT</button>
+            </nav>
+          </aside>
+          <div className="sp-world-list-panel ui-panel worlds-list-panel">
+            <div className="ui-panel-title">WORLDS <small>Select a world to load or create a new one</small></div>
             <div className="sp-world-list">
               {worlds.length === 0 && (
                 <div className="sp-empty">
@@ -171,8 +182,8 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
 
           {/* Selected world detail + Play */}
           {selectedWorld && (
-            <div className="sp-detail-panel ui-panel">
-              <div className="ui-panel-title">◈ World Details</div>
+            <div className="sp-detail-panel ui-panel worlds-preview-panel">
+              <div className="ui-panel-title">WORLD PREVIEW</div>
               <div className="sp-detail-content">
                 <div className="sp-detail-hero" style={{ background: MODE_BACKGROUNDS[selectedWorld.mode]?.gradient }}>
                   <span className="sp-detail-icon">{selectedWorld.icon}</span>
@@ -188,7 +199,7 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                   </div>
                 </div>
                 <button className="sp-play-btn" onClick={() => onStart(selectedWorld.seed, selectedWorld.mode)}>
-                  ▶ PLAY WORLD
+                  LOAD WORLD
                 </button>
               </div>
             </div>

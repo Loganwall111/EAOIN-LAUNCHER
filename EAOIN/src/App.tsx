@@ -411,6 +411,7 @@ export default function App() {
         onCloseInventory={closeInventory}
         onCloseSettings={closeSettings}
         onSettingsChange={setSettings}
+        onSelectBlock={setSelectedBlock}
       />
     </div>
   );
