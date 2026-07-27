@@ -750,7 +750,7 @@ export type CreativeTab = BlockCategory | 'all';
 
 /** Creative-style building applies to Creative and the unlocked Incredible mode. */
 export function isCreativeMode(mode: GameMode): boolean {
-  return mode === 'creative' || mode === 'incredible';
+  return mode === 'creative' || mode === 'incredible' || mode === 'experimental' || mode === 'story';
 }
 
 /**

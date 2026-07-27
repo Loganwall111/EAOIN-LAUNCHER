@@ -387,6 +387,9 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   297: { id: 297, name: 'Carved Pumpkin', shortName: 'CP', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 14, emissive: true, stackSize: 64, color: '#e67a1a' },
   298: { id: 298, name: 'Jack o Lantern', shortName: 'JL', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 15, emissive: true, stackSize: 64, color: '#e67a1a' },
   299: { id: 299, name: 'Bee Nest', shortName: 'BN', category: 'decoration', solid: true, transparent: false, hardness: 0.3, lightLevel: 0, emissive: false, stackSize: 64, color: '#c8a85a' },
+  300: { id: 300, name: 'The Forgotten Journal', shortName: 'FJ', category: 'misc', solid: false, transparent: true, hardness: 100.0, lightLevel: 8, emissive: true, stackSize: 1, color: '#3a2a1a', accentColor: '#ffd166' },
+  301: { id: 301, name: 'Memory Shard', shortName: 'MS', category: 'misc', solid: false, transparent: true, hardness: 100.0, lightLevel: 12, emissive: true, stackSize: 71, color: '#5dd6ff', accentColor: '#ffffff' },
+  302: { id: 302, name: 'The Omni Creator', shortName: 'OC', category: 'misc', solid: false, transparent: true, hardness: 100.0, lightLevel: 15, emissive: true, stackSize: 1, color: '#fff7c8', accentColor: '#7c2cff' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */

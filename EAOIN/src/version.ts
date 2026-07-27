@@ -1,8 +1,15 @@
-export const GAME_VERSION = '1.0.0';
-export const RELEASE_NAME = 'Official Release';
+export const GAME_VERSION = '1.1.0';
+export const RELEASE_NAME = 'The Final Journey — Official Public Release';
 export const RELEASE_LABEL = `EAOIN ${GAME_VERSION} — ${RELEASE_NAME}`;
-export const RELEASE_TAGLINE = '1.0 — 25 Dimensions • Space • 300+ Blocks • 14 Civilizations • 30+ Bosses • Modding • Shaders • Multiplayer';
+export const RELEASE_TAGLINE = 'Official Public Release — Terrain Revamp • The Creator Endgame • 71 Memory Shards';
 export const RELEASE_FEATURES = [
+  '⛰️ Terrain Update: Perlin noise mountains, realistic cliffs & valleys',
+  '🕳️ Cave Rework: Big tunnel systems, less abyss, refined frequency',
+  '📔 The Final Journey: Find the 71 Memory Shards to restore the Journal',
+  '👴 The Creator: Confront the final mystery in the Corrupted Lands',
+  '🚀 Final Cinematic: Launch to a new world at the end of the story',
+  '🎨 Volumetric Clouds: Higher altitude, larger clustered clouds',
+  '🏗️ Inventory Fix: Creative inventory accessible in all sandbox modes',
   '🌍 25 dimensions with unique gravity, mobs, ores, music, hazards',
   '🚀 Space travel — stars, planets, galaxies, anomalies',
   '🧱 300+ blocks across 18 categories',

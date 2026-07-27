@@ -27,6 +27,7 @@ export function createStarterInventory(): InventoryStacks {
     21: 0,
     22: 0,
     23: 0,
+    300: 1, // The Forgotten Journal
   };
 }
 

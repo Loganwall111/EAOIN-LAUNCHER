@@ -47,7 +47,8 @@ export type RuntimeDimensionID =
   | 'undead_realm'
   | 'cosmic_void'
   | 'aether'
-  | 'backrooms';
+  | 'backrooms'
+  | 'corrupted_lands';
 
 export interface RuntimeDimensionDefinition {
   id: RuntimeDimensionID;
@@ -626,6 +627,25 @@ const DIMENSIONS: RuntimeDimensionDefinition[] = [
     hazards: ['Getting lost permanently', 'Entity encounters', 'No exit'],
     lore: 'You noclipped out of reality. Roughly six hundred million square miles of damp carpet, the smell of old moisture, and the buzz of fluorescent lights at maximum hum. If you hear something, you are not alone.',
     message: 'You noclipped into the Backrooms. Good luck.',
+  },
+  {
+    id: 'corrupted_lands',
+    name: 'The Corrupted Lands',
+    emoji: '👾',
+    description: 'A reality in decay. Source code leaks through the cracks.',
+    sky: new Color4(0.02, 0.02, 0.02, 1),
+    fog: new Color3(0, 0, 0),
+    gravity: new Vector3(0, -0.4, 0),
+    tint: new Color3(0.1, 1.0, 0.1),
+    weather: 'Source code particles, reality rifts',
+    music: 'Digital decay, glitchy ambient',
+    exclusiveBlocks: ['glitch_block', 'void_stone', 'dark_matter'],
+    exclusiveMobs: ['The Creator', 'Corrupted Echo'],
+    boss: 'The Creator',
+    structures: ['The Final Door', 'Launch Platform'],
+    hazards: ['Reality shifts', 'Gravity instability'],
+    lore: 'Outside every known dimension. Reality itself is damaged.',
+    message: 'UNKNOWN REGION — Reality unstable.',
   },
 ];
 

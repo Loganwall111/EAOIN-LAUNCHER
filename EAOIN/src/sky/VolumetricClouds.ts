@@ -28,7 +28,7 @@ import {
 } from '@babylonjs/core';
 
 /** Height above the world origin at which the cloud deck sits. */
-export const CLOUD_DECK_ALTITUDE = 165;
+export const CLOUD_DECK_ALTITUDE = 192;
 /** Half-width of the tiling cloud field, in world units. */
 export const CLOUD_FIELD_EXTENT = 1400;
 /** Spacing between candidate cluster centres. */

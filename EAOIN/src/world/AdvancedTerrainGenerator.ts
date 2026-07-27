@@ -94,13 +94,13 @@ export interface WorldGenConfig {
 
 export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
   seed: 'eaoin_seed_2026',
-  seaLevel: 18,
-  worldDepth: 128,
+  seaLevel: 32,
+  worldDepth: 256,
   bedrockThickness: 4,
-  continentScale: 0.0018,
-  detailScale: 0.022,
-  mountainIntensity: 1.0,
-  erosionIterations: 2,
+  continentScale: 0.0012,
+  detailScale: 0.018,
+  mountainIntensity: 1.4,
+  erosionIterations: 3,
   caveScale: 2,
   floatingIslands: false,
   skyIslands: false,
@@ -318,16 +318,21 @@ export class AdvancedTerrainGenerator {
     if (cached !== undefined) return cached;
 
     const continent = this.getBaseHeight(x, z);
-    const mountain = this.getMountainHeight(x, z);
+    
+    // Improved mountain noise for Caves & Cliffs style
+    const mountainBase = this.noise.fbm2D(x * 0.0008, z * 0.0008, 6, 2.1, 0.48, 8);
+    const mountainRidge = this.noise.ridge2D(x * 0.002, z * 0.002, 5, 12);
+    
+    // Mountain mask decides where peaks are
+    const mountainMask = Math.pow(Math.max(0, mountainBase - 0.42) * 1.8, 2);
+    
+    // Continental baseline
+    const baseHeight = this.config.seaLevel - 4 + continent * 32;
+    
+    // Mountain peaks: sharp ridges that rise high
+    const mountainContribution = mountainRidge * mountainMask * 120 * this.config.mountainIntensity;
 
-    // Mountain mask — where on the continent mountains appear.
-    const mountainMask = Math.max(0, this.noise.fbm2D(x * 0.0011, z * 0.0011, 4, 2.0, 0.5, 8) - 0.55) * 4;
-
-    // Continental baseline (0..1) → block height (0..90).
-    const baseHeight = this.config.seaLevel - 8 + continent * 22;
-    const mountainContribution = mountain * mountainMask * 64 * this.config.mountainIntensity;
-
-    const detail = this.detailNoise.fbm2D(x * this.config.detailScale, z * this.config.detailScale, 4, 2.0, 0.5, 11) * 2.6;
+    const detail = this.detailNoise.fbm2D(x * this.config.detailScale, z * this.config.detailScale, 5, 2.0, 0.5, 11) * 3.5;
     const beach = this.getBeachHeight(x, z);
 
     const raw = baseHeight + mountainContribution + detail + beach;
@@ -469,18 +474,30 @@ export class AdvancedTerrainGenerator {
     const cs = this.config.caveScale;
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       const surface = this.getTerrainHeight(wx, wz);
+      // Only generate caves in certain areas using a low-freq mask
+      const caveMask = this.caveNoise.fbm2D(wx * 0.005, wz * 0.005, 3, 2.0, 0.5, 151);
+      if (caveMask < 0.45) return; // Only 55% of the world has caves
+
       if (surface < this.config.seaLevel - 4) return;
-      // 3D cave noise — three independent samples combined for spaghetti caves.
-      const yStart = this.config.bedrockThickness + 1;
-      const yEnd = surface - 6;
+      
+      const yStart = this.config.bedrockThickness + 2;
+      const yEnd = surface - 10; // Deeper roof for realism
+      
       for (let y = yStart; y < yEnd; y++) {
-        const n1 = this.caveNoise.fbm3D(wx * 0.045, y * 0.06, wz * 0.045, 3, 2.0, 0.5, 1);
-        const n2 = this.caveNoise.fbm3D((wx + 211) * 0.030, y * 0.050, (wz - 503) * 0.030, 3, 2.0, 0.5, 2);
-        const n3 = this.caveNoise.fbm3D((wx - 117) * 0.018, y * 0.030, (wz + 71) * 0.018, 3, 2.0, 0.5, 3);
-        const cave = (n1 * 0.5 + n2 * 0.35 + n3 * 0.15);
-        const surfaceProx = Math.max(0, (surface - y) / Math.max(1, surface));
-        const threshold = cs === 1 ? 0.74 : 0.69;
-        if (cave > threshold && surfaceProx > 0.18) chunk.setBlock(lx, y, lz, BLOCK.AIR);
+        // Spaghetti tunnel noise
+        const n1 = this.caveNoise.fbm3D(wx * 0.025, y * 0.04, wz * 0.025, 2, 2.0, 0.5, 1);
+        const n2 = this.caveNoise.fbm3D((wx + 211) * 0.025, y * 0.04, (wz - 503) * 0.025, 2, 2.0, 0.5, 2);
+        
+        // Combine for tunnel effect: where two noise "tubes" intersect or are close
+        const tunnel = Math.abs(n1 - 0.5) + Math.abs(n2 - 0.5);
+        
+        // Threshold for "big tunnels"
+        const threshold = 0.08 * (cs === 1 ? 1.2 : 1.0);
+        
+        if (tunnel < threshold) {
+          // Avoid flooding the entire underground: no water in standard caves
+          chunk.setBlock(lx, y, lz, BLOCK.AIR);
+        }
       }
     });
   }
