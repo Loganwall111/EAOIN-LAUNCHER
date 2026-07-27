@@ -22,6 +22,9 @@ import { createStarterToolInventory, isToolUnlocked, ToolID, ToolInventory } fro
 import { GameSettings } from './settings/GameSettings';
 import { loadSettings, saveSettings } from './settings/SettingsSave';
 import CinematicBoot from './ui/CinematicBoot';
+import SpawnAwakening from './ui/SpawnAwakening';
+import WorldLoadingScreen from './ui/WorldLoadingScreen';
+import { worldTypeFromSeed, WorldTypeID } from './world/WorldTypes';
 import SignInScreen, { SignedInUser } from './ui/SignInScreen';
 import MarketplaceScreen from './ui/MarketplaceScreen';
 import EditorScreen from './ui/EditorScreen';
@@ -46,11 +49,19 @@ export default function App() {
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(() => createDefaultRuntimeStatus());
   const [objectivesVisible, setObjectivesVisible] = useState(true);
+  /** Plays the waking-up cutscene once, on entering a world. */
+  const [awakening, setAwakening] = useState(false);
+  /** Shows the world-creation loading screen before the world appears. */
+  const [worldLoading, setWorldLoading] = useState(false);
+  const [pendingWorldType, setPendingWorldType] = useState<WorldTypeID>('default');
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
   type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options' | 'marketplace' | 'editor';
-  const [appPhase, setAppPhase] = useState<AppPhase>('signin');
+  // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
+  // forced before you could reach the menu. Boot now runs first and hands off
+  // to the title screen; sign-in is reached only by pressing the button there.
+  const [appPhase, setAppPhase] = useState<AppPhase>('boot');
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
 
   const [appearance, setAppearance] = useState<CharacterAppearance>(() => {
@@ -62,6 +73,7 @@ export default function App() {
   });
   const [telemetry, setTelemetry] = useState<HudTelemetry>({
     position: { x: 0, y: 0, z: 0 }, yaw: 0, timeOfDay: 12, day: 1, biome: 'Meadows', flightEnabled: false,
+    hydration: 100, climate: 'temperate', weather: 'clear', skyProfile: 'Overworld',
   });
 
   /** Ability buttons re-use the engine's real keyboard handlers. */
@@ -112,6 +124,10 @@ export default function App() {
     setGameplayCounters(createGameplayCounters());
     setRuntimeStatus(createDefaultRuntimeStatus());
     setCraftingMessage(saved ? 'Loaded saved player progress' : 'New player inventory ready');
+    // Loading screen first, then the awakening cutscene, then gameplay.
+    setPendingWorldType(worldTypeFromSeed(nextSeed));
+    setWorldLoading(true);
+    setAwakening(true);
     setGameStarted(true);
   }, [worldSeed]);
 
@@ -141,6 +157,14 @@ export default function App() {
 
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
+  }, []);
+
+  /**
+   * Instant dimension travel from the Dimensions menu. The engine owns the
+   * actual transition, so we just raise an event it already listens for.
+   */
+  const travelToDimension = useCallback((dimensionId: string) => {
+    window.dispatchEvent(new CustomEvent('eaoin-travel-dimension', { detail: { dimensionId } }));
   }, []);
 
   const recordGameplayEvent = useCallback((event: GameplayCounterKey, amount = 1) => {
@@ -198,12 +222,13 @@ export default function App() {
     setSignedInUser(user);
     // Update the character name from the signed-in user
     setAppearance((prev) => ({ ...prev, name: user.name }));
-    setAppPhase('boot');
+    // Return to the title screen the button was pressed from.
+    setAppPhase('title');
   }, []);
 
   const handleSkipSignIn = useCallback(() => {
     setSignedInUser(null);
-    setAppPhase('boot');
+    setAppPhase('title');
   }, []);
 
   const handleBootComplete = useCallback(() => {
@@ -367,6 +392,7 @@ export default function App() {
         onGameplayEvent={recordGameplayEvent}
         onRuntimeStatusChange={setRuntimeStatus}
         onTelemetry={setTelemetry}
+        onGameModeChange={setGameMode}
       />
       <HudFrame
         appearance={appearance}
@@ -390,6 +416,23 @@ export default function App() {
         onOpenSettings={toggleSettings}
         onOpenQuests={() => setObjectivesVisible((v) => !v)}
       />
+      {worldLoading && (
+        <WorldLoadingScreen
+          worldName={worldSeed}
+          worldType={pendingWorldType}
+          seed={worldSeed}
+          reducedMotion={settings.reducedMotion}
+          onComplete={() => setWorldLoading(false)}
+        />
+      )}
+      {!worldLoading && awakening && (
+        <SpawnAwakening
+          onComplete={() => setAwakening(false)}
+          reducedMotion={settings.reducedMotion}
+          biomeName={telemetry.biome}
+          worldName={worldSeed}
+        />
+      )}
       <HUD
         gameMode={gameMode}
         selectedBlock={selectedBlock}
@@ -412,6 +455,7 @@ export default function App() {
         onCloseSettings={closeSettings}
         onSettingsChange={setSettings}
         onSelectBlock={setSelectedBlock}
+        onTravelToDimension={travelToDimension}
       />
     </div>
   );

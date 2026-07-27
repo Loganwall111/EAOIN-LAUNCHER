@@ -26,6 +26,7 @@
 import { BlockID } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { AdvancedNoise } from './AdvancedNoise';
+import { DeepCaveGenerator } from './DeepCaves';
 import { editKey, WorldBlockEdit } from './WorldSave';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
 import { getBiome, BiomeDefinition } from './Biomes';
@@ -178,6 +179,8 @@ export class AdvancedTerrainGenerator {
   private readonly riverNoise: AdvancedNoise;
   private readonly biomeNoise: AdvancedNoise;
   private readonly oreNoise: AdvancedNoise;
+  /** 2.0 — huge caverns, cave biomes, glow flora and the molten core. */
+  private readonly deepCaves: DeepCaveGenerator;
   private readonly heightCache = new Map<string, number>();
   private readonly rawHeightCache = new Map<string, number>();
   public readonly config: WorldGenConfig;
@@ -191,6 +194,12 @@ export class AdvancedTerrainGenerator {
     this.riverNoise = new AdvancedNoise(this.config.seed + ':river');
     this.biomeNoise = new AdvancedNoise(this.config.seed + ':biome');
     this.oreNoise = new AdvancedNoise(this.config.seed + ':ore');
+    this.deepCaves = new DeepCaveGenerator({
+      seed: this.config.seed,
+      bedrockThickness: this.config.bedrockThickness,
+      worldDepth: this.config.worldDepth,
+      seaLevel: this.config.seaLevel,
+    });
   }
 
   /** Build a chunk by composing every terrain pass. */
@@ -205,6 +214,11 @@ export class AdvancedTerrainGenerator {
       this.fillContinents(chunk);
     }
     this.applyCavePass(chunk);
+    // 2.0 — widen the underground into real caverns with their own biomes.
+    // Strictly below the surface; the overworld terrain is untouched.
+    if (!this.config.floatingIslands && !this.config.skyIslands) {
+      this.deepCaves.apply(chunk, (x, z) => this.getTerrainHeight(x, z));
+    }
     this.applyRavines(chunk);
     this.applySinkholes(chunk);
     this.applyUndergroundOceansAndRivers(chunk);

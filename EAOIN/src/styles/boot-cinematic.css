@@ -412,3 +412,100 @@
     animation: none !important;
   }
 }
+
+/* ==========================================================================
+   2.0 — Mojang-style logo phase
+   Each letter drops in on its own note of the boot chime, overshoots slightly,
+   then settles at a small hand-placed tilt.
+   ========================================================================== */
+
+.cinematic-boot.cb-logo {
+  display: grid;
+  place-content: center;
+  gap: 26px;
+  background: radial-gradient(ellipse at 50% 45%, #14161f 0%, #07080c 60%, #000 100%);
+}
+
+.cb-logo-mark {
+  display: flex;
+  gap: clamp(4px, 1.2vw, 16px);
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.cb-logo-letter {
+  display: inline-block;
+  font: 900 clamp(56px, 13vw, 168px)/0.9 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 2px;
+  color: #f4f7ff;
+  text-shadow:
+    0 6px 0 #1d2430,
+    0 10px 26px rgba(0, 0, 0, 0.75),
+    0 0 42px rgba(120, 190, 255, 0.28);
+  /* Start high, invisible and over-scaled; the .lit class drops it in. */
+  opacity: 0;
+  transform: translateY(-46%) scale(1.35) rotate(0deg);
+  will-change: transform, opacity;
+}
+
+.cb-logo-letter.lit {
+  opacity: 1;
+  transform: translateY(0) scale(1) rotate(var(--cb-letter-tilt, 0deg));
+  /* Overshoot easing gives the letter a physical "thunk" as it lands. */
+  transition:
+    transform 520ms cubic-bezier(0.18, 1.5, 0.4, 1),
+    opacity 220ms ease-out;
+  animation: cb-letter-flash 520ms ease-out;
+}
+
+@keyframes cb-letter-flash {
+  0%   { text-shadow: 0 6px 0 #1d2430, 0 0 90px rgba(150, 210, 255, 0.95); }
+  100% { text-shadow: 0 6px 0 #1d2430, 0 10px 26px rgba(0,0,0,.75), 0 0 42px rgba(120,190,255,.28); }
+}
+
+.cb-logo-sub {
+  text-align: center;
+  font: 700 clamp(10px, 1.5vw, 15px)/1 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.62em;
+  text-indent: 0.62em;
+  color: #7f8ea8;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.cb-logo-sub.shown {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 900ms ease-out 260ms, transform 900ms ease-out 260ms;
+}
+
+/* Shown only when the browser blocked autoplay, so the chime can be retried. */
+.cb-audio-retry {
+  justify-self: center;
+  margin-top: 6px;
+  padding: 9px 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(160, 200, 255, 0.35);
+  border-radius: 4px;
+  color: #cfe2ff;
+  font: 700 11px var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.cb-audio-retry:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(190, 220, 255, 0.6);
+}
+
+/* Accessibility: no drop, no flash — just a plain fade. */
+.reduced-motion .cb-logo-letter,
+.reduced-motion .cb-logo-letter.lit {
+  transform: none;
+  animation: none;
+  transition: opacity 200ms linear;
+}
+.reduced-motion .cb-logo-sub.shown {
+  transform: none;
+  transition: opacity 200ms linear;
+}

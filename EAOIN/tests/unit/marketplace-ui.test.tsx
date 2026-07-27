@@ -250,22 +250,27 @@ describe('CinematicBoot', () => {
     expect(container.querySelector('.cb-warning')).not.toBeNull();
   });
 
-  it('skips straight to loading on the first key press', () => {
+  it('skips straight to the ready card on the first key press', () => {
+    // 2.0: boot is pure presentation, so skipping jumps to "press any key"
+    // rather than to a fake loading stage.
     const { container } = render(<CinematicBoot onComplete={noop} />);
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(container.querySelector('.cinematic-loading')).not.toBeNull();
+    expect(container.querySelector('.cb-ready')).not.toBeNull();
   });
 
-  it('shows named loading stages rather than a bare bar', () => {
+  it('never shows a loading bar during boot', () => {
+    // The real loading bar belongs to world creation, where there is genuine
+    // work to wait on. Boot must not fake one.
     const { container } = render(<CinematicBoot onComplete={noop} />);
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(container.querySelector('.cb-loading-stage')?.textContent).toBeTruthy();
-    expect(container.querySelector('.cb-loading-bar-fill')).not.toBeNull();
+    expect(container.querySelector('.cb-loading-bar-fill')).toBeNull();
+    expect(container.querySelector('.cinematic-loading')).toBeNull();
   });
 
-  it('starts at the loading phase when reduced motion is on', () => {
+  it('starts at the chiming logo phase when reduced motion is on', () => {
     const { container } = render(<CinematicBoot onComplete={noop} reducedMotion />);
-    expect(container.querySelector('.cinematic-loading')).not.toBeNull();
+    expect(container.querySelector('.cb-logo')).not.toBeNull();
+    expect(container.querySelectorAll('.cb-logo-letter').length).toBe(5);
   });
 
   it('calls onComplete exactly once', async () => {

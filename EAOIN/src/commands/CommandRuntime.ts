@@ -1,4 +1,5 @@
 import { GameSettings } from '../settings/GameSettings';
+import { GameMode } from '../modes/GameMode';
 
 export interface WorldTimeState {
   timeOfDay: number;
@@ -9,11 +10,24 @@ export interface CommandRuntimeState {
   settings: GameSettings;
   time: WorldTimeState;
   lastMessage: string;
+  /** Current game mode, so `/gamemode` can switch it live. */
+  gameMode?: GameMode;
 }
 
 export interface CommandResult extends CommandRuntimeState {
   ok: boolean;
+  /** Set when the command asks for a live game-mode change. */
+  gameModeChange?: GameMode;
 }
+
+/** Accepts Minecraft-style aliases: `/gamemode 1`, `/gamemode c`, `/gmc`. */
+const GAME_MODE_ALIASES: Record<string, GameMode> = {
+  '0': 'survival', s: 'survival', survival: 'survival',
+  '1': 'creative', c: 'creative', creative: 'creative',
+  '2': 'story', story: 'story', adventure: 'story',
+  '3': 'experimental', e: 'experimental', experimental: 'experimental', spectator: 'experimental',
+  '4': 'incredible', i: 'incredible', incredible: 'incredible',
+};
 
 export function runCommand(input: string, state: CommandRuntimeState): CommandResult {
   const command = input.trim();
@@ -25,8 +39,24 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
     return {
       ...state,
       ok: true,
-      lastMessage: 'Commands: /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
+      lastMessage: 'Commands: /gamemode <survival|creative|story|experimental> /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
     };
+  }
+
+  // Minecraft-style live game-mode switching. This is what makes the creative
+  // inventory reachable from inside an already-running survival world.
+  if (name === 'gamemode' || name === 'gm') {
+    const raw = args[0]?.toLowerCase();
+    const mode = raw ? GAME_MODE_ALIASES[raw] : undefined;
+    if (!mode) {
+      return { ...state, ok: false, lastMessage: 'Usage: /gamemode <survival|creative|story|experimental|incredible>' };
+    }
+    return { ...state, ok: true, gameMode: mode, gameModeChange: mode, lastMessage: `Game mode set to ${mode}` };
+  }
+  // Shorthand: /gmc, /gms, /gme …
+  if (/^gm[0-9scei]$/.test(name)) {
+    const mode = GAME_MODE_ALIASES[name.slice(2)];
+    if (mode) return { ...state, ok: true, gameMode: mode, gameModeChange: mode, lastMessage: `Game mode set to ${mode}` };
   }
 
   if (name === 'day') {

@@ -6,14 +6,25 @@
  *   2. ENGINE    — "POWERED BY EAOIN ENGINE" tech logo with a scanning sweep
  *   3. STUDIO    — ONBLOCKAWAY STUDIOS with an orbiting particle ring
  *   4. PRESENTS  — letter-spaced "PRESENTS"
- *   5. TITLE     — the EAOIN wordmark with a light sweep and rising tagline
- *   6. LOADING   — real staged loading with named subsystems and a progress bar
+ *   5. LOGO      — the Mojang-style wordmark: each letter drops in on its own
+ *                  note of a four-note chime, then the whole mark settles
+ *   6. TITLE     — the full wordmark with light sweep and rising tagline
  *   7. READY     — "PRESS ANY KEY" pulse before handing off to the menu
  *
- * The whole sequence is skippable — press any key or click at any point. It is
- * also automatically shortened when the player has `reducedMotion` enabled.
+ * ## 2.0 changes
+ *
+ * - **No loading bar here.** Boot is pure presentation; nothing is actually
+ *   being loaded at this point, so a fake progress bar just delayed the menu.
+ *   The real loading bar now lives in world creation, where there is genuine
+ *   work to wait on.
+ * - **New LOGO phase** with the letter-by-letter chime, and the whole sequence
+ *   runs noticeably longer so it reads as a real title card.
+ *
+ * The sequence stays fully skippable — press any key or click at any point —
+ * and collapses to a short fade when `reducedMotion` is set.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BootChime } from '../audio/BootChime';
 
 interface CinematicBootProps {
   onComplete: () => void;
@@ -26,45 +37,30 @@ type BootPhase =
   | 'ENGINE'
   | 'STUDIO'
   | 'PRESENTS'
+  | 'LOGO'
   | 'TITLE'
-  | 'LOADING'
   | 'READY'
   | 'DONE';
 
-/** Ordered phases and how long each holds, in ms. */
-const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
-  { phase: 'WARNING', durationMs: 2600 },
-  { phase: 'ENGINE', durationMs: 2400 },
-  { phase: 'STUDIO', durationMs: 3000 },
-  { phase: 'PRESENTS', durationMs: 1400 },
-  { phase: 'TITLE', durationMs: 3000 },
-  { phase: 'LOADING', durationMs: 0 }, // driven by the loading simulation
-  { phase: 'READY', durationMs: 0 },   // waits for input
-];
+/** The wordmark, one letter per chime note. */
+const LOGO_LETTERS = ['E', 'A', 'O', 'I', 'N'];
 
 /**
- * Loading stages. Each has a weight so the bar advances at a believable,
- * uneven pace rather than perfectly linearly.
+ * Ordered phases and how long each holds, in ms.
+ * Durations are longer than 1.x so the boot reads as a real AAA title card.
  */
-const LOAD_STAGES: Array<{ label: string; weight: number }> = [
-  { label: 'Initializing voxel engine', weight: 6 },
-  { label: 'Detecting graphics backend', weight: 5 },
-  { label: 'Compiling shader permutations', weight: 14 },
-  { label: 'Loading block registry', weight: 7 },
-  { label: 'Building biome tables', weight: 8 },
-  { label: 'Warming terrain generator', weight: 11 },
-  { label: 'Carving caves and ravines', weight: 9 },
-  { label: 'Streaming spawn chunks', weight: 12 },
-  { label: 'Linking dimension portals', weight: 6 },
-  { label: 'Calibrating physics solver', weight: 7 },
-  { label: 'Spawning volumetric clouds', weight: 6 },
-  { label: 'Syncing marketplace catalog', weight: 5 },
-  { label: 'Finalizing render pipeline', weight: 4 },
+const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
+  { phase: 'WARNING', durationMs: 3400 },
+  { phase: 'ENGINE', durationMs: 3200 },
+  { phase: 'STUDIO', durationMs: 3800 },
+  { phase: 'PRESENTS', durationMs: 1800 },
+  // Long enough for every letter to land plus the chime tail.
+  { phase: 'LOGO', durationMs: 4200 },
+  { phase: 'TITLE', durationMs: 3600 },
+  { phase: 'READY', durationMs: 0 }, // waits for input
 ];
 
-const TOTAL_WEIGHT = LOAD_STAGES.reduce((sum, stage) => sum + stage.weight, 0);
-
-/** Rotating hint cards shown beneath the loading bar. */
+/** Rotating hint cards shown on the READY card. */
 const TIPS = [
   'Press F to toggle flight once you are in the world.',
   'Coins buy skins, capes, shaders, worlds and mods on the Marketplace.',
@@ -76,9 +72,12 @@ const TIPS = [
 ];
 
 export default function CinematicBoot({ onComplete, reducedMotion = false }: CinematicBootProps) {
-  const [phase, setPhase] = useState<BootPhase>(reducedMotion ? 'LOADING' : 'WARNING');
-  const [progress, setProgress] = useState(0);
-  const [stageIndex, setStageIndex] = useState(0);
+  const [phase, setPhase] = useState<BootPhase>(reducedMotion ? 'LOGO' : 'WARNING');
+  // How many wordmark letters have dropped in so far.
+  const [litLetters, setLitLetters] = useState(0);
+  // Set when the browser blocked audio, so we can offer a click-to-hear retry.
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const chime = useMemo(() => new BootChime(), []);
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const [skipHintVisible, setSkipHintVisible] = useState(false);
   const completedRef = useRef(false);
@@ -94,8 +93,9 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
   const skip = useCallback(() => {
     setPhase((current) => {
       if (current === 'READY' || current === 'DONE') { finish(); return 'DONE'; }
-      if (current === 'LOADING') return current; // let the load finish honestly
-      return 'LOADING';
+      // Everything in boot is presentation, so skipping jumps straight to the
+      // "press any key" card rather than to a fake loading stage.
+      return 'READY';
     });
   }, [finish]);
 
@@ -133,56 +133,52 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     return () => window.clearTimeout(timer);
   }, [phase, reducedMotion]);
 
-  /* ---------------------------- loading simulation ------------------------ */
+  /* ------------------------- logo chime choreography ---------------------- */
 
   useEffect(() => {
-    if (phase !== 'LOADING') return;
+    if (phase !== 'LOGO') return;
     let cancelled = false;
-    let completed = 0;
-    let index = 0;
+    const timers: number[] = [];
 
-    const runStage = () => {
-      if (cancelled) return;
-      if (index >= LOAD_STAGES.length) {
-        setProgress(100);
-        window.setTimeout(() => { if (!cancelled) setPhase('READY'); }, 420);
-        return;
-      }
+    // Try to sound the chime. Browsers block audio without a prior gesture, so
+    // if it fails we surface a click-to-hear affordance instead of going quiet
+    // with no explanation.
+    const sounded = chime.play({ volume: reducedMotion ? 0.3 : 0.55 });
+    if (!sounded) setAudioBlocked(true);
 
-      const stage = LOAD_STAGES[index];
-      setStageIndex(index);
+    // Drop each letter in on its own note.
+    setLitLetters(0);
+    for (let i = 0; i < LOGO_LETTERS.length; i += 1) {
+      const noteIndex = Math.min(i, BootChime.noteCount() - 1);
+      const delay = reducedMotion ? i * 70 : BootChime.noteOnsetMs(noteIndex);
+      timers.push(
+        window.setTimeout(() => {
+          if (!cancelled) setLitLetters(i + 1);
+        }, delay)
+      );
+    }
 
-      // Animate the bar across this stage's slice of the total weight.
-      const from = (completed / TOTAL_WEIGHT) * 100;
-      const to = ((completed + stage.weight) / TOTAL_WEIGHT) * 100;
-      const stageMs = reducedMotion ? 60 : 150 + stage.weight * 22;
-      const startedAt = performance.now();
-
-      const step = () => {
-        if (cancelled) return;
-        const elapsed = performance.now() - startedAt;
-        const t = Math.min(1, elapsed / stageMs);
-        // Ease-out so each stage decelerates as it lands.
-        const eased = 1 - Math.pow(1 - t, 2);
-        setProgress(from + (to - from) * eased);
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          completed += stage.weight;
-          index += 1;
-          runStage();
-        }
-      };
-      requestAnimationFrame(step);
+    return () => {
+      cancelled = true;
+      for (const t of timers) window.clearTimeout(t);
     };
+  }, [phase, reducedMotion, chime]);
 
-    runStage();
-    return () => { cancelled = true; };
-  }, [phase, reducedMotion]);
-
-  // Cycle the tip cards while loading.
+  // Retry the chime once the player interacts, if autoplay was blocked.
   useEffect(() => {
-    if (phase !== 'LOADING') return;
+    if (!audioBlocked) return;
+    const retry = () => {
+      if (chime.play({ volume: 0.55 })) setAudioBlocked(false);
+    };
+    window.addEventListener('pointerdown', retry, { once: true });
+    return () => window.removeEventListener('pointerdown', retry);
+  }, [audioBlocked, chime]);
+
+  useEffect(() => () => chime.dispose(), [chime]);
+
+  // Cycle the tip cards on the ready card.
+  useEffect(() => {
+    if (phase !== 'READY') return;
     const timer = window.setInterval(() => {
       setTipIndex((index) => (index + 1) % TIPS.length);
     }, 2600);
@@ -313,14 +309,14 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     );
   }
 
-  /* ================================ LOADING =============================== */
-  if (phase === 'LOADING') {
-    const stage = LOAD_STAGES[Math.min(stageIndex, LOAD_STAGES.length - 1)];
+  /* ================================= LOGO ================================= */
+  // The Mojang-style moment: letters drop in one per chime note.
+  if (phase === 'LOGO') {
     return (
-      <div className="cinematic-boot cinematic-loading">
+      <div className="cinematic-boot cb-logo">
         <div className="cb-vignette" />
         <div className="cb-ember-field" aria-hidden="true">
-          {embers.slice(0, 10).map((ember) => (
+          {embers.slice(0, 12).map((ember) => (
             <span
               key={ember.id}
               className="cb-ember"
@@ -335,34 +331,30 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
           ))}
         </div>
 
-        <div className="cb-loading-logo">EAOIN</div>
-
-        <div className="cb-loading-block">
-          <div className="cb-loading-stage-row">
-            <span className="cb-loading-stage">{stage.label}…</span>
-            <span className="cb-loading-pct">{Math.round(progress)}%</span>
-          </div>
-
-          <div className="cb-loading-bar-track">
-            <div className="cb-loading-bar-fill" style={{ width: `${progress}%` }}>
-              <span className="cb-loading-bar-shine" />
-            </div>
-          </div>
-
-          <div className="cb-loading-steps" aria-hidden="true">
-            {LOAD_STAGES.map((entry, index) => (
-              <span
-                key={entry.label}
-                className={`cb-step-dot ${index < stageIndex ? 'done' : index === stageIndex ? 'active' : ''}`}
-              />
-            ))}
-          </div>
+        <div className="cb-logo-mark">
+          {LOGO_LETTERS.map((letter, i) => (
+            <span
+              key={`${letter}-${i}`}
+              className={`cb-logo-letter ${i < litLetters ? 'lit' : ''}`}
+              // Each letter carries its own slight rotation so the settled
+              // wordmark looks hand-placed rather than mechanically aligned.
+              style={{ ['--cb-letter-tilt' as string]: `${((i % 2 === 0 ? -1 : 1) * (1.5 + i * 0.4)).toFixed(2)}deg` }}
+            >
+              {letter}
+            </span>
+          ))}
         </div>
 
-        <div className="cb-tip-card">
-          <span className="cb-tip-label">TIP</span>
-          <span className="cb-tip-text">{TIPS[tipIndex]}</span>
+        <div className={`cb-logo-sub ${litLetters >= LOGO_LETTERS.length ? 'shown' : ''}`}>
+          ONBLOCKAWAY STUDIOS
         </div>
+
+        {audioBlocked && (
+          <button className="cb-audio-retry" onClick={() => { if (chime.play({ volume: 0.55 })) setAudioBlocked(false); }}>
+            🔊 Click for sound
+          </button>
+        )}
+        {skipHint}
       </div>
     );
   }
@@ -377,6 +369,10 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
         <div className="cb-game-tagline">Everything And On Infinite</div>
       </div>
       <button className="cb-press-any" onClick={finish}>PRESS ANY KEY</button>
+      <div className="cb-tip-card">
+        <span className="cb-tip-label">TIP</span>
+        <span className="cb-tip-text">{TIPS[tipIndex]}</span>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { RecipeID, RECIPES, canCraft, recipeCostLabel, recipeOutputLabel } from 
 import { GameMode } from '../modes/GameMode';
 import { ObjectiveStatus } from '../objectives/ObjectiveTracker';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
-import { getStackCount, InventoryStacks } from '../player/InventoryState';
+import { getStackCount, HOTBAR_BLOCKS, InventoryStacks } from '../player/InventoryState';
 import { SurvivalStats } from '../player/SurvivalState';
 import { ToolID, ToolInventory } from '../player/ToolState';
 import { GameSettings, clampSettings } from '../settings/GameSettings';
@@ -13,6 +13,7 @@ import { ALL_SHADERS, ShaderID, ShaderDefinition } from '../rendering/ShaderRegi
 import { ModPackRegistry, ModDefinition, ALL_MODS, MOD_CATEGORY_LABELS, MOD_CATEGORIES } from '../modding/ModPackRegistry';
 import { ALL_SERVERS, ServerEntry, DEMO_FRIENDS, DEMO_GUILDS, DEMO_NATIONS } from '../networking/ServerBrowser';
 import { ALL_DIMENSIONS } from '../dimensions/DimensionRuntime';
+import DimensionSigil from './DimensionSigil';
 import { ALL_BOSSES, BOSS_TIER_LABELS } from '../creatures/BossRegistry';
 import { ALL_QUESTS, QUEST_TYPES, QUEST_TYPE_LABELS } from '../objectives/QuestRegistry';
 import { CIVILIZATIONS, RACE_NAMES, TECH_AGE_LABELS, TECH_AGE_ICONS } from '../civilization/CivilizationTech';
@@ -22,6 +23,8 @@ import { ALL_BIOMES } from '../world/Biomes';
 interface HUDProps {
   gameMode: GameMode; selectedBlock: BlockID; selectedTool: ToolID; toolInventory: ToolInventory;
   inventory: InventoryStacks; survivalStats: SurvivalStats; inventoryOpen: boolean; settingsOpen: boolean; settings: GameSettings;
+  /** Instant dimension travel from the Dimensions menu. */
+  onTravelToDimension?: (dimensionId: string) => void;
   runtimeStatus: RuntimeStatus; objectives: ObjectiveStatus[]; objectivesVisible: boolean; systemsVisible: boolean;
   onToggleObjectives: () => void; onToggleSystems: () => void; craftingMessage: string;
   onCraftRecipe: (recipe: RecipeID) => void; onCloseInventory: () => void; onCloseSettings: () => void;
@@ -97,16 +100,20 @@ function BlockSlot({ id, count, selected, onClick, onDoubleClick, showKey, size 
 }
 
 /* --------------------- Main HUD --------------------- */
-export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onSelectBlock }: HUDProps) {
+export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onSelectBlock, onTravelToDimension }: HUDProps) {
   const updateSettings = (patch: Partial<GameSettings>) => onSettingsChange(clampSettings({ ...settings, ...patch }));
   const [craftMode, setCraftMode] = useState<2 | 3>(2);
   const [craftGrid, setCraftGrid] = useState<(BlockID | null)[]>([null, null, null, null]);
   const [craftGrid3, setCraftGrid3] = useState<(BlockID | null)[]>(Array(9).fill(null));
 
   /* ---- creative menu state ---- */
-  const [creativeCategory, setCreativeCategory] = useState<BlockCategory>('building');
+  // 'all' is a real tab, and searching implicitly searches every category —
+  // which is what people expect from Minecraft's creative search.
+  const [creativeCategory, setCreativeCategory] = useState<CreativeTab>('all');
   const [creativeSearch, setCreativeSearch] = useState('');
   const [creativePage, setCreativePage] = useState(0);
+  /** Player-editable creative hotbar, like Minecraft's bottom row. */
+  const [creativeHotbar, setCreativeHotbar] = useState<BlockID[]>(() => [...HOTBAR_BLOCKS]);
 
   /* ---- shader menu ---- */
   const [shaderMenuOpen, setShaderMenuOpen] = useState(false);
@@ -199,23 +206,31 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
     return () => window.removeEventListener('keydown', handler);
   }, [onToggleObjectives, onToggleSystems]);
 
-  /* Creative inventory items for the current category */
+  /* Creative inventory items for the current tab.
+     A non-empty search always spans every category. */
   const creativeItems = useMemo(() => {
-    const list = ALL_BLOCK_IDS
-      .map(getBlock)
-      .filter((b) => b.category === creativeCategory);
-    if (!creativeSearch) return list;
-    const q = creativeSearch.toLowerCase();
-    return list.filter((b) => b.name.toLowerCase().includes(q) || b.shortName.toLowerCase().includes(q));
+    const q = creativeSearch.trim().toLowerCase();
+    const all = ALL_BLOCK_IDS.map(getBlock);
+    const scoped = q || creativeCategory === 'all'
+      ? all
+      : all.filter((b) => b.category === creativeCategory);
+    if (!q) return scoped;
+    return scoped.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        b.shortName.toLowerCase().includes(q) ||
+        String(b.id) === q ||
+        b.category.includes(q)
+    );
   }, [creativeCategory, creativeSearch]);
-  const CREATIVE_PER_PAGE = 36;
+  const CREATIVE_PER_PAGE = 45;
   const creativePageCount = Math.max(1, Math.ceil(creativeItems.length / CREATIVE_PER_PAGE));
   useEffect(() => { setCreativePage(0); }, [creativeCategory, creativeSearch]);
   useEffect(() => { if (creativePage > creativePageCount - 1) setCreativePage(Math.max(0, creativePageCount - 1)); }, [creativePage, creativePageCount]);
   const pagedCreative = creativeItems.slice(creativePage * CREATIVE_PER_PAGE, (creativePage + 1) * CREATIVE_PER_PAGE);
 
   return (
-    <div className={`game-hud-overlay ${gameMode === 'creative' ? 'creative' : 'survival'}`} aria-label="EAOIN gameplay HUD">
+    <div className={`game-hud-overlay ${isCreativeMode(gameMode) ? 'creative' : 'survival'}`} aria-label="EAOIN gameplay HUD">
       {systemsVisible && (
         <div className="systems-panel">
           <h3>Runtime [U]</h3>
@@ -247,7 +262,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
         <div className="inventory-panel pro-inv">
           <div className="inventory-header">
             <div>
-              <h2>Inventory {gameMode === 'creative' ? '— Creative' : '— Survival'}</h2>
+              <h2>Inventory {isCreativeMode(gameMode) ? '— Creative' : '— Survival'}</h2>
               <p>Mode: {gameMode} • Version {GAME_VERSION} • {craftingMessage}</p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -256,7 +271,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
             </div>
           </div>
 
-          {gameMode === 'creative' ? (
+          {isCreativeMode(gameMode) ? (
             <CreativeInventory
               category={creativeCategory}
               onCategoryChange={setCreativeCategory}
@@ -266,8 +281,18 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
               pageCount={creativePageCount}
               onPageChange={setCreativePage}
               items={pagedCreative}
+              totalCount={creativeItems.length}
               selectedBlock={selectedBlock}
-              onPickBlock={(blockId) => { onSelectBlock(blockId); onCloseInventory(); }}
+              hotbar={creativeHotbar}
+              onAssignHotbar={(slot, blockId) => {
+                setCreativeHotbar((current) => {
+                  const next = [...current];
+                  next[slot] = blockId;
+                  return next;
+                });
+              }}
+              onPickBlock={(blockId) => { onSelectBlock(blockId); }}
+              onPickAndClose={(blockId) => { onSelectBlock(blockId); onCloseInventory(); }}
             />
           ) : (
             <SurvivalInventory
@@ -365,21 +390,38 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
       {dimensionMenuOpen && (
         <div className="menu-panel pro dim-panel">
           <div className="inventory-header">
-            <div><h2>🌌 Dimensions [F8] — {ALL_DIMENSIONS.length} total</h2><p>Current: {runtimeStatus.dimensionName} • Each has unique gravity, mobs, ores, music, boss</p></div>
+            <div>
+              <h2>Dimensions [F8] — {ALL_DIMENSIONS.length} total</h2>
+              <p>Current: {runtimeStatus.dimensionName} • Click any dimension to travel there instantly</p>
+            </div>
             <button onClick={() => setDimensionMenuOpen(false)}>Close</button>
           </div>
           <div className="dim-grid">
-            {ALL_DIMENSIONS.map((d) => (
-              <div key={d.id} className={`dim-card ${runtimeStatus.dimensionId === d.id ? 'current' : ''}`}>
-                <div className="dim-emoji">{d.emoji}</div>
-                <strong>{d.name}</strong>
-                <small>{d.description}</small>
-                <div className="dim-stats">
-                  <span>👑 {d.boss}</span>
-                  <span>🎵 {d.music.slice(0, 24)}</span>
-                </div>
-              </div>
-            ))}
+            {ALL_DIMENSIONS.map((d) => {
+              const isCurrent = runtimeStatus.dimensionId === d.id;
+              return (
+                <button
+                  key={d.id}
+                  className={`dim-card ${isCurrent ? 'current' : ''}`}
+                  disabled={isCurrent}
+                  title={isCurrent ? `You are already in ${d.name}` : `Travel to ${d.name}`}
+                  onClick={() => {
+                    if (isCurrent) return;
+                    onTravelToDimension?.(d.id);
+                    setDimensionMenuOpen(false);
+                  }}
+                >
+                  <DimensionSigil id={d.id} />
+                  <strong>{d.name}</strong>
+                  <small>{d.description}</small>
+                  <div className="dim-stats">
+                    <span>Boss: {d.boss}</span>
+                    <span>{d.weather.slice(0, 26)}</span>
+                  </div>
+                  <span className="dim-travel-cta">{isCurrent ? 'CURRENT' : 'TRAVEL →'}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -696,33 +738,90 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
 }
 
 /* --------------------- Creative Inventory --------------------- */
-function CreativeInventory({ category, onCategoryChange, search, onSearchChange, page, pageCount, onPageChange, items, selectedBlock, onPickBlock }: {
-  category: BlockCategory;
-  onCategoryChange: (c: BlockCategory) => void;
+
+const CATEGORY_ICONS: Record<BlockCategory, string> = {
+  building: '🧱', decoration: '🎨', functional: '⚙', redstone: '🔌', plant: '🌱',
+  food: '🍗', tool: '🛠', weapon: '⚔', armor: '🛡', ore: '⛏', fluid: '💧',
+  nature: '🌳', nether: '🔥', end: '🌌', space: '🚀', creative: '✨', spawn_egg: '🥚', misc: '📦',
+};
+
+/** Creative tabs are the block categories plus a leading "all" tab. */
+export type CreativeTab = BlockCategory | 'all';
+
+/** Creative-style building applies to Creative and the unlocked Incredible mode. */
+export function isCreativeMode(mode: GameMode): boolean {
+  return mode === 'creative' || mode === 'incredible';
+}
+
+/**
+ * Minecraft-style creative inventory.
+ *
+ * Fixes over the previous version:
+ *  - An "All" tab and search that spans every category, not just the open one.
+ *  - A real, editable creative hotbar strip along the bottom: click a block to
+ *    equip it, or click a hotbar slot first to choose which slot to overwrite.
+ *  - Shows the item count for the whole result set, not just the current page.
+ *  - Keyboard paging and a visible "no results" state.
+ */
+function CreativeInventory({
+  category, onCategoryChange, search, onSearchChange, page, pageCount, onPageChange,
+  items, totalCount, selectedBlock, hotbar, onAssignHotbar, onPickBlock, onPickAndClose,
+}: {
+  category: CreativeTab;
+  onCategoryChange: (c: CreativeTab) => void;
   search: string;
   onSearchChange: (s: string) => void;
   page: number;
   pageCount: number;
   onPageChange: (p: number) => void;
   items: BlockDef[];
+  totalCount: number;
   selectedBlock: BlockID;
+  hotbar: BlockID[];
+  onAssignHotbar: (slot: number, blockId: BlockID) => void;
   onPickBlock: (id: BlockID) => void;
+  onPickAndClose: (id: BlockID) => void;
 }) {
+  // When a hotbar slot is armed, the next block clicked goes into that slot
+  // instead of simply being equipped.
+  const [armedSlot, setArmedSlot] = useState<number | null>(null);
+
+  const handlePick = (blockId: BlockID) => {
+    if (armedSlot !== null) {
+      onAssignHotbar(armedSlot, blockId);
+      setArmedSlot(null);
+      onPickBlock(blockId);
+      return;
+    }
+    onPickBlock(blockId);
+  };
+
   return (
     <div className="creative-inventory">
       <div className="creative-tabs">
+        <button
+          className={`creative-tab ${category === 'all' ? 'active' : ''}`}
+          onClick={() => onCategoryChange('all')}
+        >
+          ★ All
+        </button>
         {CATEGORY_ORDER.map((cat) => (
-          <button key={cat} className={`creative-tab ${category === cat ? 'active' : ''}`} onClick={() => onCategoryChange(cat)}>
+          <button
+            key={cat}
+            className={`creative-tab ${category === cat ? 'active' : ''}`}
+            onClick={() => onCategoryChange(cat)}
+          >
             {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
           </button>
         ))}
       </div>
+
       <div className="creative-controls">
         <input
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="🔍 Search blocks..."
+          placeholder="🔍 Search all blocks by name, id or category…"
           className="creative-search"
         />
         <div className="creative-pager">
@@ -730,15 +829,20 @@ function CreativeInventory({ category, onCategoryChange, search, onSearchChange,
           <span>Page {page + 1} / {pageCount}</span>
           <button onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))} disabled={page >= pageCount - 1}>▶</button>
         </div>
-        <small className="creative-count">{items.length} blocks</small>
+        <small className="creative-count">{totalCount} blocks</small>
       </div>
+
       <div className="creative-grid">
+        {items.length === 0 && (
+          <div className="creative-empty">No blocks match “{search}”. Try another term or the All tab.</div>
+        )}
         {items.map((b) => (
           <button
             key={b.id}
             className={`creative-slot ${selectedBlock === b.id ? 'selected' : ''}`}
-            title={`${b.name} (${b.id}) — click to equip in the hotbar`}
-            onClick={() => onPickBlock(b.id)}
+            title={`${b.name} (#${b.id}) — ${CATEGORY_LABELS[b.category]}\nClick to equip • Double-click to equip and close`}
+            onClick={() => handlePick(b.id)}
+            onDoubleClick={() => onPickAndClose(b.id)}
           >
             <BlockLogo id={b.id} size={36} />
             <span className="creative-name">{b.name}</span>
@@ -746,18 +850,33 @@ function CreativeInventory({ category, onCategoryChange, search, onSearchChange,
           </button>
         ))}
       </div>
+
+      {/* Editable creative hotbar, exactly like Minecraft's bottom row. */}
+      <div className="creative-hotbar-row">
+        <span className="creative-hotbar-label">Hotbar</span>
+        <div className="creative-hotbar">
+          {hotbar.map((blockId, i) => (
+            <button
+              key={i}
+              className={`creative-hotbar-slot ${armedSlot === i ? 'armed' : ''} ${selectedBlock === blockId ? 'selected' : ''}`}
+              title={`Slot ${i + 1}: ${getBlock(blockId).name}\nClick to arm this slot, then click any block above to assign it`}
+              onClick={() => setArmedSlot(armedSlot === i ? null : i)}
+            >
+              <span className="slot-key">{i + 1}</span>
+              <BlockLogo id={blockId} size={26} />
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="creative-tip">
-        💡 Creative tip: Click any block to pull it into your active hotbar slot instantly. Every block here places without limits in Creative mode; use search/categories for natural blocks, ores, redstone, portals, and space blocks.
+        {armedSlot !== null
+          ? `🎯 Slot ${armedSlot + 1} armed — click any block above to place it in that hotbar slot.`
+          : '💡 Click a block to equip it • Double-click to equip and close • Click a hotbar slot to reassign it • F4 toggles Creative/Survival • /gamemode creative also works'}
       </div>
     </div>
   );
 }
-
-const CATEGORY_ICONS: Record<BlockCategory, string> = {
-  building: '🧱', decoration: '🎨', functional: '⚙', redstone: '🔌', plant: '🌱',
-  food: '🍗', tool: '🛠', weapon: '⚔', armor: '🛡', ore: '⛏', fluid: '💧',
-  nature: '🌳', nether: '🔥', end: '🌌', space: '🚀', creative: '✨', spawn_egg: '🥚', misc: '📦',
-};
 
 /* --------------------- Survival Inventory --------------------- */
 function SurvivalInventory({ inventory, selectedBlock, craftMode, setCraftMode, activeGrid, matchingRecipe, placeIntoGrid, clearGrid, craftFromGrid, craftGrid, craftGrid3, setCraftGrid, setCraftGrid3, toolInventory, onCraftRecipe }: any) {

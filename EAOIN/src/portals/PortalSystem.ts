@@ -27,6 +27,7 @@
  */
 import { Color3, Color4, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMaterial, Texture, Vector3 } from '@babylonjs/core';
 import { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
+import { PortalWindow } from './PortalWindow';
 
 export interface PortalDef {
   dimension: RuntimeDimensionID;
@@ -79,6 +80,8 @@ export class PortalInstance {
   position: Vector3;
   time: number = 0;
   alive: boolean = true;
+  /** See-through view onto the destination dimension. */
+  window: PortalWindow | null = null;
 
   constructor(scene: Scene, def: PortalDef, position: Vector3) {
     this.def = def;
@@ -99,9 +102,20 @@ export class PortalInstance {
     innerMat.emissiveColor = Color3.Lerp(def.color1, def.color2, 0.5);
     innerMat.diffuseColor = new Color3(0, 0, 0);
     innerMat.specularColor = new Color3(0, 0, 0);
-    innerMat.alpha = 0.85;
+    // 2.0: the interior is now a WINDOW, not a solid colour. This disc is kept
+    // only as a faint tint over the destination view so each portal still
+    // reads in its own colour.
+    innerMat.alpha = 0.18;
     this.innerMesh.material = innerMat;
     this.innerMesh.isPickable = false;
+
+    // The actual see-through surface, painted with the destination's sky.
+    this.window = new PortalWindow(scene, {
+      destination: def.dimension,
+      radius: def.size * 0.46,
+      position: position.clone(),
+    });
+    this.window.attach();
 
     this.particles = new ParticleSystem('portal_particles_' + def.dimension, def.particleCount, scene);
     this.particles.particleTexture = this.makePortalParticle(scene, def);
@@ -140,7 +154,14 @@ export class PortalInstance {
     this.innerMesh.rotation.z = -this.time * 0.7;
     const innerMat = this.innerMesh.material as StandardMaterial;
     if (innerMat) {
-      innerMat.alpha = 0.7 + 0.25 * Math.sin(this.time * 4);
+      // Subtle pulse on the tint only — the window underneath stays readable.
+      innerMat.alpha = 0.12 + 0.10 * Math.sin(this.time * 4);
+    }
+    if (this.window) {
+      this.window.update(dt, camera);
+      // Fade distant portal windows out; the frame still shows.
+      const distance = Vector3.Distance(this.position, camera);
+      this.window.setVisibility(distance > 120 ? 0 : distance > 80 ? 1 - (distance - 80) / 40 : 1);
     }
   }
 
@@ -148,6 +169,7 @@ export class PortalInstance {
     this.alive = false;
     this.mesh.dispose();
     this.innerMesh.dispose();
+    this.window?.dispose();
     this.particles.dispose();
   }
 }
