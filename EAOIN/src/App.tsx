@@ -54,6 +54,8 @@ export default function App() {
   /** Shows the world-creation loading screen before the world appears. */
   const [worldLoading, setWorldLoading] = useState(false);
   const [worldLoadProgress, setWorldLoadProgress] = useState<WorldLoadProgress>({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
+  /** Remounts GameCanvas when startup fails and the player chooses Retry. */
+  const [worldAttempt, setWorldAttempt] = useState(0);
   const [pendingWorldType, setPendingWorldType] = useState<WorldTypeID>('default');
   const [systemsVisible, setSystemsVisible] = useState(false);
 
@@ -128,6 +130,7 @@ export default function App() {
     // Loading screen first, then the awakening cutscene, then gameplay.
     setWorldLoadProgress({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
     setPendingWorldType(worldTypeFromSeed(nextSeed));
+    setWorldAttempt((attempt) => attempt + 1);
     setWorldLoading(true);
     setAwakening(true);
     setGameStarted(true);
@@ -136,6 +139,8 @@ export default function App() {
   const exitToMenu = useCallback(() => {
     setInventoryOpen(false);
     setSettingsOpen(false);
+    setWorldLoading(false);
+    setAwakening(false);
     setGameStarted(false);
     setAppPhase('title');
   }, []);
@@ -243,6 +248,7 @@ export default function App() {
         current.percent === progress.percent &&
         current.label === progress.label &&
         current.ready === progress.ready &&
+        current.error === progress.error &&
         current.loadedChunks === progress.loadedChunks &&
         current.totalChunks === progress.totalChunks &&
         Math.floor(current.elapsedMs / 1000) === Math.floor(progress.elapsedMs / 1000)
@@ -253,6 +259,13 @@ export default function App() {
 
   const handleWorldLoadingComplete = useCallback(() => {
     setWorldLoading(false);
+  }, []);
+
+  const retryWorldStartup = useCallback(() => {
+    setWorldLoadProgress({ percent: 0, label: 'Retrying renderer', ready: false, elapsedMs: 0 });
+    setWorldLoading(true);
+    setAwakening(true);
+    setWorldAttempt((attempt) => attempt + 1);
   }, []);
 
   const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
@@ -393,6 +406,7 @@ export default function App() {
   return (
     <div className={shellClass}>
       <GameCanvas
+        key={`${worldSeed}:${worldAttempt}`}
         seed={worldSeed}
         gameMode={gameMode}
         onExit={exitToMenu}
@@ -439,12 +453,15 @@ export default function App() {
       />
       {worldLoading && (
         <WorldLoadingScreen
+          key={`loading:${worldSeed}:${worldAttempt}`}
           worldName={worldSeed}
           worldType={pendingWorldType}
           seed={worldSeed}
           reducedMotion={settings.reducedMotion}
           loadingProgress={worldLoadProgress}
           onComplete={handleWorldLoadingComplete}
+          onRetry={retryWorldStartup}
+          onCancel={exitToMenu}
         />
       )}
       {!worldLoading && awakening && (

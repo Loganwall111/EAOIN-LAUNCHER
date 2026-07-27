@@ -1,6 +1,3 @@
-import { BlockID } from '@shared/blocks/BlockRegistry';
-import { InventoryStacks } from '../player/InventoryState';
-
 export const TOTAL_MEMORY_SHARDS = 71;
 
 export interface JournalPage {
@@ -18,11 +15,10 @@ export const JOURNAL_ENTRIES: JournalPage[] = [
 
 export class TheFinalJourney {
   static getUnlockedPages(shardsCollected: number): JournalPage[] {
-    const basicPages = JOURNAL_ENTRIES.slice(0, 4);
-    const extraPages = Math.floor(shardsCollected / (TOTAL_MEMORY_SHARDS / 10));
-    // For simplicity, we reveal more as the player collects more.
-    // In a full implementation, each unique shard might map to a specific page.
-    return [...basicPages];
+    // All currently authored prologue pages are available. Keep the argument in
+    // the API so future shard-specific entries can be added without a save break.
+    void shardsCollected;
+    return JOURNAL_ENTRIES.slice(0, 4);
   }
 
   static isJournalComplete(shardsCollected: number): boolean {
