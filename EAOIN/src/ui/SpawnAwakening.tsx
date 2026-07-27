@@ -50,12 +50,23 @@ export default function SpawnAwakening({
   const [beat, setBeat] = useState<AwakeningBeat>('BLACK');
   const doneRef = useRef(false);
 
+  // Keep the latest completion callback in a ref. While the world is running
+  // the parent (App) re-renders several times a second — every HUD telemetry
+  // tick — and each render hands us a *brand new* inline `onComplete`. If the
+  // beat timer below depended on that callback directly, it would be torn down
+  // and restarted on every one of those re-renders, so the 900 ms BLACK beat
+  // (eyes fully shut) would never elapse. The eyelids would stay closed and the
+  // player would see nothing but a permanent black wall over the live game.
+  // Reading the callback through a ref keeps the timer stable across re-renders.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   const finish = useCallback(() => {
     if (doneRef.current) return;
     doneRef.current = true;
     setBeat('DONE');
-    onComplete();
-  }, [onComplete]);
+    onCompleteRef.current();
+  }, []);
 
   /* Advance through the beats on a timer. */
   useEffect(() => {
