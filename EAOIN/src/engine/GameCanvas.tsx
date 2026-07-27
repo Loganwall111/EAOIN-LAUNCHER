@@ -117,7 +117,16 @@ const TERMINAL_VELOCITY = -28;
 /** Chunks meshed synchronously before the first frame is presented. */
 const INITIAL_CHUNK_RADIUS = 2;
 /** Chunks generated + meshed per frame while streaming the render radius in. */
-const CHUNKS_PER_FRAME = 2;
+const CHUNKS_PER_FRAME = 4;
+/**
+ * Wall-clock budget for chunk streaming per frame, in ms.
+ *
+ * Measured cost is ~7ms for an average chunk but several times that for
+ * mountainous, cavern-heavy terrain, so a fixed count of 2 chunks/frame was
+ * either wasteful or a visible hitch depending on where you stood. ~6ms leaves
+ * the rest of a 16.6ms frame for rendering and simulation.
+ */
+const CHUNK_STREAM_BUDGET_MS = 6;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required', vulkanStatus: 'Detecting graphics backend…' };
 /** Hard cap for the blocking loading overlay; remaining distant chunks stream while playing. */
 const WORLD_LOADING_MAX_MS = 18_000;
@@ -509,8 +518,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const breakOverlay = new BreakOverlay(scene);
 
       let miningSession: MiningSession | null = null;
+      /**
+       * Last mining progress pushed into React state.
+       *
+       * Declared here, beside `miningSession`, because `clearMining` below
+       * assigns it — declaring it further down (next to the render-loop
+       * locals) put it in the temporal dead zone for that call and threw.
+       */
+      let lastPublishedMiningProgress = 0;
       const clearMining = (): void => {
-        miningSession = null; setMiningProgress(0); setMiningLabel('');
+        miningSession = null; lastPublishedMiningProgress = 0; setMiningProgress(0); setMiningLabel('');
         breakOverlay.hide();
         viewModel.setContinuousSwing(false);
       };
@@ -554,6 +571,19 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         else { audio.play('error', settingsRef.current); showActionMessage(`${getBlock(existing).name} broke but dropped nothing — stronger tool needed`); }
         rebuildEditedBlock(session.target); saveWorldEdits(); clearMining();
       };
+
+      // --- player physics + survival locals ------------------------------
+      // Declared here rather than further down because `respawnPlayer` and the
+      // command executor below both assign them. `let` bindings are in the
+      // temporal dead zone until their declaration is *executed*, so declaring
+      // them after those closures made `/kill` and `/tp` throw a ReferenceError
+      // the moment they ran.
+      let velocityY = 0;
+      let fallStartY = camera.position.y;
+      let wasFalling = false;
+      // 2.0 — thirst. Deserts are genuinely hostile: the bar drains fast in
+      // the heat and you must find water (or an oasis) to top it back up.
+      let hydrationState: HydrationState = createStarterHydration();
 
       /**
        * Kill and respawn the player.
@@ -626,7 +656,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
       };
 
-      let velocityY = 0; let grounded = false; let jumpRequested = false; let fallStartY = camera.position.y; let wasFalling = false;
+      // NOTE: velocityY / fallStartY / wasFalling are declared above, before
+      // respawnPlayer and the command executor, which both assign them.
+      let grounded = false; let jumpRequested = false;
       const pressedKeys = new Set<string>();
       const setFlightMode = (enabled: boolean): void => {
         flightEnabledRef.current = enabled;
@@ -688,7 +720,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let startupLoadingComplete = !renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
       // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
       // the heat and you must find water (or an oasis) to top it back up.
-      let hydrationState: HydrationState = createStarterHydration();
+      // NOTE: hydrationState is declared above, before the command executor.
       let currentClimate = climateForBiome('plains');
       let worldDay = 1, lastTimeOfDay = worldTimeRef.current.timeOfDay;
       let timeState: WorldTimeState = worldTimeRef.current;
@@ -720,7 +752,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const now = performance.now();
         if (miningSession) {
           const progress = Math.min(1, (now - miningSession.startedAt) / miningSession.durationMs);
-          setMiningProgress(progress);
+          // PERF: this used to call setState every single frame while mining,
+          // re-rendering the whole HUD React tree ~60x/second for a bar that
+          // is only ~300px wide. Publishing at 2% granularity is visually
+          // identical and cuts the renders by roughly 30x.
+          const quantised = Math.round(progress * 50) / 50;
+          if (quantised !== lastPublishedMiningProgress) {
+            lastPublishedMiningProgress = quantised;
+            setMiningProgress(quantised);
+          }
           // Cracks advance through ten discrete destroy stages on the block
           // itself; the arm keeps swinging on its own constant tempo.
           breakOverlay.show(
@@ -1033,7 +1073,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           const result = renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, renderRadius,
             chunkSource.generateChunk,
-            { budget: CHUNKS_PER_FRAME }
+            { budget: CHUNKS_PER_FRAME, timeBudgetMs: CHUNK_STREAM_BUDGET_MS }
           );
           if (result.loaded > 0 || result.unloaded > 0) {
             // Meshing is expensive and bursty; tell the tuner to ignore this

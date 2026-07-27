@@ -338,10 +338,19 @@ export class DeepCaveGenerator {
           continue;
         }
 
+        // Same per-band memoisation as `dressColumn`: the biome lookup is
+        // several noise samples and only its depth band varies down a column.
+        const carveBands: Array<CaveBiomeDefinition | undefined> = [undefined, undefined, undefined];
+
         for (let y = bottom; y < top; y += 1) {
           // 0 at the surface, 1 at bedrock.
           const depthFraction = (surface - y) / column;
-          const biome = this.getCaveBiomeAt(wx, wz, depthFraction);
+          const band = depthFraction > DEEP_BAND_END ? 2 : depthFraction > CAVERN_BAND_END ? 1 : 0;
+          let biome = carveBands[band];
+          if (!biome) {
+            biome = this.getCaveBiomeAt(wx, wz, depthFraction);
+            carveBands[band] = biome;
+          }
 
           if (biome.id === 'backrooms') {
             this.carveBackrooms(chunk, lx, lz, wx, wz, y, depthFraction);
@@ -414,12 +423,27 @@ export class DeepCaveGenerator {
     top: number
   ): void {
     const column = Math.max(1, surface - bottom);
+
+    // PERF: `getCaveBiomeAt` runs several fbm2D samples and was called once per
+    // Y for the whole column. The horizontal component is identical for every
+    // Y in a column — only the depth band changes — so the result is memoised
+    // per band (there are only three) instead of recomputed ~60 times.
+    const bandCache: Array<CaveBiomeDefinition | undefined> = [undefined, undefined, undefined];
+    const biomeForDepth = (depthFraction: number): CaveBiomeDefinition => {
+      const band = depthFraction > DEEP_BAND_END ? 2 : depthFraction > CAVERN_BAND_END ? 1 : 0;
+      const cached = bandCache[band];
+      if (cached) return cached;
+      const value = this.getCaveBiomeAt(wx, wz, depthFraction);
+      bandCache[band] = value;
+      return value;
+    };
+
     for (let y = bottom + 1; y < top - 1; y += 1) {
       const here = chunk.getBlock(lx, y, lz);
       if (here !== B.AIR) continue;
 
       const depthFraction = (surface - y) / column;
-      const biome = this.getCaveBiomeAt(wx, wz, depthFraction);
+      const biome = biomeForDepth(depthFraction);
       const below = chunk.getBlock(lx, y - 1, lz);
       const above = chunk.getBlock(lx, y + 1, lz);
 

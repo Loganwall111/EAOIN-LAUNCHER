@@ -41,6 +41,16 @@ export interface StreamUpdateOptions {
    * screen for minutes, so callers spread the work over several frames.
    */
   budget?: number;
+  /**
+   * Maximum wall-clock milliseconds to spend generating + meshing.
+   *
+   * A fixed chunk count is the wrong unit: chunk cost varies by an order of
+   * magnitude between a flat plain and a mountain riddled with caverns, so
+   * "2 chunks" was comfortably under budget in one place and a 40ms frame
+   * spike in another. Stopping on elapsed time keeps the frame rate steady
+   * and simply streams a little slower where the terrain is expensive.
+   */
+  timeBudgetMs?: number;
 }
 
 interface MutableMeshData {
@@ -74,6 +84,12 @@ const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
   [0, 0, 1],
   [0, 0, -1],
 ];
+
+/** Monotonic clock, falling back to Date.now in non-browser test environments. */
+const now = (): number =>
+  (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
 
 const NEIGHBOR_CHUNKS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
@@ -168,8 +184,13 @@ export class ChunkRenderManager {
     }
 
     let loaded = 0;
+    const timeBudgetMs = options.timeBudgetMs ?? Number.POSITIVE_INFINITY;
+    const startedAt = Number.isFinite(timeBudgetMs) ? now() : 0;
     for (const entry of missing) {
       if (loaded >= budget) break;
+      // Always allow the first chunk through, so progress is guaranteed even
+      // if a single chunk exceeds the whole budget.
+      if (loaded > 0 && Number.isFinite(timeBudgetMs) && now() - startedAt >= timeBudgetMs) break;
       const chunk = generateChunk(entry.cx, entry.cz);
       this.chunks.set(this.key(entry.cx, entry.cz), chunk);
       dirty.add(this.key(entry.cx, entry.cz));

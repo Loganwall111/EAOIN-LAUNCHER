@@ -274,6 +274,9 @@ class Painter {
   }
 }
 
+/** Rendered-texture cache, keyed by `${id}:${face}:${pack}`. */
+const TEXEL_CACHE = new Map<string, TexelBuffer>();
+
 export interface TextureRequest {
   id: BlockID;
   face: BlockFace;
@@ -306,8 +309,6 @@ export function buildBlockTexels(request: TextureRequest): TexelBuffer {
   TEXEL_CACHE.set(cacheKey, painter.data);
   return painter.data;
 }
-
-const TEXEL_CACHE = new Map<string, TexelBuffer>();
 
 /** Drops every cached texture. Called when the texture pack changes. */
 export function clearTextureCache(): void {
