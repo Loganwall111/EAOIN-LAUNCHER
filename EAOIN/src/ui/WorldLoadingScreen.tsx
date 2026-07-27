@@ -57,6 +57,15 @@ export default function WorldLoadingScreen({
   const doneRef = useRef(false);
   const type = useMemo(() => getWorldType(worldType), [worldType]);
 
+  // Read the completion callback through a ref. While the world is starting up
+  // the parent (App) re-renders frequently — every HUD telemetry tick hands us
+  // a fresh inline `onComplete`. If the completion timers below depended on
+  // that callback, they would be reset on every re-render and could never fire,
+  // leaving the player stuck on the loading overlay (or, once it does dismiss,
+  // on the black "eyes shut" awakening). The ref keeps the timers stable.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   const percent = Math.max(0, Math.min(100, loadingProgress?.percent ?? 0));
   const stageLabel = loadingProgress?.label ?? 'Waiting for renderer…';
   const elapsedSeconds = Math.max(0, Math.floor((loadingProgress?.elapsedMs ?? 0) / 1000));
@@ -69,10 +78,10 @@ export default function WorldLoadingScreen({
     const timer = window.setTimeout(() => {
       if (doneRef.current) return;
       doneRef.current = true;
-      onComplete();
+      onCompleteRef.current();
     }, reducedMotion ? 80 : 420);
     return () => window.clearTimeout(timer);
-  }, [loadingProgress?.ready, onComplete, reducedMotion]);
+  }, [loadingProgress?.ready, reducedMotion]);
 
   // Defensive cap: if the renderer never sends a ready event, never leave the
   // player staring at a stuck percentage forever. Distant chunks keep streaming
@@ -81,10 +90,10 @@ export default function WorldLoadingScreen({
     const timer = window.setTimeout(() => {
       if (doneRef.current) return;
       doneRef.current = true;
-      onComplete();
+      onCompleteRef.current();
     }, SAFETY_COMPLETE_MS);
     return () => window.clearTimeout(timer);
-  }, [onComplete]);
+  }, []);
 
   return (
     <div className="world-loading" role="status" aria-live="polite">
