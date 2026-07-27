@@ -10,7 +10,7 @@ import ModsScreen from './ui/ModsScreen';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
 import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
-import GameCanvas, { HudTelemetry } from './engine/GameCanvas';
+import GameCanvas, { HudTelemetry, WorldLoadProgress } from './engine/GameCanvas';
 import { GameMode } from './modes/GameMode';
 import HUD from './ui/HUD';
 import { buildObjectives, createGameplayCounters, GameplayCounterKey, GameplayCounters } from './objectives/ObjectiveTracker';
@@ -53,6 +53,7 @@ export default function App() {
   const [awakening, setAwakening] = useState(false);
   /** Shows the world-creation loading screen before the world appears. */
   const [worldLoading, setWorldLoading] = useState(false);
+  const [worldLoadProgress, setWorldLoadProgress] = useState<WorldLoadProgress>({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
   const [pendingWorldType, setPendingWorldType] = useState<WorldTypeID>('default');
   const [systemsVisible, setSystemsVisible] = useState(false);
 
@@ -125,6 +126,7 @@ export default function App() {
     setRuntimeStatus(createDefaultRuntimeStatus());
     setCraftingMessage(saved ? 'Loaded saved player progress' : 'New player inventory ready');
     // Loading screen first, then the awakening cutscene, then gameplay.
+    setWorldLoadProgress({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
     setPendingWorldType(worldTypeFromSeed(nextSeed));
     setWorldLoading(true);
     setAwakening(true);
@@ -233,6 +235,24 @@ export default function App() {
 
   const handleBootComplete = useCallback(() => {
     setAppPhase('title');
+  }, []);
+
+  const handleWorldLoadingProgress = useCallback((progress: WorldLoadProgress) => {
+    setWorldLoadProgress((current) => {
+      if (
+        current.percent === progress.percent &&
+        current.label === progress.label &&
+        current.ready === progress.ready &&
+        current.loadedChunks === progress.loadedChunks &&
+        current.totalChunks === progress.totalChunks &&
+        Math.floor(current.elapsedMs / 1000) === Math.floor(progress.elapsedMs / 1000)
+      ) return current;
+      return progress;
+    });
+  }, []);
+
+  const handleWorldLoadingComplete = useCallback(() => {
+    setWorldLoading(false);
   }, []);
 
   const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
@@ -392,6 +412,7 @@ export default function App() {
         onGameplayEvent={recordGameplayEvent}
         onRuntimeStatusChange={setRuntimeStatus}
         onTelemetry={setTelemetry}
+        onLoadingProgress={handleWorldLoadingProgress}
         onGameModeChange={setGameMode}
       />
       <HudFrame
@@ -422,7 +443,8 @@ export default function App() {
           worldType={pendingWorldType}
           seed={worldSeed}
           reducedMotion={settings.reducedMotion}
-          onComplete={() => setWorldLoading(false)}
+          loadingProgress={worldLoadProgress}
+          onComplete={handleWorldLoadingComplete}
         />
       )}
       {!worldLoading && awakening && (

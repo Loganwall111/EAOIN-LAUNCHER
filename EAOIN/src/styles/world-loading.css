@@ -140,6 +140,15 @@
 .wl-bar-segments span { border-right: 2px solid rgba(0, 0, 0, 0.38); }
 .wl-bar-segments span:last-child { border-right: none; }
 
+.wl-load-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font: 9px/1.4 var(--eaoin-pixel-font, monospace);
+  color: #8fa2ba;
+}
+
 /* ------------------------------- the tip -------------------------------- */
 
 .wl-tip {

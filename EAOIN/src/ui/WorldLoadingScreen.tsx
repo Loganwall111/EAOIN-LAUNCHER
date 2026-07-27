@@ -2,42 +2,32 @@
  * WorldLoadingScreen — the Minecraft-style loading screen.
  *
  * This is where the loading bar belongs: unlike the boot sequence, world
- * creation genuinely has work to wait on (terrain seeding, biome tables, chunk
- * meshing), so the progress here reflects real staged setup.
- *
- * Presentation is deliberately Minecraft-ish: a tiled dirt-block background,
- * the world name and type, a chunky segmented progress bar, and a rotating
- * splash tip — over an animated parallax of the world type's own preview
- * gradient, so creating a Skylands world already looks like Skylands.
+ * creation genuinely has work to wait on (renderer startup, save decoding,
+ * terrain seeding, material setup, and chunk meshing), so the percentage shown
+ * here is driven by GameCanvas' real loading reports instead of a fake timer.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getWorldType, WorldTypeID } from '../world/WorldTypes';
+
+interface LoadingProgressSnapshot {
+  percent: number;
+  label: string;
+  ready: boolean;
+  loadedChunks?: number;
+  totalChunks?: number;
+  elapsedMs?: number;
+}
 
 interface WorldLoadingScreenProps {
   worldName: string;
   worldType: WorldTypeID;
   seed: string;
-  /** Fired when every stage has completed. */
+  /** Real loading progress emitted by GameCanvas. */
+  loadingProgress?: LoadingProgressSnapshot;
+  /** Fired when the world is playable or the safety cap is reached. */
   onComplete: () => void;
   reducedMotion?: boolean;
 }
-
-/** Staged setup with weights, so the bar moves at a believable uneven pace. */
-const STAGES: Array<{ label: string; weight: number }> = [
-  { label: 'Seeding world generator', weight: 6 },
-  { label: 'Building biome tables', weight: 8 },
-  { label: 'Raising continents', weight: 12 },
-  { label: 'Carving caves and ravines', weight: 14 },
-  { label: 'Flooding oceans', weight: 9 },
-  { label: 'Planting flora', weight: 8 },
-  { label: 'Placing structures', weight: 10 },
-  { label: 'Spawning wildlife', weight: 7 },
-  { label: 'Linking dimension portals', weight: 6 },
-  { label: 'Lighting the sky', weight: 6 },
-  { label: 'Meshing spawn chunks', weight: 14 },
-];
-
-const TOTAL_WEIGHT = STAGES.reduce((sum, s) => sum + s.weight, 0);
 
 const TIPS = [
   'Press F4 to switch between Survival and Creative at any time.',
@@ -52,67 +42,49 @@ const TIPS = [
   'Type /gamemode creative for the full creative inventory.',
 ];
 
+/** Keep the blocking overlay under 15-20 seconds even on slow devices. */
+const SAFETY_COMPLETE_MS = 20_000;
+
 export default function WorldLoadingScreen({
   worldName,
   worldType,
   seed,
+  loadingProgress,
   onComplete,
   reducedMotion = false,
 }: WorldLoadingScreenProps) {
-  const [progress, setProgress] = useState(0);
-  const [stageIndex, setStageIndex] = useState(0);
   const [tipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const doneRef = useRef(false);
   const type = useMemo(() => getWorldType(worldType), [worldType]);
 
-  /* Advance through the stages. */
+  const percent = Math.max(0, Math.min(100, loadingProgress?.percent ?? 0));
+  const stageLabel = loadingProgress?.label ?? 'Waiting for renderer…';
+  const elapsedSeconds = Math.max(0, Math.floor((loadingProgress?.elapsedMs ?? 0) / 1000));
+  const chunkDetail = loadingProgress?.loadedChunks !== undefined && loadingProgress.totalChunks !== undefined
+    ? `${loadingProgress.loadedChunks}/${loadingProgress.totalChunks} chunks`
+    : null;
+
   useEffect(() => {
-    let cancelled = false;
-    let completed = 0;
-    let index = 0;
+    if (!loadingProgress?.ready || doneRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      onComplete();
+    }, reducedMotion ? 80 : 420);
+    return () => window.clearTimeout(timer);
+  }, [loadingProgress?.ready, onComplete, reducedMotion]);
 
-    const runStage = () => {
-      if (cancelled) return;
-
-      if (index >= STAGES.length) {
-        setProgress(100);
-        window.setTimeout(() => {
-          if (cancelled || doneRef.current) return;
-          doneRef.current = true;
-          onComplete();
-        }, reducedMotion ? 100 : 480);
-        return;
-      }
-
-      const stage = STAGES[index];
-      setStageIndex(index);
-
-      const from = (completed / TOTAL_WEIGHT) * 100;
-      const to = ((completed + stage.weight) / TOTAL_WEIGHT) * 100;
-      const stageMs = reducedMotion ? 40 : 170 + stage.weight * 26;
-      const startedAt = performance.now();
-
-      const step = () => {
-        if (cancelled) return;
-        const t = Math.min(1, (performance.now() - startedAt) / stageMs);
-        // Ease-out so each stage decelerates as it lands.
-        setProgress(from + (to - from) * (1 - Math.pow(1 - t, 2)));
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          completed += stage.weight;
-          index += 1;
-          runStage();
-        }
-      };
-      requestAnimationFrame(step);
-    };
-
-    runStage();
-    return () => { cancelled = true; };
-  }, [onComplete, reducedMotion]);
-
-  const stage = STAGES[Math.min(stageIndex, STAGES.length - 1)];
+  // Defensive cap: if the renderer never sends a ready event, never leave the
+  // player staring at a stuck percentage forever. Distant chunks keep streaming
+  // in-game after the overlay closes.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      onComplete();
+    }, SAFETY_COMPLETE_MS);
+    return () => window.clearTimeout(timer);
+  }, [onComplete]);
 
   return (
     <div className="world-loading" role="status" aria-live="polite">
@@ -134,16 +106,21 @@ export default function WorldLoadingScreen({
 
         <div className="wl-bar-block">
           <div className="wl-bar-row">
-            <span className="wl-stage">{stage.label}…</span>
-            <span className="wl-pct">{Math.round(progress)}%</span>
+            <span className="wl-stage">{stageLabel}</span>
+            <span className="wl-pct">{Math.round(percent)}%</span>
           </div>
 
           {/* Chunky segmented bar, Minecraft-style. */}
-          <div className="wl-bar-track">
-            <div className="wl-bar-fill" style={{ width: `${progress}%` }} />
+          <div className="wl-bar-track" aria-label={`World loading ${Math.round(percent)} percent`}>
+            <div className="wl-bar-fill" style={{ width: `${percent}%` }} />
             <div className="wl-bar-segments" aria-hidden="true">
               {Array.from({ length: 20 }, (_, i) => <span key={i} />)}
             </div>
+          </div>
+
+          <div className="wl-load-detail">
+            <span>{chunkDetail ?? 'Real startup progress from renderer and world generator'}</span>
+            <span>{elapsedSeconds}s / 20s max</span>
           </div>
         </div>
 

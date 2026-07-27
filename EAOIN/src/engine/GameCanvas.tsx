@@ -39,6 +39,21 @@ import { getWorldLayout } from '../world/WorldDistribution';
 import { WorldSaveManager } from '../world/WorldSave';
 
 /** Live world readouts pushed to the HUD each sampling tick. */
+export interface WorldLoadProgress {
+  /** Honest 0-100 readiness for the blocking world load overlay. */
+  percent: number;
+  /** Current real subsystem or chunk-streaming step. */
+  label: string;
+  /** True once the world is playable and the overlay may close. */
+  ready: boolean;
+  /** Spawn/render chunks that have actually been generated + meshed. */
+  loadedChunks?: number;
+  /** Total chunks targeted for the visible startup radius. */
+  totalChunks?: number;
+  /** Milliseconds since GameCanvas began initializing this world. */
+  elapsedMs: number;
+}
+
 export interface HudTelemetry {
   position: { x: number; y: number; z: number };
   /** Camera yaw in radians. */
@@ -68,6 +83,8 @@ interface GameCanvasProps {
   onGameplayEvent: (e: GameplayCounterKey, amount?: number) => void;
   onRuntimeStatusChange: (s: RuntimeStatus) => void;
   onTelemetry?: (t: HudTelemetry) => void;
+  /** Reports real renderer/world/chunk-loading progress to the overlay. */
+  onLoadingProgress?: (progress: WorldLoadProgress) => void;
   /** Live game-mode switching, so `/gamemode creative` works mid-world. */
   onGameModeChange?: (mode: GameMode) => void;
 }
@@ -84,6 +101,9 @@ const INITIAL_CHUNK_RADIUS = 2;
 /** Chunks generated + meshed per frame while streaming the render radius in. */
 const CHUNKS_PER_FRAME = 2;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required' };
+/** Hard cap for the blocking loading overlay; remaining distant chunks stream while playing. */
+const WORLD_LOADING_MAX_MS = 18_000;
+
 
 /** Full day/night cycle length in real seconds — 20 minutes, like Minecraft. */
 const DAY_LENGTH_SECONDS = 1200;
@@ -96,7 +116,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onGameModeChange }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -111,7 +131,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
+  const loadingProgressRef = useRef(onLoadingProgress);
   useEffect(() => { telemetryRef.current = onTelemetry; }, [onTelemetry]);
+  useEffect(() => { loadingProgressRef.current = onLoadingProgress; }, [onLoadingProgress]);
   const [actionMessage, setActionMessage] = useState('WASD move • SPACE jump • Left mine with hand punch • Right place • T chat /day /time • O objectives U systems');
   const [worldVersion, setWorldVersion] = useState(0);
   const [miningProgress, setMiningProgress] = useState(0);
@@ -140,21 +162,53 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   useEffect(() => {
     let disposed = false;
     let cleanupScene: (() => void) | undefined;
+    const loadingStartedAt = performance.now();
+    let lastLoadingReport: WorldLoadProgress = { percent: -1, label: '', ready: false, elapsedMs: 0 };
+    const reportLoadingProgress = (
+      percent: number,
+      label: string,
+      ready = false,
+      chunks?: Pick<WorldLoadProgress, 'loadedChunks' | 'totalChunks'>
+    ): void => {
+      if (disposed) return;
+      const elapsedMs = performance.now() - loadingStartedAt;
+      const rounded = Math.round(Math.max(0, Math.min(100, percent)));
+      // Never let the visible bar go backwards if the renderer re-checks a stage.
+      const next: WorldLoadProgress = {
+        percent: Math.max(rounded, lastLoadingReport.percent),
+        label,
+        ready,
+        elapsedMs,
+        ...chunks,
+      };
+      const percentChanged = next.percent !== lastLoadingReport.percent;
+      const labelChanged = next.label !== lastLoadingReport.label;
+      const chunkChanged = next.loadedChunks !== lastLoadingReport.loadedChunks || next.totalChunks !== lastLoadingReport.totalChunks;
+      if (ready || percentChanged || labelChanged || chunkChanged || elapsedMs - lastLoadingReport.elapsedMs > 500) {
+        lastLoadingReport = next;
+        loadingProgressRef.current?.(next);
+      }
+    };
+
     void (async () => {
       const canvas = canvasRef.current; if (!canvas) return;
       canvas.tabIndex = 1;
+      reportLoadingProgress(1, 'Creating renderer');
       const runtimeEngine = await createRuntimeEngine(canvas, settingsRef.current);
       const engine = runtimeEngine.engine;
       if (disposed) { engine.dispose(); return; }
+      reportLoadingProgress(8, runtimeEngine.info.label || 'Renderer ready');
       setRenderStats(c => ({ ...c, renderer: runtimeEngine.info }));
       const scene = new Scene(engine);
       scene.clearColor = new Color4(0.22, 0.38, 0.58, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);
       scene.fogEnabled = settingsRef.current.fogEnabled;
+      reportLoadingProgress(12, 'Scene created');
 
       const saveManager = new WorldSaveManager(seed);
       const savedEdits = saveManager.load();
+      reportLoadingProgress(16, savedEdits.length > 0 ? `Loaded ${savedEdits.length} saved world edits` : 'Checked saved world edits');
       // 1.0 advanced world generation. Falls back to legacy if the seed asks.
       const useAdvancedWorld = !/classic|legacy/i.test(seed);
       // 2.0 — the world-creation screen tags the seed with the chosen preset,
@@ -173,10 +227,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const terrain: TerrainGenerator = useAdvancedWorld
         ? (advancedTerrain as unknown as TerrainGenerator)
         : new TerrainGenerator(seed, savedEdits);
+      reportLoadingProgress(22, useAdvancedWorld ? 'Terrain generator seeded' : 'Legacy terrain generator seeded');
       const floatingIslands: FloatingIslandsGenerator | null = isSkyWorld ? new FloatingIslandsGenerator(seed) : null;
       void floatingIslands; // reserved for future floating-island content injection
       const spawn = terrain.getSpawnPoint();
       const layout = getWorldLayout(seed, spawn);
+      reportLoadingProgress(28, `Spawn point found at ${Math.round(spawn.x)}, ${Math.round(spawn.y)}, ${Math.round(spawn.z)}`);
       setActionMessage(savedEdits.length > 0
         ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.settlement.z))}m • 1.0 advanced world`
         : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
@@ -238,6 +294,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const THIRD_PERSON_DISTANCE = 3.5;
 
       const materials = createBlockMaterials(scene, settingsRef.current.texturePack);
+      reportLoadingProgress(34, 'Block materials baked');
       const audio = new GameAudio();
       // 2.0 — layered procedural soundscapes per biome/dimension.
       const ambience = new AmbienceEngine();
@@ -245,6 +302,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const renderer = new ChunkRenderManager(scene, materials);
       const itemDrops = new ItemDropManager(scene, materials);
       const renderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+      const startupChunkTotal = chunksInRadius(renderRadius);
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
       const moddingRuntime = new ModdingRuntime(); moddingRuntime.registerMockPack();
@@ -257,7 +315,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // frame has ground in it. The rest of the render radius is streamed in a
       // few chunks per frame below, which keeps the canvas from sitting on a
       // black screen while thousands of chunks are meshed.
+      const initialChunkTotal = chunksInRadius(INITIAL_CHUNK_RADIUS);
+      reportLoadingProgress(42, `Meshing spawn chunks 0/${initialChunkTotal}`, false, { loadedChunks: 0, totalChunks: initialChunkTotal });
       renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, (cx, cz) => terrain.generateChunk(cx, cz));
+      const initialLoadedChunks = Math.min(renderer.getStats().loadedChunks, startupChunkTotal);
+      reportLoadingProgress(55, `Meshed spawn chunks ${Math.min(initialLoadedChunks, initialChunkTotal)}/${initialChunkTotal}`, false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       const lighting = configureSceneLighting(scene, spawn);
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
@@ -308,6 +370,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       atmosphere.attach();
       atmosphere.timeOfDay = worldTimeRef.current.timeOfDay;
       atmosphere.setDimension(dimensionRuntime.getState().id);
+      reportLoadingProgress(66, 'Atmosphere, lighting, and sky attached', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       // Track the biome under the player so the sky can cross-fade per biome.
       let lastBiomeKey = '';
       const portalSystem = new PortalSystem(scene);
@@ -412,6 +475,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
 
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
+      let startupLoadingComplete = !renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
       // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
       // the heat and you must find water (or an oasis) to top it back up.
       let hydrationState: HydrationState = createStarterHydration();
@@ -646,6 +710,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           if (result.loaded > 0 || result.unloaded > 0) {
             try { const sg = lighting.shadowGenerator; for (const m of scene.meshes) if (m.name.startsWith('voxel_world_')) { sg.addShadowCaster(m as Mesh, true); (m as Mesh).receiveShadows = true; } } catch {}
           }
+          if (!startupLoadingComplete) {
+            const loadedVisibleChunks = Math.max(0, Math.min(startupChunkTotal, startupChunkTotal - result.pending));
+            const chunkRatio = startupChunkTotal > 0 ? loadedVisibleChunks / startupChunkTotal : 1;
+            const elapsed = performance.now() - loadingStartedAt;
+            if (result.pending === 0) {
+              startupLoadingComplete = true;
+              reportLoadingProgress(100, `World ready — ${loadedVisibleChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
+            } else if (elapsed >= WORLD_LOADING_MAX_MS) {
+              startupLoadingComplete = true;
+              reportLoadingProgress(100, `Playable now — ${loadedVisibleChunks}/${startupChunkTotal} chunks loaded; the rest will stream in`, true, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
+            } else {
+              reportLoadingProgress(76 + chunkRatio * 23, `Streaming chunks ${loadedVisibleChunks}/${startupChunkTotal}`, false, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
+            }
+          }
           if (result.pending > 0 && streamFrame % 30 === 0) {
             showActionMessage(`Loading world — ${result.pending} chunks remaining`);
           } else if (result.pending === 0 && result.loaded > 0) {
@@ -836,6 +914,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       window.addEventListener('eaoin-travel-dimension', handleTravelEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
+      reportLoadingProgress(76, 'Controls and gameplay systems wired', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
+      if (!renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
+        reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
+      }
       let recoveredFromRenderError = false;
       engine.runRenderLoop(() => {
         try {
@@ -1085,6 +1167,7 @@ function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
 
 function toBlockCoordinate(point: Vector3): BlockCoordinate { return { x: Math.floor(point.x), y: Math.floor(point.y), z: Math.floor(point.z) }; }
 function toChunkCoordinate(worldX: number, worldZ: number): { cx: number; cz: number } { return { cx: Math.floor(worldX / 16), cz: Math.floor(worldZ / 16) }; }
+function chunksInRadius(radius: number): number { const diameter = radius * 2 + 1; return diameter * diameter; }
 function hasNearbyBlock(terrain: { getBlockAt(x: number, y: number, z: number): BlockID }, position: Vector3, blockId: BlockID, radius: number): boolean {
   const minX = Math.floor(position.x - radius); const maxX = Math.floor(position.x + radius); const minZ = Math.floor(position.z - radius); const maxZ = Math.floor(position.z + radius); const minY = Math.max(0, Math.floor(position.y - radius)); const maxY = Math.min(127, Math.floor(position.y + radius));
   for (let x = minX; x <= maxX; x++) for (let z = minZ; z <= maxZ; z++) for (let y = minY; y <= maxY; y++) if (terrain.getBlockAt(x, y, z) === blockId) return true;
