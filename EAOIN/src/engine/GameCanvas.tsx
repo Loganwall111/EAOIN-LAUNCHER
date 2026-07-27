@@ -10,6 +10,9 @@ import { applyDamage, createStarterSurvivalStats, SurvivalStats, updateSurvivalL
 import { climateForBiome, createStarterHydration, drink, HydrationState, updateHydration } from '../player/Hydration';
 import { estimateMining, getTool, nextTool, ToolID, ToolInventory } from '../player/ToolState';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
+import { BossState } from '../creatures/BossEncounter';
+import { BossEncounter } from '../creatures/BossEncounter';
+import { ALL_BOSSES, getBoss } from '../creatures/BossRegistry';
 import DimensionRuntime, { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
 import { WorldInteractionRuntime } from '../effects/WorldInteractionRuntime';
 import { ItemDropManager } from '../items/ItemDropManager';
@@ -187,6 +190,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
    * spawn a creature). This ref is the bridge between the two.
    */
   const commandEffectRef = useRef<((effect: CommandEffect) => string | void) | null>(null);
+  /** Set by the scene; summons a boss by id. Used by `/boss` and the B key. */
+  const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
+  /** Live boss state, drives the on-screen boss health bar. */
+  const [bossState, setBossState] = useState<BossState | null>(null);
   const [commandText, setCommandText] = useState('/help');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
@@ -523,6 +530,87 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       creatureManager.update(camera.position, 1);
 
+      /* ---------------------------------------------------------------- *
+       * Boss encounters
+       *
+       * BossRegistry defines 38 bosses; before this the only thing that
+       * imported it was the HUD menu, so none could be fought. `activeBoss`
+       * holds the live encounter, driven from the frame loop below.
+       * ---------------------------------------------------------------- */
+      let activeBoss: BossEncounter | null = null;
+
+      const clearBoss = (): void => {
+        activeBoss?.dispose();
+        activeBoss = null;
+        setBossState(null);
+      };
+
+      const publishBoss = (): void => {
+        setBossState(activeBoss ? activeBoss.getState() : null);
+      };
+
+      const summonBoss = (bossId: string): string => {
+        const def = getBoss(bossId)
+          ?? ALL_BOSSES.find((b) => b.name.toLowerCase() === bossId.toLowerCase());
+        if (!def) return `No such boss: ${bossId}`;
+
+        clearBoss();
+        // Place it in front of the player, clear of the ground.
+        const forward = camera.getForwardRay(1).direction;
+        const spawnAt = camera.position.add(
+          new Vector3(forward.x, 0, forward.z).normalize().scale(14 + def.size.depth * 0.5)
+        );
+        spawnAt.y = terrain.getHeightAt(spawnAt.x, spawnAt.z) + 1;
+
+        const boss = new BossEncounter(scene, def, spawnAt);
+
+        boss.onPhase = (phase, bossDef) => {
+          showActionMessage(`${bossDef.name} enters phase ${phase} of ${bossDef.phases}!`);
+          audio.play('hit', settingsRef.current);
+          publishBoss();
+        };
+
+        boss.onAbility = (event) => {
+          const distance = Vector3.Distance(event.position, camera.position);
+          if (event.kind === 'summon') {
+            for (let i = 0; i < (event.summonCount ?? 1); i += 1) {
+              creatureManager.spawnNear(event.position, event.summonSpecies ?? 'husk_wanderer');
+            }
+            showActionMessage(`${def.name} uses ${event.name}!`);
+            return;
+          }
+          // Melee and pulses need the player actually within reach.
+          const reach = event.kind === 'melee' ? 5 : event.kind === 'pulse' ? 12 : 36;
+          if (distance > reach) return;
+          if (isCreativeMode(gameModeRef.current)) return;
+
+          const next = applyDamage(survivalStatsRef.current, event.damage);
+          survivalStatsRef.current = next;
+          publishSurvivalStats(next);
+          audio.play('hit', settingsRef.current);
+          showActionMessage(`${def.name}: ${event.name} hits you for ${event.damage}!`);
+        };
+
+        boss.onDefeated = (bossDef, position) => {
+          showActionMessage(`${bossDef.name} defeated! Drops: ${bossDef.drops.join(', ')}`);
+          audio.play('creature_down', settingsRef.current);
+          onGameplayEvent('creaturesDefeated');
+          // Registry drops are lore item names; award a themed block stack so
+          // the kill has a tangible reward in the inventory.
+          const reward = bossDef.tier === 'final' ? 16 : bossDef.tier === 'world' ? 11 : 10;
+          for (let i = 0; i < Math.min(6, bossDef.phases + 1); i += 1) {
+            itemDrops.spawnDrop(reward as BlockID, position, 1);
+          }
+          window.setTimeout(() => { clearBoss(); }, 400);
+        };
+
+        publishBoss();
+        audio.play('ui', settingsRef.current);
+        return `${def.name} — ${def.tier.toUpperCase()} — ${def.health} HP, ${def.phases} phases. ${def.lore}`;
+      };
+
+      bossSummonRef.current = summonBoss;
+
       // Real Minecraft-style destroy-stage cracks. The old overlay just faded a
       // dark box to red over the block, which is the "red screen when breaking
       // a block" the player called outdated.
@@ -657,6 +745,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           case 'spawn': {
             const spawned = creatureManager.spawnNear(camera.position, effect.entity ?? 'sheep');
             return spawned ? `Summoned ${spawned}.` : 'No room to summon here.';
+          }
+          case 'boss': {
+            const note = bossSummonRef.current?.(effect.entity ?? 'wood_warden');
+            return note ?? 'Boss system unavailable.';
           }
           case 'weather':
             // The atmosphere system owns weather; setBiome re-evaluates it.
@@ -956,6 +1048,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
         // Keep the spawner's clock in step so nocturnal species (scorpions,
         // owls, bats) only appear after dark.
+        // Boss encounters tick before creatures so summoned minions appear
+        // in the same frame the ability fires.
+        if (activeBoss) {
+          activeBoss.update(deltaSeconds, camera.position);
+          if (streamFrame % 6 === 0) publishBoss();
+        }
         creatureManager.setTimeOfDay(timeState.timeOfDay);
         creatureManager.update(camera.position, deltaSeconds);
         const collectedDrops = itemDrops.update(camera.position, deltaSeconds);
@@ -1218,6 +1316,27 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             return true;
           }
         }
+        // Bosses are large, so they get a longer reach than ordinary mobs and
+        // are checked first.
+        if (activeBoss?.isAlive()) {
+          const bossPick = scene.pickWithRay(
+            camera.getForwardRay(Math.max(BLOCK_REACH, 12)),
+            (mesh) => Boolean(mesh.metadata?.bossId)
+          );
+          if (bossPick?.hit) {
+            const tool = getTool(selectedToolRef.current);
+            const damage = 12 + tool.tier * 9 + (tool.kind === 'axe' ? 4 : 0);
+            const result = activeBoss.damage(damage);
+            audio.play(result.dead ? 'creature_down' : 'hit', settingsRef.current);
+            authorityRuntime.recordAction();
+            if (!result.dead) {
+              showActionMessage(`${activeBoss.def.name}: ${Math.ceil(result.health)}/${activeBoss.def.health} HP`);
+            }
+            publishBoss();
+            return true;
+          }
+        }
+
         const pick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH), (mesh) => Boolean(mesh.metadata?.creatureId));
         const creatureId = pick?.pickedMesh?.metadata?.creatureId as string | undefined; if (!pick?.hit || !creatureId) return false;
         const tool = getTool(selectedToolRef.current); const damage = 5 + tool.tier * 4 + (tool.kind === 'axe' ? 3 : 0);
@@ -1483,7 +1602,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
-        breakOverlay.dispose(); viewModel.dispose();
+        breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
         audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
@@ -1559,6 +1678,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       )}
       <div className="game-hud">
         {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
+        {bossState && bossState.alive && (
+          <div className="boss-bar" role="status" aria-live="polite">
+            <div className="boss-bar-head">
+              <span className="boss-name">{bossState.def.emoji} {bossState.def.name}</span>
+              <span className="boss-tier">{bossState.def.tier.toUpperCase()}</span>
+            </div>
+            <div className="boss-bar-track">
+              <span
+                className="boss-bar-fill"
+                style={{ width: `${Math.max(0, (bossState.health / bossState.maxHealth) * 100)}%` }}
+              />
+            </div>
+            <div className="boss-bar-foot">
+              <span>PHASE {bossState.phase} / {bossState.def.phases}</span>
+              <span>{Math.ceil(bossState.health)} / {bossState.maxHealth}</span>
+            </div>
+          </div>
+        )}
         {targetLabel && <div className="target-label">{targetLabel}</div>}
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
         {commandOpen && <div className="command-console"><input value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}

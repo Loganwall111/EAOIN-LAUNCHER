@@ -24,7 +24,7 @@ export interface CommandRuntimeState {
  * to do nothing at all.
  */
 export interface CommandEffect {
-  kind: 'kill' | 'teleport' | 'give' | 'heal' | 'clear' | 'spawn' | 'weather';
+  kind: 'kill' | 'teleport' | 'give' | 'heal' | 'clear' | 'spawn' | 'weather' | 'boss';
   /** Target coordinates for `teleport`. */
   x?: number;
   y?: number;
@@ -65,7 +65,7 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
     return {
       ...state,
       ok: true,
-      lastMessage: 'Commands: /gamemode <survival|creative|story|experimental> /kill /heal /tp <x> <y> <z> /give <id> [n] /clear /weather <clear|rain|storm> /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
+      lastMessage: 'Commands: /gamemode <survival|creative|story|experimental> /kill /heal /tp <x> <y> <z> /give <id> [n] /boss <id> /clear /weather <clear|rain|storm> /day /night /time <0-24|infinite|resume> /vulkan on|off /shader on|off /particles on|off /texture classic|soft|vibrant|noir /summon /credits /god /boss /rocket /mars',
     };
   }
 
@@ -205,7 +205,12 @@ export function runCommand(input: string, state: CommandRuntimeState): CommandRe
 
   if (name === 'credits') return { ...state, ok: true, lastMessage: 'Credits command accepted: press C to open the ending credits runtime' };
   if (name === 'god') return { ...state, ok: true, lastMessage: 'God command accepted: press H to toggle unlocked god/editor mode' };
-  if (name === 'boss') return { ...state, ok: true, lastMessage: 'Boss command accepted: press N to damage the Ender/Abyss finale bosses' };
+  if (name === 'boss') {
+    // `/boss` with no argument summons the tutorial boss, so the system is
+    // discoverable. Previously this only printed a hint and did nothing.
+    const target = args[0] ?? 'wood_warden';
+    return { ...state, ok: true, effect: { kind: 'boss', entity: target }, lastMessage: `Summoning ${target}…` };
+  }
   if (name === 'rocket' || name === 'moon') return { ...state, ok: true, lastMessage: 'Rocket command accepted: stand near the rocket and press R to launch' };
   if (name === 'mars') return { ...state, ok: true, lastMessage: 'Mars is visible in the solar runtime; planetary landing is staged through rockets' };
   if (name === 'incredible') return { ...state, ok: true, lastMessage: 'Incredible mode is seed-gated; use McDonald\'s half for the rare world' };

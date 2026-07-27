@@ -185,6 +185,70 @@ export const SPECIES_MORPHS: Record<string, VariantDefinition[]> = {
     { id: 'black', label: 'Black', weight: 18, lighten: -0.45 },
     { id: 'snowflake', label: 'Snowflake', weight: 6, lighten: 0.4, rare: true },
   ],
+  /* ---- EAOIN natives: variants themed on the game's own creatures ---- */
+  husk_wanderer: [
+    { id: 'common', label: '', weight: 44 },
+    { id: 'parched', label: 'Parched', weight: 22, tint: { color: '#a89060', amount: 0.45 } },
+    { id: 'drowned', label: 'Drowned', weight: 18, tint: { color: '#2a6a7a', amount: 0.5 } },
+    { id: 'frozen', label: 'Frozen', weight: 14, tint: { color: '#8ac0e0', amount: 0.45 } },
+    { id: 'ancient', label: 'Ancient', weight: 2, lighten: -0.4, scale: 1.2, health: 1.8, rare: true },
+  ],
+  bone_archer: [
+    { id: 'common', label: '', weight: 48 },
+    { id: 'weathered', label: 'Weathered', weight: 24, tint: { color: '#8a8060', amount: 0.4 } },
+    { id: 'wither', label: 'Wither-touched', weight: 18, lighten: -0.55 },
+    { id: 'frost', label: 'Frostbound', weight: 8, tint: { color: '#a8d8f0', amount: 0.5 } },
+    { id: 'gilded', label: 'Gilded', weight: 2, tint: { color: '#e8c040', amount: 0.55 }, health: 1.6, rare: true },
+  ],
+  creep_bloom: [
+    { id: 'common', label: '', weight: 56 },
+    { id: 'sporeling', label: 'Sporeling', weight: 24, tint: { color: '#a86ad0', amount: 0.42 }, scale: 0.85 },
+    { id: 'scorched', label: 'Scorched', weight: 16, tint: { color: '#8a3a1a', amount: 0.45 } },
+    { id: 'charged', label: 'Charged', weight: 2.5, tint: { color: '#5ad8ff', amount: 0.6 }, health: 1.5, rare: true },
+  ],
+  hollow_stalker: [
+    { id: 'common', label: '', weight: 58 },
+    { id: 'riftborn', label: 'Riftborn', weight: 24, tint: { color: '#7a3ad0', amount: 0.45 } },
+    { id: 'faded', label: 'Faded', weight: 15, lighten: 0.3, saturate: 0.4 },
+    { id: 'null', label: 'Null', weight: 2, lighten: -0.75, scale: 1.2, health: 1.9, rare: true },
+  ],
+  ember_imp: [
+    { id: 'common', label: '', weight: 52 },
+    { id: 'cinder', label: 'Cinder', weight: 24, lighten: -0.3 },
+    { id: 'blaze', label: 'Blaze', weight: 20, tint: { color: '#ffb02a', amount: 0.5 } },
+    { id: 'coldfire', label: 'Coldfire', weight: 3, tint: { color: '#4ac8ff', amount: 0.62 }, rare: true },
+  ],
+  cave_lurker: [
+    { id: 'common', label: '', weight: 50 },
+    { id: 'pale', label: 'Pale', weight: 24, lighten: 0.34, saturate: 0.5 },
+    { id: 'venom', label: 'Venomous', weight: 22, tint: { color: '#5ad02a', amount: 0.45 } },
+    { id: 'broodmother', label: 'Broodmother', weight: 2, scale: 1.6, health: 2.2, rare: true },
+  ],
+  void_drifter: [
+    { id: 'common', label: '', weight: 54 },
+    { id: 'nebula', label: 'Nebula', weight: 24, tint: { color: '#d04a9a', amount: 0.42 } },
+    { id: 'starlit', label: 'Starlit', weight: 19, tint: { color: '#8ad8ff', amount: 0.42 } },
+    { id: 'eclipse', label: 'Eclipse', weight: 2, lighten: -0.7, scale: 1.35, health: 1.8, rare: true },
+  ],
+  frost_stag: [
+    { id: 'common', label: '', weight: 56 },
+    { id: 'glacial', label: 'Glacial', weight: 24, tint: { color: '#6ac8f0', amount: 0.4 } },
+    { id: 'snowbound', label: 'Snowbound', weight: 17, lighten: 0.34 },
+    { id: 'aurora', label: 'Aurora', weight: 2, tint: { color: '#7affc0', amount: 0.5 }, rare: true },
+  ],
+  raptor: [
+    { id: 'common', label: '', weight: 48 },
+    { id: 'plumed', label: 'Plumed', weight: 24, tint: { color: '#d05a2a', amount: 0.4 } },
+    { id: 'shadow', label: 'Shadow', weight: 20, lighten: -0.45 },
+    { id: 'alpha', label: 'Alpha', weight: 3, scale: 1.4, health: 2, rare: true },
+  ],
+  rune_golem: [
+    { id: 'common', label: '', weight: 50 },
+    { id: 'mossy', label: 'Mossy', weight: 26, tint: { color: '#4a7a3a', amount: 0.4 } },
+    { id: 'obsidian', label: 'Obsidian', weight: 20, lighten: -0.55 },
+    { id: 'goldbound', label: 'Gold-bound', weight: 2.5, tint: { color: '#e8c040', amount: 0.5 }, health: 1.9, rare: true },
+  ],
+
   shark: [
     { id: 'great_white', label: '', weight: 54 },
     { id: 'tiger', label: 'Tiger', weight: 24, tint: { color: '#6a6a3a', amount: 0.38 } },

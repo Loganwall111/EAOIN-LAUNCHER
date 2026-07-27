@@ -335,3 +335,81 @@
     width: min(320px, 60vw) !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   BOSS BAR — top-centre, below the compass and clock.
+
+   Bosses were defined in the registry but never fightable, so there was no UI
+   for them at all. This is deliberately the widest element on screen: when a
+   boss is up, it is the thing that matters.
+   -------------------------------------------------------------------------- */
+
+.game-hud .boss-bar {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, 52vw);
+  padding: 8px 12px 9px;
+  background: linear-gradient(180deg, rgba(18, 12, 16, 0.86), rgba(10, 7, 10, 0.9));
+  border: 1px solid rgba(255, 120, 100, 0.34);
+  border-radius: 3px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  z-index: var(--hud-z-hotbar);
+  pointer-events: none;
+  animation: boss-bar-in 0.45s ease-out both;
+}
+
+@keyframes boss-bar-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.game-hud .boss-bar-head,
+.game-hud .boss-bar-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.game-hud .boss-name {
+  font: 700 13px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.06em;
+  color: #ffe4d8;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.game-hud .boss-tier {
+  font: 700 9px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.16em;
+  color: #ff9a7a;
+}
+
+.game-hud .boss-bar-track {
+  position: relative;
+  height: 12px;
+  margin: 6px 0 5px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.game-hud .boss-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, #ff6a52, #b81f2a 60%, #7a1018);
+  box-shadow: 0 0 12px rgba(255, 90, 70, 0.5);
+  /* Eased so chip damage reads as a drain rather than a jump. */
+  transition: width 0.22s ease-out;
+}
+
+.game-hud .boss-bar-foot {
+  font: 600 9px/1.2 var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.08em;
+  color: rgba(255, 220, 210, 0.72);
+}
+
+@media (max-width: 900px) {
+  .game-hud .boss-bar { width: 76vw; top: 68px; }
+}
