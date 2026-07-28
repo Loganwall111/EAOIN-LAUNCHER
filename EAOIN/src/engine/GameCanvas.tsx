@@ -25,7 +25,7 @@ import { createBlockMaterials } from '../rendering/BlockMaterials';
 import { ChunkRenderManager, ChunkRenderStats } from '../rendering/ChunkRenderManager';
 import { BreakOverlay } from '../rendering/BreakOverlay';
 import { FirstPersonViewModel } from '../rendering/FirstPersonViewModel';
-import { applyRenderScale, createRuntimeEngine, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
+import { applyRenderScale, createRuntimeEngine, enableSnapshotRenderingWhenReady, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
 import { DimensionChunkSource } from './DimensionChunkSource';
 import { AdaptivePerformance, BUDGET_PRESETS, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
 import { LogicRuntime } from '../redstone/LogicRuntime';
@@ -1589,6 +1589,71 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // meshed above, and gameplay controls are now wired. Mark the world ready immediately
       // so WorldLoadingScreen never traps the player waiting for distant background chunks.
       reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
+      // WebGPU snapshot rendering may only be armed once the scene can really
+      // draw. Doing it at engine-creation time recorded an empty command
+      // bundle and replayed it forever, which showed the HUD over a totally
+      // black world. See RendererBackend.enableSnapshotRenderingWhenReady().
+      enableSnapshotRenderingWhenReady(engine, scene, settingsRef.current);
+
+      /* ------------------------------------------------------------------ *
+       * Black-frame watchdog
+       *
+       * Defence in depth for the "HUD over a black world" class of bug. If the
+       * world has geometry loaded and the render loop is running, yet the
+       * presented frame is still essentially black several seconds in, then
+       * something is swallowing the draws. Rather than leave the player
+       * staring at a black wall, we strip the optional layers that are capable
+       * of covering the screen — the recorded WebGPU snapshot, post-processing
+       * and the glow layer — and let the plain forward render through.
+       * ------------------------------------------------------------------ */
+      let watchdogDone = false;
+      const blackFrameWatchdog = window.setTimeout(() => {
+        void (async () => {
+          if (watchdogDone || disposed) return;
+          try {
+            // Nothing meshed yet? Then black is legitimate, not a fault.
+            if (renderer.getStats().triangleCount <= 0) return;
+
+            const width = engine.getRenderWidth();
+            const height = engine.getRenderHeight();
+            if (width < 8 || height < 8) return;
+
+            // Sample a small central patch rather than the whole framebuffer.
+            const patch = 32;
+            const pixels = await engine.readPixels(
+              Math.floor(width / 2 - patch / 2),
+              Math.floor(height / 2 - patch / 2),
+              patch,
+              patch
+            ) as unknown as Uint8Array;
+
+            let brightest = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+              const luma = pixels[i] + pixels[i + 1] + pixels[i + 2];
+              if (luma > brightest) brightest = luma;
+            }
+            // ~4% of full brightness. A real night sky still clears this.
+            if (brightest > 30) return;
+
+            watchdogDone = true;
+            console.warn(
+              '[Render] Frame is black despite loaded geometry — disabling snapshot rendering, post-processing and glow to restore visibility.'
+            );
+            try {
+              const webgpu = engine as unknown as { snapshotRendering?: boolean };
+              if (webgpu.snapshotRendering) webgpu.snapshotRendering = false;
+            } catch { /* not a WebGPU engine */ }
+            invalidateRenderSnapshot(engine);
+            pipeline?.dispose(); pipeline = null;
+            scene.postProcessesEnabled = false;
+            glow.intensity = 0;
+            setActionMessage('Display recovered — heavy effects disabled so the world stays visible');
+          } catch {
+            /* The watchdog must never itself break the game. */
+          }
+        })();
+      }, 6000);
+
       let recoveredFromRenderError = false;
       let consecutiveRenderFailures = 0;
       engine.runRenderLoop(() => {
@@ -1626,6 +1691,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       }); engine.resize();
       const initialStats = renderer.getStats(); console.log(`[Render] 3.2 ready: ${initialStats.loadedChunks} chunks, clouds moving, mountains & caves volumetric, 16 render, 20min day`);
       cleanupScene = () => {
+        watchdogDone = true;
+        window.clearTimeout(blackFrameWatchdog);
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
