@@ -24,6 +24,22 @@ export class ChunkCache {
     return this.chunks.has(this.key(x, z));
   }
 
+  /**
+   * Keys of every resident chunk.
+   *
+   * The streamer needs this to unload chunks that have left the radius. It
+   * used to iterate its own in-flight set instead, which is emptied as soon as
+   * a chunk finishes loading — so nothing was ever unloaded.
+   */
+  keys(): string[] {
+    return Array.from(this.chunks.keys());
+  }
+
+  /** Number of resident chunks. */
+  get size(): number {
+    return this.chunks.size;
+  }
+
   delete(x: number, z: number): boolean {
     const mesh = this.meshes.get(this.key(x, z));
     if (mesh) {
