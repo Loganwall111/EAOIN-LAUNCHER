@@ -31,14 +31,14 @@ interface SpawnAwakeningProps {
   worldName?: string;
 }
 
-/** Beat durations in ms. Total ≈ 9.4s, or ~1s with reduced motion. */
+/** Beat durations in ms. Snappy pacing so you never stare at a black screen. */
 const BEATS: Array<{ beat: AwakeningBeat; ms: number }> = [
-  { beat: 'BLACK', ms: 900 },
-  { beat: 'BLINK', ms: 2400 },
-  { beat: 'GROUND', ms: 1700 },
-  { beat: 'PUSH', ms: 1800 },
-  { beat: 'LOOK', ms: 1700 },
-  { beat: 'HANDS', ms: 900 },
+  { beat: 'BLACK', ms: 250 },
+  { beat: 'BLINK', ms: 800 },
+  { beat: 'GROUND', ms: 600 },
+  { beat: 'PUSH', ms: 600 },
+  { beat: 'LOOK', ms: 500 },
+  { beat: 'HANDS', ms: 400 },
 ];
 
 export default function SpawnAwakening({
@@ -84,6 +84,14 @@ export default function SpawnAwakening({
 
     return () => window.clearTimeout(timer);
   }, [beat, reducedMotion, finish]);
+
+  // Failsafe: never let the waking up sequence trap the player on a black screen
+  // if a browser timer is delayed or interrupted.
+  useEffect(() => {
+    const maxTotalMs = reducedMotion ? 400 : 3600;
+    const safety = window.setTimeout(() => finish(), maxTotalMs);
+    return () => window.clearTimeout(safety);
+  }, [reducedMotion, finish]);
 
   /* Skip on any input. */
   useEffect(() => {

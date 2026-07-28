@@ -2302,32 +2302,43 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 /* ---- HUD buttons (F6-F12 etc) ---- */
 .hud-buttons {
   position: absolute;
-  top: 12px;
+  top: 74px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 4px;
+  flex-wrap: nowrap;
+  gap: 5px;
   pointer-events: auto;
   z-index: 30;
-  background: rgba(0,0,0,0.6);
-  border: 2px solid #444;
-  padding: 4px;
-  border-radius: 4px;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(12, 16, 24, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 4px 8px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  max-width: min(94vw, 860px);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .hud-btn {
-  padding: 5px 10px;
-  font: 800 9px var(--eaoin-pixel-font);
-  color: #fff;
-  text-shadow: 1px 1px #000;
-  background: linear-gradient(180deg, #4a4a4d 0%, #2a2a2d 100%);
-  border-top: 2px solid #8a8a8d;
-  border-left: 2px solid #8a8a8d;
-  border-right: 2px solid #1a1a1d;
-  border-bottom: 2px solid #1a1a1d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font: 600 10.5px/1.2 var(--ui-font, 'Segoe UI', system-ui, -apple-system, sans-serif);
+  letter-spacing: 0.03em;
+  color: #e2ecf8;
+  text-shadow: none;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
   cursor: pointer;
-  transition: transform 60ms ease, filter 60ms ease;
+  transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
   image-rendering: pixelated;
 }
 .hud-btn:hover { filter: brightness(1.2); }
@@ -2622,7 +2633,7 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   .hud-btn { padding: 4px 7px; font-size: 8px; }
 }
 @media (max-width: 760px) {
-  .hud-buttons { flex-wrap: wrap; }
+  .hud-buttons { flex-wrap: nowrap !important; overflow-x: auto !important; }
   .creative-grid { grid-template-columns: repeat(4, 1fr); }
 }
 

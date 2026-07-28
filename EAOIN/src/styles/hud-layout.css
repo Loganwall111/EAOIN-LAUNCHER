@@ -108,8 +108,78 @@
 }
 
 .eaoin-hud .hud-clock {
-  top: 48px !important;
+  top: 44px !important;
   z-index: var(--hud-z-panel);
+}
+
+/* --------------------------------------------------------------------------
+   TOP-CENTRE MENU BUTTONS — Shaders, Mods, Dims, Bosses, Quests, Civs, Space, Servers, Friends
+   Previously at top: 12px where they collided directly with the compass and clock,
+   and wrapped into squished overlapping rows. They now sit in a sleek, compact
+   pill bar below the clock.
+   -------------------------------------------------------------------------- */
+
+.game-hud .hud-buttons, .hud-buttons {
+  position: absolute !important;
+  top: 74px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 4px 8px !important;
+  background: rgba(12, 16, 24, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  z-index: var(--hud-z-panel) !important;
+  max-width: min(94vw, 860px) !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+}
+
+.hud-buttons::-webkit-scrollbar {
+  display: none !important;
+}
+
+.game-hud .hud-buttons .hud-btn, .hud-buttons .hud-btn, .hud-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  padding: 4px 10px !important;
+  font: 600 10.5px/1.2 var(--ui-font, 'Segoe UI', system-ui, -apple-system, sans-serif) !important;
+  letter-spacing: 0.03em !important;
+  color: #e2ecf8 !important;
+  text-shadow: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.game-hud .hud-buttons .hud-btn:hover,
+.hud-buttons .hud-btn:hover,
+.hud-btn:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-1px) !important;
+  filter: none !important;
+}
+
+.game-hud .hud-buttons .hud-btn:active,
+.hud-buttons .hud-btn:active,
+.hud-btn:active {
+  transform: translateY(0) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -346,7 +416,7 @@
 
 .game-hud .boss-bar {
   position: absolute;
-  top: 84px;
+  top: 116px;
   left: 50%;
   transform: translateX(-50%);
   width: min(620px, 52vw);
@@ -411,5 +481,5 @@
 }
 
 @media (max-width: 900px) {
-  .game-hud .boss-bar { width: 76vw; top: 68px; }
+  .game-hud .boss-bar { width: 76vw; top: 112px; }
 }

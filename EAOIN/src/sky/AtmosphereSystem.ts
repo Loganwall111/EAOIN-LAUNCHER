@@ -76,7 +76,7 @@ export interface AtmosphereFrame {
  * Tuned so a moonlit field reads as dim blue and a cave interior stays
  * navigable, rather than resolving to pure black.
  */
-const MIN_AMBIENT = { r: 0.34, g: 0.37, b: 0.44 };
+const MIN_AMBIENT = { r: 0.40, g: 0.44, b: 0.52 };
 
 export class AtmosphereSystem {
   private readonly scene: Scene;

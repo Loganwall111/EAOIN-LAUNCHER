@@ -133,4 +133,29 @@ describe('HUD layout stylesheet', () => {
     expect(LAYOUT).toMatch(/@media \(max-width: 1180px\)/);
     expect(LAYOUT).toMatch(/@media \(max-width: 900px\)/);
   });
+
+  it('positions the top menu button bar below the compass and clock without overlapping', () => {
+    const compass = ruleFor(LAYOUT, '.eaoin-hud .hud-compass');
+    const clock = ruleFor(LAYOUT, '.eaoin-hud .hud-clock');
+    const buttons = ruleFor(LAYOUT, '.game-hud .hud-buttons, .hud-buttons');
+    expect(compass).toBeTruthy();
+    expect(clock).toBeTruthy();
+    expect(buttons).toBeTruthy();
+    const compassTop = pxValue(compass!, 'top')!;
+    const clockTop = pxValue(clock!, 'top')!;
+    const buttonsTop = pxValue(buttons!, 'top')!;
+    expect(clockTop - compassTop).toBeGreaterThanOrEqual(24);
+    expect(buttonsTop - clockTop).toBeGreaterThanOrEqual(24);
+    expect(buttons).toMatch(/flex-wrap:\s*nowrap/);
+  });
+
+  it('positions the boss bar below the top menu buttons so they never collide', () => {
+    const buttons = ruleFor(LAYOUT, '.game-hud .hud-buttons, .hud-buttons');
+    const boss = ruleFor(LAYOUT, '.game-hud .boss-bar');
+    expect(buttons).toBeTruthy();
+    expect(boss).toBeTruthy();
+    const buttonsTop = pxValue(buttons!, 'top')!;
+    const bossTop = pxValue(boss!, 'top')!;
+    expect(bossTop - buttonsTop).toBeGreaterThanOrEqual(36);
+  });
 });
