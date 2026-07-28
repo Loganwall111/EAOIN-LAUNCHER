@@ -82,11 +82,47 @@ export class TerrainGenerator {
   getEdits(): WorldBlockEdit[] { return Array.from(this.editOverrides.values()).map(e => ({ ...e })); }
   getEditCount(): number { return this.editOverrides.size; }
 
+  /**
+   * Cheap analytic ground estimate. Does not generate a chunk, and does not
+   * account for caves or any other carving. Fine for surveys; use
+   * `getSurfaceHeight` before placing anything into the world.
+   */
   getHeightAt(worldX: number, worldZ: number): number {
     const x = Math.floor(worldX), z = Math.floor(worldZ);
     // Use heightmap directly for speed instead of scanning after generation
     const h = this.getTerrainHeight(x, z);
     return h;
+  }
+
+  /**
+   * Highest solid, sky-exposed block for a column, read from the real voxels.
+   *
+   * Mirrors `AdvancedTerrainGenerator.getSurfaceHeight` so both generators
+   * expose the same placement contract: anything that spawns into the world
+   * should sit at `getSurfaceHeight() + 1`.
+   */
+  getSurfaceHeight(worldX: number, worldZ: number): number {
+    const a = this.toChunkAddress(worldX, worldZ);
+    const chunk = this.generateChunk(a.cx, a.cz);
+    for (let y = CHUNK_HEIGHT - 1; y >= 0; y--) {
+      const id = chunk.getBlock(a.lx, y, a.lz);
+      // See through air, fluids and vegetation to find real ground.
+      if (id === 0 || id === 5 || id === 6 || id === 7) continue;
+      return y;
+    }
+    return 0;
+  }
+
+  /** True when `height` blocks of air sit above the ground at this column. */
+  hasClearanceAbove(worldX: number, worldZ: number, height: number): boolean {
+    const a = this.toChunkAddress(worldX, worldZ);
+    const chunk = this.generateChunk(a.cx, a.cz);
+    const surface = this.getSurfaceHeight(worldX, worldZ);
+    for (let y = surface + 1; y <= surface + height; y++) {
+      if (y >= CHUNK_HEIGHT) return false;
+      if (chunk.getBlock(a.lx, y, a.lz) !== 0) return false;
+    }
+    return true;
   }
 
   getBiomeAt(worldX: number, worldZ: number): BiomeID {

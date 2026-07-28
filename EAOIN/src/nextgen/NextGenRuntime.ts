@@ -293,7 +293,8 @@ export class NextGenRuntime {
     for (let i = 0; i < 28; i += 1) {
       const wx = baseX + (i % 8) * 3.8;
       const wz = baseZ + Math.floor(i / 8) * 4.2;
-      const y = this.terrain.getHeightAt(Math.floor(wx), Math.floor(wz)) + 1;
+      // Towers are founded on the real surface, not the analytic heightmap.
+      const y = this.terrain.getSurfaceHeight(Math.floor(wx), Math.floor(wz)) + 1;
       const building = MeshBuilder.CreateBox(`auralis_city_tower_${i}`, { width: 2.4, height: 5 + (i % 5) * 2.2, depth: 2.4 }, this.scene);
       building.position = new Vector3(wx, y + building.getBoundingInfo().boundingBox.extendSize.y, wz);
       building.material = buildingMats[i % buildingMats.length];
@@ -302,7 +303,7 @@ export class NextGenRuntime {
       if (i % 3 === 0) this.civilians += 12;
     }
     const road = MeshBuilder.CreateBox('auralis_400km_city_biome_road_marker', { width: 34, height: 0.08, depth: 4 }, this.scene);
-    road.position = new Vector3(baseX + 14, this.terrain.getHeightAt(Math.floor(baseX), Math.floor(baseZ)) + 1.04, baseZ - 3.4);
+    road.position = new Vector3(baseX + 14, this.terrain.getSurfaceHeight(Math.floor(baseX), Math.floor(baseZ)) + 1.04, baseZ - 3.4);
     road.material = roadMat;
     road.isPickable = false;
     this.runtimeMeshes.push({ mesh: road });

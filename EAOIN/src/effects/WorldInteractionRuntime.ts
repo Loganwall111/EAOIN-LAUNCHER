@@ -75,21 +75,23 @@ export class WorldInteractionRuntime {
     const dd = this.layout.dimensionalDoor;
     const rk = this.layout.rocket;
 
-    const normalDoorPos = new Vector3(wd.x, this.terrain.getHeightAt(Math.floor(wd.x), Math.floor(wd.z)) + 2.1, wd.z);
+    // Objective props sit on the real, post-carve surface (getSurfaceHeight),
+    // not the analytic heightmap, so they never float over carved ground.
+    const normalDoorPos = new Vector3(wd.x, this.terrain.getSurfaceHeight(Math.floor(wd.x), Math.floor(wd.z)) + 2.1, wd.z);
     const normalDoor = MeshBuilder.CreateBox('runtime_overworld_door', { width: 0.9, height: 2.2, depth: 0.18 }, this.scene);
     normalDoor.position = normalDoorPos;
     normalDoor.material = wood;
     normalDoor.metadata = { runtimeType: 'door', doorType: 'wooden' };
     this.meshes.push(normalDoor);
 
-    const dimDoorPos = new Vector3(dd.x, this.terrain.getHeightAt(Math.floor(dd.x), Math.floor(dd.z)) + 2.35, dd.z);
+    const dimDoorPos = new Vector3(dd.x, this.terrain.getSurfaceHeight(Math.floor(dd.x), Math.floor(dd.z)) + 2.35, dd.z);
     const dimDoor = MeshBuilder.CreateBox('runtime_dimensional_door', { width: 1.05, height: 2.55, depth: 0.2 }, this.scene);
     dimDoor.position = dimDoorPos;
     dimDoor.material = dimensional;
     dimDoor.metadata = { runtimeType: 'door', doorType: 'dimensional' };
     this.meshes.push(dimDoor);
 
-    const rocketBase = new Vector3(rk.x, this.terrain.getHeightAt(Math.floor(rk.x), Math.floor(rk.z)) + 1, rk.z);
+    const rocketBase = new Vector3(rk.x, this.terrain.getSurfaceHeight(Math.floor(rk.x), Math.floor(rk.z)) + 1, rk.z);
     const rocket = MeshBuilder.CreateCylinder('runtime_moon_rocket', { height: 4.6, diameterTop: 0.32, diameterBottom: 1.05, tessellation: 18 }, this.scene);
     rocket.position = rocketBase.add(new Vector3(0, 2.35, 0));
     rocket.material = rocketMat;

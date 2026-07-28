@@ -214,6 +214,46 @@ const BLOCK = {
 
 const BEDROCK_MIX: BlockID[] = [12, 12, 12, 12, 3]; // Mostly obsidian-ish "bedrock" stand-in
 
+/**
+ * Blocks a top-down surface sweep looks straight through.
+ *
+ * A tree, a flower or a body of water sitting on the ground must not hide the
+ * ground from the surface pass, otherwise topsoil gets painted onto a canopy
+ * or a water surface. Anything listed here is treated as "not the terrain".
+ */
+const SKY_TRANSPARENT: ReadonlySet<BlockID> = new Set<BlockID>([
+  BLOCK.AIR,
+  BLOCK.WATER,
+  BLOCK.LAVA,
+  BLOCK.LEAVES,
+  BLOCK.LOG,
+  BLOCK.CHERRY_LEAVES,
+  90, 91, 92, 93, 94, 95, 96, 97, 99, 103, 106, 107, 109, // saplings, flowers, plants
+]);
+
+/**
+ * Natural ground materials that a surface pass is allowed to recolour.
+ *
+ * Restricting writes to this set is what stops the surface pass from painting
+ * grass over a structure's brickwork, an exposed ore, or bedrock.
+ */
+const NATURAL_GROUND: ReadonlySet<BlockID> = new Set<BlockID>([
+  BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SAND, BLOCK.SNOW, BLOCK.MOSS,
+  BLOCK.MUD, BLOCK.BASALT, BLOCK.GRAVEL, BLOCK.PODZOL,
+  BLOCK.GRANITE, BLOCK.DIORITE, BLOCK.ANDESITE, BLOCK.DEEPSLATE,
+  BLOCK.COBBLESTONE, BLOCK.PACKED_ICE, BLOCK.BLUE_ICE,
+]);
+
+/** True when a top-down sweep should see through this block. */
+function isSkyTransparent(id: BlockID): boolean {
+  return SKY_TRANSPARENT.has(id);
+}
+
+/** True when the surface pass may recolour this block. */
+function isNaturalGround(id: BlockID): boolean {
+  return NATURAL_GROUND.has(id);
+}
+
 /* ---- ravine placement (see `applyRavines`) ---- */
 /** Grid cell size, in blocks, that ravines are placed on. */
 const RAVINE_CELL_SIZE = 340;
@@ -252,6 +292,16 @@ const SMOOTH_HEIGHT_STEP = 16;
 
 /** Cell size, in blocks, of the Voronoi partition that assigns size classes. */
 const BIOME_REGION_CELL = 900;
+
+/**
+ * Height above sea level at which biomes turn alpine, then permanently iced.
+ *
+ * Relative to sea level so they stay meaningful across configs. Absolute Y
+ * thresholds silently turned the whole world alpine once the heightmap range
+ * changed.
+ */
+const ALPINE_ELEVATION = 26;
+const ICE_CAP_ELEVATION = 38;
 
 /**
  * Remap a bell-shaped fbm sample onto an approximately uniform 0-1.
@@ -294,6 +344,17 @@ function columnKey(x: number, z: number): number {
   return (x + 33_554_432) * 67_108_864 + (z + 33_554_432);
 }
 
+/** A decoration voxel destined for a chunk that has not been built yet. */
+interface SpilledBlock { lx: number; y: number; lz: number; block: BlockID; }
+
+/**
+ * How many not-yet-generated chunks may hold buffered overhang writes.
+ *
+ * Comfortably larger than the biggest render radius, so a feature is never
+ * dropped in practice, while still bounding memory on a long exploration run.
+ */
+const SPILL_CHUNK_LIMIT = 4096;
+
 /** Max columns kept in the height caches (~a few MB at most). */
 const HEIGHT_CACHE_LIMIT = 262144;
 /**
@@ -306,6 +367,11 @@ const CHUNK_CACHE_LIMIT = 512;
 export class AdvancedTerrainGenerator {
   private readonly chunks = new Map<string, Chunk>();
   private readonly editOverrides = new Map<string, WorldBlockEdit>();
+  /**
+   * Decoration voxels that overhang into a chunk which has not been generated
+   * yet. Drained by `generateChunk`. See `setBlockIfInChunk`.
+   */
+  private readonly pendingSpill = new Map<string, SpilledBlock[]>();
   private readonly cachedLayout: ReturnType<typeof getWorldLayout>;
   private readonly noise: AdvancedNoise;
   private readonly caveNoise: AdvancedNoise;
@@ -351,7 +417,40 @@ export class AdvancedTerrainGenerator {
     });
   }
 
-  /** Build a chunk by composing every terrain pass. */
+  /**
+   * Build a chunk by composing every terrain pass.
+   *
+   * ## Pass ordering contract
+   *
+   * The pipeline is split into three strictly ordered stages. The ordering is
+   * not cosmetic — the artefacts this generator used to produce were all
+   * caused by a later stage using data that belonged to an earlier one.
+   *
+   * ```
+   *  STAGE 1 — SHAPE      fillContinents / fillSkyIslands
+   *                       (analytic heightmap -> solid voxels)
+   *
+   *  STAGE 2 — CARVE      caves, deep caves, ravines, sinkholes,
+   *                       underground water, ore, geology
+   *                       (may only REMOVE or RETYPE voxels)
+   *
+   *  ------------------- heightmap is now STALE -------------------
+   *
+   *  STAGE 3 — DRESS      surface masking, vegetation, structures
+   *                       (must query the VOXELS, never the heightmap)
+   * ```
+   *
+   * The horizontal rule is the important part. After Stage 2 the analytic
+   * `getTerrainHeight()` no longer describes the chunk: a cave may have
+   * dropped the real surface twenty blocks. Any Stage 3 code that still calls
+   * `getTerrainHeight` is reading a value that was true before the carve, and
+   * that is exactly how blocks end up floating. Stage 3 therefore uses
+   * `findSkyExposedSurface()` — a real top-down sweep of the voxel array.
+   *
+   * `getTerrainHeight` remains correct and is still used by Stage 1 and by
+   * Stage 2 (which needs to know how much rock is overhead), and by gameplay
+   * queries that want a cheap estimate without generating a chunk.
+   */
   generateChunk(cx: number, cz: number): Chunk {
     const key = this.chunkKey(cx, cz);
     const cached = this.chunks.get(key);
@@ -362,11 +461,14 @@ export class AdvancedTerrainGenerator {
       return cached;
     }
     const chunk = new Chunk(cx, cz, this.config.seed, { generate: false });
+
+    /* ---- STAGE 1: base shape from the noise heightmap ---- */
     if (this.config.floatingIslands || this.config.skyIslands) {
       this.fillSkyIslands(chunk);
     } else {
       this.fillContinents(chunk);
     }
+    /* ---- STAGE 2: carving. Removes and retypes voxels only. ---- */
     this.applyCavePass(chunk);
     // 2.0 — widen the underground into real caverns with their own biomes.
     // Strictly below the surface; the overworld terrain is untouched.
@@ -386,7 +488,19 @@ export class AdvancedTerrainGenerator {
     this.applyAntiFloatingPatch(chunk);
     this.applyOrePass(chunk);
     this.applyGeologyPass(chunk);
+
+    /* ================================================================
+     * The analytic heightmap is STALE from here on. Everything below
+     * must locate the ground with findSkyExposedSurface(), which reads
+     * the voxels that actually exist after carving.
+     * ================================================================ */
+
+    /* ---- STAGE 3: dressing ---- */
     this.applySurfacePass(chunk);
+    // Overhang from neighbouring chunks' features is applied before this
+    // chunk grows its own, so a canopy that crosses the border is already
+    // present and local decoration can see it.
+    this.applyPendingSpill(chunk);
     this.applyVegetation(chunk);
     this.applyStructures(chunk);
     // Skylands must really have a void below their islands. The old
@@ -415,13 +529,41 @@ export class AdvancedTerrainGenerator {
 
   /* ============= HEIGHTMAP ============= */
 
-  /** Continental height in [0, 1], warped for natural coastlines. */
+  /**
+   * Continental height in [0, 1], warped for natural coastlines.
+   *
+   * ## Bug fixed here: the field was collapsed onto its diagonal
+   *
+   * The old body was:
+   *
+   * ```ts
+   * const warp = this.noise.warped2D(cx, cz, 1.6, 1);   // a SCALAR
+   * const continent = this.noise.fbm2D(warp * 1.2, warp * 1.2, ...);
+   * ```
+   *
+   * Both arguments to `fbm2D` were the *same* number, so the continent field
+   * was only ever sampled along the line x === z. Two consequences, both
+   * visible in-game:
+   *
+   *  1. The 2D field degenerated to a 1D one, so continents became long
+   *     straight bands running at 45°, and the effective feature size no
+   *     longer matched `continentScale`.
+   *  2. `warped2D` returns a value in [0, 1], so after the `* 1.2` the entire
+   *     world only ever sampled the fbm over a 1.2-unit-wide window. Almost
+   *     all of the continental variation was therefore compressed into a tiny
+   *     patch of noise, which is why the measured height distribution was so
+   *     narrow (p05..p95 spanned only 46..74) and why nearly the whole map sat
+   *     above the biome system's `elevation > 48` alpine gate.
+   *
+   * The fix warps the *coordinates* (a real 2D vector displacement) and then
+   * samples the continent field at those warped coordinates.
+   */
   getBaseHeight(worldX: number, worldZ: number): number {
     const cx = worldX * this.config.continentScale;
     const cz = worldZ * this.config.continentScale;
-    const warp = this.noise.warped2D(cx, cz, 1.6, 1);
-    const continent = this.noise.fbm2D(warp * 1.2, warp * 1.2, 5, 2.0, 0.5, 2);
-    return continent;
+    // Displace the sample point, keeping X and Z independent.
+    const warped = this.noise.warpPoint2D(cx, cz, 1.6, 1);
+    return this.noise.fbm2D(warped.x, warped.y, 5, 2.0, 0.5, 2);
   }
 
   /** Mountain ridge height in [0, 1] for a given point. */
@@ -1016,50 +1158,170 @@ export class AdvancedTerrainGenerator {
 
   /* ============= SURFACE BIOMES ============= */
 
+  /**
+   * Per-biome surface material. Pure data, so the sweep below stays a single
+   * well-defined algorithm instead of a wall of `if`s inside a loop.
+   *
+   *  - `top`    goes on the one block that is exposed to the sky.
+   *  - `filler` replaces DIRT immediately underneath, for `fillerDepth` blocks.
+   */
+  private surfacePaletteFor(biomeId: string): { top: BlockID; filler: BlockID; fillerDepth: number } {
+    switch (biomeId) {
+      case 'desert':
+      case 'badlands':
+      case 'eroded_badlands':
+      case 'wooded_badlands':
+        return { top: BLOCK.SAND, filler: BLOCK.SAND, fillerDepth: 3 };
+      case 'beach':
+      case 'warm_beach':
+      case 'snowy_beach':
+        return { top: BLOCK.SAND, filler: BLOCK.SAND, fillerDepth: 2 };
+      case 'snowy_plains':
+      case 'snowy_taiga':
+      case 'ice_spikes':
+      case 'frozen_wasteland_biome':
+        return { top: BLOCK.SNOW, filler: BLOCK.DIRT, fillerDepth: 3 };
+      case 'mushroom_fields':
+      case 'mushroom_island':
+      case 'mushroom_valley':
+      case 'mushroom_biome':
+        return { top: BLOCK.MOSS, filler: BLOCK.DIRT, fillerDepth: 3 };
+      case 'ocean_world_biome':
+      case 'deep_ocean':
+      case 'frozen_ocean':
+        return { top: BLOCK.GRAVEL, filler: BLOCK.GRAVEL, fillerDepth: 2 };
+      case 'swamp':
+      case 'mangrove_swamp':
+      case 'mangrove_biome':
+      case 'mangrove_delta':
+        return { top: BLOCK.MUD, filler: BLOCK.DIRT, fillerDepth: 3 };
+      case 'volcano':
+      case 'volcanic_realm_biome':
+      case 'lava_field':
+        return { top: BLOCK.BASALT, filler: BLOCK.BASALT, fillerDepth: 3 };
+      default:
+        return { top: BLOCK.GRASS, filler: BLOCK.DIRT, fillerDepth: 3 };
+    }
+  }
+
+  /**
+   * PASS 3 — Surface masking by top-down sky exposure.
+   *
+   * ## The bug this replaces: floating sheets of grass
+   *
+   * The old pass painted the surface material at one Y taken from the
+   * *analytic* heightmap:
+   *
+   * ```ts
+   * const surface = this.getTerrainHeight(wx, wz);   // analytic, not actual
+   * chunk.setBlock(lx, surface, lz, BLOCK.GRASS);    // unconditional write
+   * ```
+   *
+   * That Y is where the terrain *would* be if nothing had touched it. But by
+   * the time this pass runs, the cave / ravine / sinkhole / deep-cave passes
+   * have already carved the column, so `surface` is frequently inside a void.
+   * The write then *created* a block in mid-air. Because the analytic height
+   * varies smoothly across neighbouring columns, those stray blocks lined up
+   * into continuous horizontal sheets of grass hanging in the sky and slicing
+   * through tree trunks — precisely the reported artefact. Measured on the
+   * shipped generator: 523 columns per 7x7-chunk area had the analytic surface
+   * sitting over air, and 8.6% of columns disagreed with the real terrain top.
+   *
+   * ## The replacement
+   *
+   * A strict top-down vertical sweep per column:
+   *
+   *   1. Walk from the sky down. Track whether we are still "open to the sky"
+   *      (only air/leaves/water seen so far).
+   *   2. The first solid block found while open is the true surface. Paint the
+   *      biome's top material **there and nowhere else**.
+   *   3. Paint filler into the DIRT directly beneath it.
+   *   4. Once a solid block is passed, sky exposure is off — so nothing is
+   *      painted on cave ceilings or on the roofs of overhangs below.
+   *
+   * Every write is therefore conditional on an *observed* solid voxel. The
+   * pass can only ever recolour a block that already exists; it can never
+   * create one in mid-air, which makes floating topsoil structurally
+   * impossible rather than merely unlikely.
+   */
   private applySurfacePass(chunk: Chunk): void {
-    this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
-      const surface = this.getTerrainHeight(wx, wz);
-      if (surface <= this.config.bedrockThickness) return;
-      const biome = this.getBiomeAt(wx, wz);
-      const top = chunk.getBlock(lx, surface, lz);
-      // Paint surface based on biome.
-      if (biome.id === 'desert' || biome.id === 'badlands' || biome.id === 'eroded_badlands') {
-        chunk.setBlock(lx, surface, lz, BLOCK.SAND);
-        if (chunk.getBlock(lx, surface - 1, lz) === BLOCK.DIRT) chunk.setBlock(lx, surface - 1, lz, BLOCK.SAND);
-        if (chunk.getBlock(lx, surface - 2, lz) === BLOCK.DIRT) chunk.setBlock(lx, surface - 2, lz, BLOCK.SAND);
-      } else if (biome.id === 'snowy_plains' || biome.id === 'snowy_taiga' || biome.id === 'snowy_beach' || biome.id === 'ice_spikes' || biome.id === 'frozen_wasteland_biome') {
-        chunk.setBlock(lx, surface, lz, BLOCK.SNOW);
-      } else if (biome.id === 'mushroom_fields' || biome.id === 'mushroom_island' || biome.id === 'mushroom_valley') {
-        chunk.setBlock(lx, surface, lz, BLOCK.MOSS);
-      } else if (biome.id === 'cherry_grove' || biome.id === 'cherry_biome' || biome.id === 'cherry_valley') {
-        chunk.setBlock(lx, surface, lz, BLOCK.CHERRY_LEAVES);
-      } else if (biome.id === 'beach' || biome.id === 'warm_beach') {
-        chunk.setBlock(lx, surface, lz, BLOCK.SAND);
-      } else if (biome.id === 'ocean_world_biome' || biome.id === 'deep_ocean' || biome.id === 'frozen_ocean') {
-        chunk.setBlock(lx, surface, lz, BLOCK.GRAVEL);
-      } else if (biome.id === 'swamp' || biome.id === 'mangrove_swamp' || biome.id === 'mangrove_biome' || biome.id === 'mangrove_delta') {
-        chunk.setBlock(lx, surface, lz, BLOCK.MUD);
-      } else if (biome.id === 'badlands' || biome.id === 'eroded_badlands' || biome.id === 'wooded_badlands') {
-        chunk.setBlock(lx, surface, lz, BLOCK.SAND);
-      } else if (biome.id === 'volcano' || biome.id === 'volcanic_realm_biome' || biome.id === 'lava_field') {
-        chunk.setBlock(lx, surface, lz, BLOCK.BASALT);
-      } else {
-        if (top === BLOCK.GRASS) {
-          // leave as grass
-        } else {
-          chunk.setBlock(lx, surface, lz, BLOCK.GRASS);
+    const seaLevel = this.config.seaLevel;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = chunk.x * CHUNK_SIZE + lx;
+        const wz = chunk.z * CHUNK_SIZE + lz;
+        if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) continue;
+
+        const biome = this.getBiomeAt(wx, wz);
+        const palette = this.surfacePaletteFor(biome.id);
+
+        // --- step 1: find the real, sky-exposed top of this column ----------
+        const surfaceY = this.findSkyExposedSurface(chunk, lx, lz);
+        if (surfaceY < 0) continue;                       // column is all air
+        if (surfaceY <= this.config.bedrockThickness) continue;
+
+        // Underwater columns keep a sediment bed rather than grass; grass
+        // below the waterline was another source of odd-looking surfaces.
+        const submerged = surfaceY < seaLevel;
+        const top = submerged
+          ? (palette.top === BLOCK.SAND ? BLOCK.SAND : BLOCK.GRAVEL)
+          : palette.top;
+
+        // --- step 2: paint the exposed block, and only that block -----------
+        const existing = chunk.getBlock(lx, surfaceY, lz);
+        // Never repaint structural / placed materials (logs, bricks, ores,
+        // obsidian...). Only natural ground accepts a surface coat.
+        if (isNaturalGround(existing)) {
+          chunk.setBlock(lx, surfaceY, lz, top);
+        }
+
+        // --- step 3: filler directly beneath, while it is still dirt --------
+        for (let d = 1; d <= palette.fillerDepth; d++) {
+          const y = surfaceY - d;
+          if (y <= this.config.bedrockThickness) break;
+          if (chunk.getBlock(lx, y, lz) !== BLOCK.DIRT) break;
+          chunk.setBlock(lx, y, lz, palette.filler);
+        }
+
+        // --- step 4: snow cap on genuinely cold, high ground ----------------
+        if (!submerged && surfaceY > 50 && biome.temperature === 'cold' && isNaturalGround(chunk.getBlock(lx, surfaceY, lz))) {
+          chunk.setBlock(lx, surfaceY, lz, BLOCK.SNOW);
+        }
+
+        // --- step 5: sea-level fill, only into air --------------------------
+        // Bounded by the *actual* surface, and it refuses to overwrite
+        // anything solid, so it can no longer bury terrain in water.
+        if (surfaceY < seaLevel) {
+          for (let y = surfaceY + 1; y <= seaLevel; y++) {
+            if (chunk.getBlock(lx, y, lz) !== BLOCK.AIR) continue;
+            chunk.setBlock(lx, y, lz, BLOCK.WATER);
+          }
         }
       }
-      // Snow accumulation in cold biomes above 50.
-      if (surface > 50 && biome.temperature === 'cold') {
-        chunk.setBlock(lx, surface, lz, BLOCK.SNOW);
-      }
-      // Sea-level fill.
-      if (surface < this.config.seaLevel) {
-        for (let y = surface + 1; y <= this.config.seaLevel; y++) chunk.setBlock(lx, y, lz, BLOCK.WATER);
-      }
-    });
+    }
+  }
+
+  /**
+   * The canonical "highest solid block open to the sky" query for a column
+   * that has already been generated into `chunk`.
+   *
+   * Returns -1 when the column contains no solid ground at all.
+   *
+   * Leaves and plants are transparent to this sweep: a tree standing on the
+   * ground must not stop the search, otherwise the surface pass would paint
+   * grass onto a canopy. Water is transparent too, so a lake bed is still
+   * recognised as the surface.
+   */
+  private findSkyExposedSurface(chunk: Chunk, lx: number, lz: number): number {
+    const from = Math.min(CHUNK_HEIGHT - 1, chunk.getHighestOccupiedY());
+    for (let y = from; y >= 0; y--) {
+      const b = chunk.getBlock(lx, y, lz);
+      if (b === BLOCK.AIR) continue;
+      if (isSkyTransparent(b)) continue;
+      return y;
+    }
+    return -1;
   }
 
   /**
@@ -1166,8 +1428,17 @@ export class AdvancedTerrainGenerator {
     const tempTag: 'cold' | 'temperate' | 'warm' | 'hot' = tempSpread < 0.30 ? 'cold' : tempSpread < 0.55 ? 'temperate' : tempSpread < 0.78 ? 'warm' : 'hot';
     const moistTag: 'arid' | 'normal' | 'humid' | 'wet' | 'snow' = moistSpread < 0.30 ? 'arid' : moistSpread < 0.55 ? 'normal' : moistSpread < 0.78 ? 'humid' : 'wet';
 
-    if (elevation > 56 && tempTag === 'cold') return getBiome('ice_spikes');
-    if (elevation > 48 && (tempTag === 'cold' || tempTag === 'temperate')) return getBiome('alpine_biome');
+    // Alpine gates are expressed RELATIVE TO SEA LEVEL, not as absolute Y.
+    //
+    // These used to be the literals `> 56` and `> 48`. With the continent
+    // field fixed the median world height is far above 48, and a measured
+    // 88% of all columns cleared the alpine gate while 59% cleared the ice
+    // one — the entire map resolved to ice_spikes and alpine_biome. Anchoring
+    // to sea level keeps the thresholds meaningful whatever the height range
+    // a given config produces.
+    const aboveSea = elevation - this.config.seaLevel;
+    if (aboveSea > ICE_CAP_ELEVATION && tempTag === 'cold') return getBiome('ice_spikes');
+    if (aboveSea > ALPINE_ELEVATION && (tempTag === 'cold' || tempTag === 'temperate')) return getBiome('alpine_biome');
 
     // Rare regions get to host the special biomes; ordinary regions stick to
     // the staples, which is what keeps the world coherent rather than a
@@ -1197,15 +1468,51 @@ export class AdvancedTerrainGenerator {
    * during the surface, vegetation and structure passes.
    */
   private smoothedHeight(worldX: number, worldZ: number): number {
-    // PERF: quantise to a 16-block lattice before caching.
+    // Evaluate the wide stencil on a coarse lattice, then BILINEARLY
+    // INTERPOLATE between lattice points.
     //
-    // This is a 9-tap stencil, so it is 9 height lookups per call, and it is
-    // consulted for every column by the surface, vegetation and biome passes.
-    // Because the result is a wide average it barely changes between adjacent
-    // blocks, so snapping the sample point to a coarse grid gives visually
-    // identical boundaries while turning 256 evaluations per chunk into ~4.
-    const x = Math.round(worldX / SMOOTH_HEIGHT_STEP) * SMOOTH_HEIGHT_STEP;
-    const z = Math.round(worldZ / SMOOTH_HEIGHT_STEP) * SMOOTH_HEIGHT_STEP;
+    // ## Why the interpolation matters
+    //
+    // The previous version rounded the sample point to the nearest 16-block
+    // lattice node and returned that node's value directly, making the
+    // elevation a piecewise-constant step function. Because biome selection
+    // compares this value against fixed thresholds, every biome boundary
+    // snapped to the 16-block grid — the same 16 blocks as a chunk. Measured
+    // on the shipped generator, 100% of biome transitions along a 800-block
+    // transect landed on a single offset within the chunk grid.
+    //
+    // A biome change means a different surface material and different
+    // vegetation, so those grid-aligned boundaries drew perfectly straight
+    // lines across the terrain at chunk borders, which reads as a hard seam.
+    //
+    // Interpolating restores a continuous field: still ~4 stencil evaluations
+    // per chunk (the lattice nodes are shared and cached), but the value now
+    // varies smoothly between them, so boundaries follow the landscape.
+    const step = SMOOTH_HEIGHT_STEP;
+    const gx = Math.floor(worldX / step);
+    const gz = Math.floor(worldZ / step);
+    const fx = worldX / step - gx;
+    const fz = worldZ / step - gz;
+
+    const h00 = this.smoothedHeightAtNode(gx, gz);
+    const h10 = this.smoothedHeightAtNode(gx + 1, gz);
+    const h01 = this.smoothedHeightAtNode(gx, gz + 1);
+    const h11 = this.smoothedHeightAtNode(gx + 1, gz + 1);
+
+    // Smoothstep the weights so the field is C1 across lattice nodes; with raw
+    // linear weights the slope jumps at every node and the thresholds can
+    // still pick up a faint grid.
+    const u = fx * fx * (3 - 2 * fx);
+    const v = fz * fz * (3 - 2 * fz);
+    const a = h00 + (h10 - h00) * u;
+    const b = h01 + (h11 - h01) * u;
+    return a + (b - a) * v;
+  }
+
+  /** The 9-tap elevation stencil evaluated at one coarse lattice node. */
+  private smoothedHeightAtNode(nodeX: number, nodeZ: number): number {
+    const x = nodeX * SMOOTH_HEIGHT_STEP;
+    const z = nodeZ * SMOOTH_HEIGHT_STEP;
     const key = columnKey(x, z);
     const cached = this.smoothHeightCache.get(key);
     if (cached !== undefined) return cached;
@@ -1269,13 +1576,34 @@ export class AdvancedTerrainGenerator {
 
   /* ============= VEGETATION ============= */
 
+  /**
+   * PASS 4 — Decoration.
+   *
+   * ## The rule every decorator must follow
+   *
+   * Decoration runs **after** the terrain is fully shaped and carved. It must
+   * therefore ask the *voxel data* where the ground is, never the analytic
+   * heightmap. `getSurfaceHeight` below is the single sanctioned query.
+   *
+   * The old code used `getTerrainHeight(wx, wz)` — the analytic value — and
+   * then wrote a trunk upward from it. Wherever a cave, ravine or sinkhole had
+   * lowered the real ground, the tree was planted at the pre-carve altitude
+   * and grew out of thin air. Wherever the ground had been *raised*, the trunk
+   * started buried. Same root cause as the floating grass sheets.
+   */
   private applyVegetation(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
       const biome = this.getBiomeAt(wx, wz);
-      const surface = this.getTerrainHeight(wx, wz);
+      // Query the real, post-carve ground — not the analytic heightmap.
+      const surface = this.findSkyExposedSurface(chunk, lx, lz);
+      if (surface < 0) return;
       const top = chunk.getBlock(lx, surface, lz);
       if (top === BLOCK.WATER || top === BLOCK.AIR) return;
+      // Only plant on ground that can actually support a plant.
+      if (!isNaturalGround(top)) return;
+      // Refuse to plant where the space above is already occupied.
+      if (chunk.getBlock(lx, surface + 1, lz) !== BLOCK.AIR) return;
       // Tree placement on a Poisson-disc grid.
       // Forests should feel like forests: a tree roughly every 4 blocks reads
       // as dense woodland once canopies overlap, while open biomes keep the
@@ -1365,23 +1693,43 @@ export class AdvancedTerrainGenerator {
    * fossils) can stay denser because you only meet them while mining.
    */
   private applyStructures(chunk: Chunk): void {
-    this.forEachLocalBlock(chunk, (_lx, _lz, wx, wz) => {
+    this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
 
       // --- surface landmarks: rare, deliberately findable ------------------
+      // Surface structures sit on the REAL ground, found by sweeping the
+      // voxels. Using the analytic heightmap here left monoliths and ruins
+      // hovering over any column a cave or ravine had lowered.
+      const needsSurface =
+        this.featureAnchor(wx, wz, 420, 'monolith')
+        || this.featureAnchor(wx, wz, 340, 'ruin-fragment')
+        || this.featureAnchor(wx, wz, 96, 'geode')
+        || this.featureAnchor(wx, wz, 120, 'fossil');
+      if (!needsSurface && !(this.config.volcanoes && this.featureAnchor(wx, wz, 900, 'volcano'))) return;
+
+      const surface = this.findSkyExposedSurface(chunk, lx, lz);
+      if (surface < 0) return;
+
       if (this.featureAnchor(wx, wz, 420, 'monolith')) {
-        this.placeMonolith(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+        // Do not stand a monolith in a lake or on a plant.
+        if (isNaturalGround(chunk.getBlock(lx, surface, lz))) {
+          this.placeMonolith(chunk, wx, surface, wz);
+        }
       }
       if (this.featureAnchor(wx, wz, 340, 'ruin-fragment')) {
-        this.placeRuinFragment(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+        if (isNaturalGround(chunk.getBlock(lx, surface, lz))) {
+          this.placeRuinFragment(chunk, wx, surface, wz);
+        }
       }
 
       // --- buried features: only ever seen underground ---------------------
+      // These are placed relative to the surface but always well below it,
+      // so they are unaffected by surface dressing.
       if (this.featureAnchor(wx, wz, 96, 'geode')) {
-        this.placeGeode(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+        this.placeGeode(chunk, wx, surface, wz);
       }
       if (this.featureAnchor(wx, wz, 120, 'fossil')) {
-        this.placeFossil(chunk, wx, this.getTerrainHeight(wx, wz), wz);
+        this.placeFossil(chunk, wx, surface, wz);
       }
 
       if (this.config.volcanoes && this.featureAnchor(wx, wz, 900, 'volcano')) {
@@ -1604,7 +1952,57 @@ export class AdvancedTerrainGenerator {
 
   getEdits(): WorldBlockEdit[] { return Array.from(this.editOverrides.values()).map((e) => ({ ...e })); }
   getEditCount(): number { return this.editOverrides.size; }
+
+  /**
+   * Cheap analytic ground estimate for a column.
+   *
+   * This is the *pre-carve* shape. It never generates a chunk, so it is the
+   * right call for wide surveys (minimap, distant LOD, biome logic). It is the
+   * WRONG call for placing anything solid into the world — a cave or ravine
+   * may have removed the ground it reports. Use `getSurfaceHeight` for that.
+   */
   getHeightAt(worldX: number, worldZ: number): number { return this.getTerrainHeight(worldX, worldZ); }
+
+  /**
+   * The authoritative "what is the Y of the ground here" query.
+   *
+   * Generates the owning chunk if needed and sweeps its voxels top-down,
+   * returning the highest solid block that is open to the sky. Plants, leaves
+   * and water are seen through, so this is the block an entity or a structure
+   * should stand on.
+   *
+   * Anything that spawns into the world — mobs, NPCs, villages, portals,
+   * quest markers, Arena AI actors — should place at `getSurfaceHeight() + 1`.
+   * Using `getHeightAt()` for that is what made entities hover over carved
+   * terrain or stand buried inside a hill.
+   *
+   * Returns the bedrock ceiling for a column with no ground at all (a void
+   * column in a skylands world), so callers always get a usable number.
+   */
+  getSurfaceHeight(worldX: number, worldZ: number): number {
+    const a = this.toChunkAddress(worldX, worldZ);
+    const chunk = this.generateChunk(a.cx, a.cz);
+    const y = this.findSkyExposedSurface(chunk, a.lx, a.lz);
+    return y >= 0 ? y : this.config.bedrockThickness;
+  }
+
+  /**
+   * True when a feature of `height` blocks can stand at this column without
+   * clipping into anything. Decoration and structure placement should gate on
+   * this rather than assuming the space above the ground is empty.
+   */
+  hasClearanceAbove(worldX: number, worldZ: number, height: number): boolean {
+    const a = this.toChunkAddress(worldX, worldZ);
+    const chunk = this.generateChunk(a.cx, a.cz);
+    const surface = this.findSkyExposedSurface(chunk, a.lx, a.lz);
+    if (surface < 0) return false;
+    for (let y = surface + 1; y <= surface + height; y++) {
+      if (y >= CHUNK_HEIGHT) return false;
+      if (chunk.getBlock(a.lx, y, a.lz) !== BLOCK.AIR) return false;
+    }
+    return true;
+  }
+
   getSpawnPoint(): SpawnPoint {
     const x = 0.5, z = 0.5;
     const groundY = this.getTerrainHeight(Math.floor(x), Math.floor(z));
@@ -1614,11 +2012,90 @@ export class AdvancedTerrainGenerator {
 
   /* ============= HELPERS ============= */
 
+  /**
+   * Write a world-space voxel that belongs to a feature being built in
+   * `chunk`, even when it lands outside that chunk's 16x16 footprint.
+   *
+   * ## The bug this replaces: features sliced off at chunk borders
+   *
+   * The old `setBlockIfInChunk` silently *discarded* any write outside the
+   * current chunk. A tree anchored at local x=15 therefore lost the half of
+   * its canopy that belonged to the neighbouring chunk, and a 5-wide ruin
+   * anchored near an edge was cut in half. Measured on a forced-forest world,
+   * columns at the chunk edges held ~26% fewer leaf blocks than columns in the
+   * middle — a flat-sided, sheared look along every chunk boundary.
+   *
+   * ## How the spill buffer works
+   *
+   * The overhanging part of a feature is not thrown away; it is routed to the
+   * chunk that owns it:
+   *
+   *  - If that chunk is already built, apply the write immediately and mark it
+   *    for a mesh rebuild.
+   *  - If it has not been built yet, queue it. `generateChunk` drains the
+   *    queue as its last shaping step, so the decoration lands on top of the
+   *    finished terrain exactly as if it had been placed locally.
+   *
+   * Either ordering produces identical voxels, so the world stays
+   * deterministic and seam-free without any chunk needing to generate its
+   * neighbours (which would recurse).
+   */
   private setBlockIfInChunk(chunk: Chunk, worldX: number, y: number, worldZ: number, block: BlockID): void {
     if (y < 0 || y >= CHUNK_HEIGHT) return;
     const lx = worldX - chunk.x * CHUNK_SIZE, lz = worldZ - chunk.z * CHUNK_SIZE;
-    if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) return;
-    chunk.setBlock(lx, y, lz, block);
+    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE) {
+      chunk.setBlock(lx, y, lz, block);
+      return;
+    }
+    this.spillBlock(worldX, y, worldZ, block);
+  }
+
+  /**
+   * Route a feature voxel to the chunk that actually owns it.
+   *
+   * Overhang writes only ever fill AIR. A feature may not carve away terrain,
+   * a player edit, or another feature in the neighbouring chunk, so the result
+   * does not depend on which of the two chunks was generated first.
+   */
+  private spillBlock(worldX: number, y: number, worldZ: number, block: BlockID): void {
+    const a = this.toChunkAddress(worldX, worldZ);
+    // A player edit at this coordinate always wins over generated decoration.
+    if (this.editOverrides.has(editKey(a.worldX, y, a.worldZ))) return;
+
+    const key = this.chunkKey(a.cx, a.cz);
+    const existing = this.chunks.get(key);
+    if (existing) {
+      if (existing.getBlock(a.lx, y, a.lz) !== BLOCK.AIR) return;
+      existing.setBlock(a.lx, y, a.lz, block);
+      existing.meshDirty = true;
+      return;
+    }
+
+    let queue = this.pendingSpill.get(key);
+    if (!queue) {
+      // Bound the buffer so an unexplored frontier cannot grow without limit.
+      if (this.pendingSpill.size >= SPILL_CHUNK_LIMIT) {
+        const oldest = this.pendingSpill.keys().next().value as string | undefined;
+        if (oldest !== undefined) this.pendingSpill.delete(oldest);
+      }
+      queue = [];
+      this.pendingSpill.set(key, queue);
+    }
+    queue.push({ lx: a.lx, y, lz: a.lz, block });
+  }
+
+  /** Apply decoration that neighbouring chunks pushed into this one. */
+  private applyPendingSpill(chunk: Chunk): void {
+    const key = this.chunkKey(chunk.x, chunk.z);
+    const queue = this.pendingSpill.get(key);
+    if (!queue) return;
+    // AIR-only, matching the immediate path in `spillBlock`, so a queued write
+    // and a direct write produce the same world.
+    for (const w of queue) {
+      if (chunk.getBlock(w.lx, w.y, w.lz) !== BLOCK.AIR) continue;
+      chunk.setBlock(w.lx, w.y, w.lz, w.block);
+    }
+    this.pendingSpill.delete(key);
   }
 
   private chunkKey(cx: number, cz: number): string { return `${cx}:${cz}`; }

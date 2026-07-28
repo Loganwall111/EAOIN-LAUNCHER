@@ -436,9 +436,14 @@ export class CreatureManager {
   private safeGroundPosition(worldX: number, worldZ: number): Vector3 | null {
     const x = Math.floor(worldX);
     const z = Math.floor(worldZ);
-    const groundY = this.terrain.getHeightAt(x, z);
+    // Ask for the REAL surface (a top-down sweep of the generated voxels),
+    // not the analytic heightmap. `getHeightAt` returns the pre-carve height,
+    // so wherever a cave or ravine had lowered the ground a creature spawned
+    // hovering in the air above the hole it should have been standing in.
+    const groundY = this.terrain.getSurfaceHeight(x, z);
     if (groundY < 1) return null;
     if (this.terrain.getBlockAt(x, groundY, z) === 5) return null;
+    // Two blocks of head room, verified against the voxels.
     if (this.terrain.getBlockAt(x, groundY + 1, z) !== 0) return null;
     if (this.terrain.getBlockAt(x, groundY + 2, z) !== 0) return null;
     return new Vector3(worldX, groundY + 1, worldZ);
