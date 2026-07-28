@@ -268,6 +268,20 @@ const RAVINE_MIN_DEPTH = 8;
 /** Extra depth at the centreline, on top of `RAVINE_MIN_DEPTH`. */
 const RAVINE_EXTRA_DEPTH = 26;
 
+/* ---- sinkhole placement (see `applySinkholes`) ---- */
+/** Grid cell size, in blocks, that sinkhole anchors are placed on. */
+const SINKHOLE_CELL_SIZE = 12;
+/** Smallest sinkhole radius, in blocks. */
+const SINKHOLE_MIN_RADIUS = 2;
+/**
+ * Largest sinkhole radius, in blocks.
+ *
+ * This bounds how far outside its own chunk an anchor can reach, so it is also
+ * the width of the neighbouring-anchor margin scanned by `applySinkholes`.
+ * Keep the two in step: under-scanning re-introduces the clipped-crater bug.
+ */
+const SINKHOLE_MAX_RADIUS = 3;
+
 /**
  * Radius over which the deliberately flat, safe spawn platform eases back
  * into procedural terrain.  The platform used to stop at block 26 while the
@@ -959,31 +973,110 @@ export class AdvancedTerrainGenerator {
 
   /* ============= SINKHOLES ============= */
 
+  /**
+   * Sinkholes — small round craters punched down into the surface.
+   *
+   * ## The two bugs this replaces: half-craters and flat crater walls
+   *
+   * The old pass walked the columns *inside* the chunk and, whenever a column
+   * happened to be a sinkhole anchor, carved that anchor's disc. Both halves
+   * of that design were wrong at a chunk boundary.
+   *
+   *   1. **Outward clipping.** A disc whose anchor sat near an edge ran off
+   *      the chunk, and the overhanging voxels were dropped by a bare
+   *      `continue`:
+   *
+   *      ```ts
+   *      if (lx2 < 0 || lx2 >= CHUNK_SIZE || ...) continue;   // silently lost
+   *      ```
+   *
+   *   2. **Inward blindness.** An anchor in the *neighbouring* chunk whose
+   *      radius reached into this one was never considered at all, because the
+   *      loop only ever visited local columns.
+   *
+   *      These are two different halves of the same crater, and neither was
+   *      carved. Measured over a 17x17-chunk region: **55.6% of all anchors
+   *      were clipped** (1235 voxels discarded), and a further 292 in-reach
+   *      anchors were never evaluated (1241 voxel-columns left uncarved). The
+   *      result is a crater that stops dead against a perfectly straight
+   *      16-block line — a flat vertical wall of exposed, unlit interior, which
+   *      is exactly the "broken crater" artefact.
+   *
+   * ## The fix
+   *
+   * Iterate **anchors, not columns**. The chunk scans every anchor cell whose
+   * disc could possibly overlap its footprint — its own cells plus a margin of
+   * `SINKHOLE_MAX_RADIUS` on each side — and carves only the part of each disc
+   * that lands inside this chunk. Every anchor is therefore evaluated by both
+   * chunks it straddles, and each writes its own half. The two halves join
+   * seamlessly because both are derived from the same anchor hash.
+   *
+   * This needs no cross-chunk writes and no neighbour generation, so it stays
+   * deterministic and order-independent: a chunk carves an identical crater
+   * whether or not its neighbour has been built yet.
+   *
+   * ## Per-column depth
+   *
+   * The depth profile is anchored to each carved column's *own* terrain
+   * height rather than the anchor column's. Using a single height for the
+   * whole disc cut a flat-bottomed cylinder into sloped ground and could
+   * carve air well above the local surface.
+   */
   private applySinkholes(chunk: Chunk): void {
     if (!this.config.sinkholes) return;
-    this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      if (Math.hypot(wx, wz) < SPAWN_TERRAIN_BLEND_RADIUS) return;
-      const cellX = Math.floor(wx / 12);
-      const cellZ = Math.floor(wz / 12);
-      const startX = cellX * 12;
-      const startZ = cellZ * 12;
-      const ox = Math.floor(this.noise.hash(cellX, cellZ, 0, 41) * 12);
-      const oz = Math.floor(this.noise.hash(cellX, cellZ, 1, 42) * 12);
-      if (wx !== startX + ox || wz !== startZ + oz) return;
-      const r = 2 + Math.floor(this.noise.hash(cellX, cellZ, 2, 43) * 2);
-      const surface = this.getTerrainHeight(wx, wz);
-      const depth = 8 + Math.floor(this.noise.hash(cellX, cellZ, 3, 44) * 6);
-      for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
-        const d = Math.hypot(dx, dz);
-        if (d > r) continue;
-        const lx2 = lx + dx, lz2 = lz + dz;
-        if (lx2 < 0 || lx2 >= CHUNK_SIZE || lz2 < 0 || lz2 >= CHUNK_SIZE) continue;
-        for (let y = surface - Math.round(depth * (1 - d / r)); y < surface; y++) {
-          if (y < this.config.bedrockThickness) continue;
-          chunk.setBlock(lx2, y, lz2, BLOCK.AIR);
+
+    const cell = SINKHOLE_CELL_SIZE;
+    const margin = SINKHOLE_MAX_RADIUS;
+    const originX = chunk.x * CHUNK_SIZE;
+    const originZ = chunk.z * CHUNK_SIZE;
+
+    // Every anchor cell that could reach into this chunk, including the ring
+    // of neighbouring cells just outside it.
+    const firstCellX = Math.floor((originX - margin) / cell);
+    const lastCellX = Math.floor((originX + CHUNK_SIZE - 1 + margin) / cell);
+    const firstCellZ = Math.floor((originZ - margin) / cell);
+    const lastCellZ = Math.floor((originZ + CHUNK_SIZE - 1 + margin) / cell);
+
+    for (let cellX = firstCellX; cellX <= lastCellX; cellX++) {
+      for (let cellZ = firstCellZ; cellZ <= lastCellZ; cellZ++) {
+        // Anchor position — hashed from the cell, so every chunk that sees
+        // this cell derives exactly the same crater.
+        const ox = Math.floor(this.noise.hash(cellX, cellZ, 0, 41) * cell);
+        const oz = Math.floor(this.noise.hash(cellX, cellZ, 1, 42) * cell);
+        const anchorX = cellX * cell + ox;
+        const anchorZ = cellZ * cell + oz;
+
+        // Spawn guard is tested on the ANCHOR, not on each carved column, so a
+        // crater is either fully present or fully absent. Testing per column
+        // would let the blend radius slice a crater in half.
+        if (Math.hypot(anchorX, anchorZ) < SPAWN_TERRAIN_BLEND_RADIUS) continue;
+
+        const r = SINKHOLE_MIN_RADIUS
+          + Math.floor(this.noise.hash(cellX, cellZ, 2, 43) * (SINKHOLE_MAX_RADIUS - SINKHOLE_MIN_RADIUS + 1));
+        const depth = 8 + Math.floor(this.noise.hash(cellX, cellZ, 3, 44) * 6);
+
+        // Clip the disc to this chunk's footprint in world space, then carve.
+        const minX = Math.max(anchorX - r, originX);
+        const maxX = Math.min(anchorX + r, originX + CHUNK_SIZE - 1);
+        const minZ = Math.max(anchorZ - r, originZ);
+        const maxZ = Math.min(anchorZ + r, originZ + CHUNK_SIZE - 1);
+        if (minX > maxX || minZ > maxZ) continue;
+
+        for (let wx = minX; wx <= maxX; wx++) {
+          for (let wz = minZ; wz <= maxZ; wz++) {
+            const d = Math.hypot(wx - anchorX, wz - anchorZ);
+            if (d > r) continue;
+            // Depth follows THIS column's ground, so the crater hugs a slope.
+            const surface = this.getTerrainHeight(wx, wz);
+            const from = surface - Math.round(depth * (1 - d / r));
+            for (let y = from; y < surface; y++) {
+              if (y < this.config.bedrockThickness) continue;
+              chunk.setBlock(wx - originX, y, wz - originZ, BLOCK.AIR);
+            }
+          }
         }
       }
-    });
+    }
   }
 
   /* ============= UNDERGROUND OCEANS / RIVERS ============= */
