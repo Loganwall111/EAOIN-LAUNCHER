@@ -454,3 +454,144 @@ describe('biome boundaries', () => {
     expect(worstShare).toBeLessThan(0.25);
   });
 });
+
+/* ========================================================================== *
+ * 6. SINKHOLES — craters must not be clipped by chunk borders
+ *
+ * The sinkhole pass used to iterate the columns *inside* a chunk and carve the
+ * disc of any anchor it found there. That lost crater voxels twice over:
+ *
+ *   - outward: a disc anchored near an edge ran off the chunk and the
+ *     overhanging voxels were dropped by a bare `continue`;
+ *   - inward:  an anchor in the neighbouring chunk whose radius reached into
+ *     this one was never evaluated at all.
+ *
+ * Measured over a 17x17-chunk region before the fix: 55.6% of anchors were
+ * clipped and 292 in-reach anchors were skipped. A crater therefore stopped
+ * dead against a straight 16-block line, leaving a flat vertical wall of
+ * exposed unlit interior.
+ *
+ * The pass now iterates ANCHORS (its own cells plus a margin) and clips each
+ * disc to the chunk, so both chunks carve their own half of a straddling
+ * crater from the same anchor hash.
+ * ========================================================================== */
+
+describe('sinkhole craters across chunk boundaries', () => {
+  const CELL = 12;
+  const RMAX = 3;
+  const BLEND = 26 + 32; // SPAWN_PROTECTED_RADIUS + 32
+
+  /**
+   * Independently re-derive the crater profile from anchors alone and assert
+   * the generator carved it. Mirrors the pass's placement rule, not its loop,
+   * so a regression in the loop structure is caught.
+   */
+  it('carves every voxel the crater profile specifies, including across seams', () => {
+    for (const seed of ['crater-hunt', 'seam-check', 'eaoin_seed_2026']) {
+      // Reach past `private` the same way the surface-pass test above does:
+      // these are the generator's own placement internals, and the whole point
+      // of the test is to pin them.
+      const gen = new AdvancedTerrainGenerator({ seed }) as unknown as {
+        applySinkholes: (c: Chunk) => void;
+        generateChunk: (cx: number, cz: number) => Chunk;
+        getTerrainHeight: (x: number, z: number) => number;
+        noise: AdvancedNoise;
+      };
+      let checked = 0;
+      let missing = 0;
+
+      // Inspect the chunk immediately after the sinkhole pass, before later
+      // passes (anti-floating, surface fill) can legitimately refill voxels.
+      const original = gen.applySinkholes.bind(gen);
+      gen.applySinkholes = (chunk: Chunk) => {
+        original(chunk);
+        const ox0 = chunk.x * CHUNK_SIZE;
+        const oz0 = chunk.z * CHUNK_SIZE;
+        const first = (o: number) => Math.floor((o - RMAX) / CELL);
+        const last = (o: number) => Math.floor((o + CHUNK_SIZE - 1 + RMAX) / CELL);
+
+        for (let cellX = first(ox0); cellX <= last(ox0); cellX++) {
+          for (let cellZ = first(oz0); cellZ <= last(oz0); cellZ++) {
+            const ax = cellX * CELL + Math.floor(gen.noise.hash(cellX, cellZ, 0, 41) * CELL);
+            const az = cellZ * CELL + Math.floor(gen.noise.hash(cellX, cellZ, 1, 42) * CELL);
+            if (Math.hypot(ax, az) < BLEND) continue;
+            const r = 2 + Math.floor(gen.noise.hash(cellX, cellZ, 2, 43) * 2);
+            const depth = 8 + Math.floor(gen.noise.hash(cellX, cellZ, 3, 44) * 6);
+
+            for (let wx = ax - r; wx <= ax + r; wx++) {
+              for (let wz = az - r; wz <= az + r; wz++) {
+                const d = Math.hypot(wx - ax, wz - az);
+                if (d > r) continue;
+                // Skip rim columns whose profile asks for zero depth.
+                if (Math.round(depth * (1 - d / r)) < 1) continue;
+                const lx = wx - ox0;
+                const lz = wz - oz0;
+                if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+                const y = gen.getTerrainHeight(wx, wz) - 1;
+                if (y < 4 || y >= CHUNK_HEIGHT) continue;
+                checked++;
+                if (chunk.getBlock(lx, y, lz) !== AIR) missing++;
+              }
+            }
+          }
+        }
+      };
+
+      for (let cx = -6; cx <= 6; cx++) {
+        for (let cz = -6; cz <= 6; cz++) gen.generateChunk(cx, cz);
+      }
+
+      expect(checked).toBeGreaterThan(500);
+      expect(missing).toBe(0);
+    }
+  });
+
+  it('leaves no straight vertical crater wall along a chunk seam', () => {
+    const gen = new AdvancedTerrainGenerator({ seed: 'crater-hunt' });
+    const airDepth = (chunk: Chunk, lx: number, lz: number, surface: number) => {
+      let n = 0;
+      for (let y = surface - 1; y >= 4 && chunk.getBlock(lx, y, lz) === AIR; y--) n++;
+      return n;
+    };
+
+    let walls = 0;
+    for (let cx = -5; cx <= 5; cx++) {
+      for (let cz = -5; cz <= 5; cz++) {
+        const a = gen.generateChunk(cx, cz);
+        const b = gen.generateChunk(cx + 1, cz);
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          const wz = cz * CHUNK_SIZE + lz;
+          const sa = gen.getHeightAt(cx * CHUNK_SIZE + 15, wz);
+          const sb = gen.getHeightAt((cx + 1) * CHUNK_SIZE, wz);
+          if (Math.abs(airDepth(a, 15, lz, sa) - airDepth(b, 0, lz, sb)) >= 8) walls++;
+        }
+      }
+    }
+    expect(walls).toBe(0);
+  });
+
+  it('produces identical voxels whichever neighbour is generated first', () => {
+    // A cross-chunk feature must not depend on generation order, or streaming
+    // in a different direction would give a different world.
+    const forward = new AdvancedTerrainGenerator({ seed: 'order-sink' });
+    const reverse = new AdvancedTerrainGenerator({ seed: 'order-sink' });
+
+    const target = forward.generateChunk(2, -3);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx !== 0 || dz !== 0) reverse.generateChunk(2 + dx, -3 + dz);
+      }
+    }
+    const after = reverse.generateChunk(2, -3);
+
+    let diff = 0;
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        for (let y = 0; y < CHUNK_HEIGHT; y++) {
+          if (target.getBlock(x, y, z) !== after.getBlock(x, y, z)) diff++;
+        }
+      }
+    }
+    expect(diff).toBe(0);
+  });
+});

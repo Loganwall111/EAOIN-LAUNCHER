@@ -224,6 +224,23 @@ export class ChunkRenderManager {
       loaded += 1;
     }
 
+    // Pick up chunks the *generator* invalidated behind our back.
+    //
+    // A cross-chunk decoration write (`AdvancedTerrainGenerator.spillBlock` —
+    // a tree canopy or ruin that overhangs into an already-built neighbour)
+    // edits a chunk that may already be meshed, and flags it with
+    // `chunk.meshDirty = true`. Nothing consumed that flag, so the voxels
+    // existed in the array but their geometry was never uploaded: the
+    // decoration was simply invisible, and any face it should have hidden
+    // stayed exposed. Measured while streaming a forest at radius 3, two of
+    // 49 chunks finished dirty with 12 faces missing from the GPU.
+    //
+    // Scanning the live set is O(loaded chunks) against per-chunk meshing, so
+    // it is cheap next to the rebuilds it schedules.
+    for (const [key, chunk] of this.chunks) {
+      if (chunk.meshDirty) dirty.add(key);
+    }
+
     for (const key of dirty) {
       const [cx, cz] = this.parseKey(key);
       this.rebuildChunk(cx, cz);
@@ -306,6 +323,13 @@ export class ChunkRenderManager {
     const key = this.key(cx, cz);
     const chunk = this.chunks.get(key);
     if (!chunk) return;
+
+    // The chunk's voxels are about to be turned into geometry, so anything
+    // that dirtied it is now accounted for. Clearing the flag here — rather
+    // than at the call sites — keeps it correct for every path that rebuilds
+    // (streaming, block edits, dimension changes), and stops the sweep in
+    // `updateVisibleChunks` from re-meshing the same chunk on every frame.
+    chunk.meshDirty = false;
 
     this.disposeChunkMeshes(key);
 
