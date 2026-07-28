@@ -172,3 +172,13 @@ export function materialForSurface(
   const blockId = key & 0xffff;
   return materials.get(blockId) ?? null;
 }
+
+/** Creates a highly visible "missing texture" material so the game never shows Babylon's red/black checkerboard. */
+export function createMissingBlockMaterial(scene: Scene): StandardMaterial {
+  const mat = new StandardMaterial('missing_block_fallback', scene);
+  mat.diffuseColor = new Color3(1, 0, 1); // bright magenta
+  mat.emissiveColor = new Color3(0.6, 0, 0.6);
+  mat.specularColor = new Color3(0, 0, 0);
+  mat.ambientColor = new Color3(1, 1, 1);
+  return mat;
+}

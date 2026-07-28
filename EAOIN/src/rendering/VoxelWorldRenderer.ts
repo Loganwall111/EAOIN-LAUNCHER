@@ -4,10 +4,10 @@
  * The existing architecture already owns chunk/block logic; this renderer is the
  * missing runtime bridge that turns that data into physical terrain.
  */
-import { Mesh, Scene, Vector3, VertexData } from '@babylonjs/core';
+import { Mesh, Scene, Vector3, VertexData, StandardMaterial } from '@babylonjs/core';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
-import { BlockMaterialMap } from './BlockMaterials';
+import { BlockMaterialMap, createMissingBlockMaterial } from './BlockMaterials';
 
 interface MutableMeshData {
   positions: number[];
@@ -90,7 +90,12 @@ export class VoxelWorldRenderer {
       vertexData.applyToMesh(mesh, true);
 
       const block = getBlock(blockId);
-      mesh.material = materials.get(blockId) ?? null;
+      let mat = materials.get(blockId);
+      if (!mat) {
+        // Prevent Babylon red/black checkerboard — use a highly visible magenta fallback
+        mat = createMissingBlockMaterial(scene);
+      }
+      mesh.material = mat;
       mesh.checkCollisions = block.solid;
       mesh.isPickable = true;
       mesh.receiveShadows = true;
