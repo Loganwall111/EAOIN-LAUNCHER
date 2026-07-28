@@ -91,6 +91,26 @@ describe('main world load', () => {
     expect(first.pending).toBe(0);
   });
 
+  it('keeps a complete player-facing radius while the next guard ring streams', () => {
+    const manager = new ChunkRenderManager({} as never, new Map() as never);
+    (manager as unknown as { rebuildChunk(cx: number, cz: number): void }).rebuildChunk = () => {};
+    const generate = (cx: number, cz: number) => new Chunk(cx, cz, 'coverage-guard');
+    const visibleRadius = 3;
+    const streamingRadius = visibleRadius + 1;
+
+    // Finish the initial target, including the one-chunk prefetch ring.
+    manager.updateVisibleChunks(0, 0, streamingRadius, generate);
+    expect(manager.hasChunksInRadius(0, 0, visibleRadius)).toBe(true);
+
+    // Crossing one chunk boundary adds an outer strip. It is deliberately
+    // budget-limited here to model a slow frame: that strip is still pending,
+    // but the old prefetch ring must now cover every chunk the player can see.
+    const result = manager.updateVisibleChunks(1, 0, streamingRadius, generate, { budget: 1 });
+    expect(result.pending).toBeGreaterThan(0);
+    expect(manager.hasPendingChunks(1, 0, streamingRadius)).toBe(true);
+    expect(manager.hasChunksInRadius(1, 0, visibleRadius)).toBe(true);
+  });
+
   it('actually unloads outer meshes when adaptive render distance drops', () => {
     const manager = new ChunkRenderManager({} as never, new Map() as never);
     (manager as unknown as { rebuildChunk(cx: number, cz: number): void }).rebuildChunk = () => {};
