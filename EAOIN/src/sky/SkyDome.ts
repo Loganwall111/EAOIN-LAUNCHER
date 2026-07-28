@@ -119,12 +119,51 @@ export class SkyDome {
         this.vertexDirections[i * 3 + 2] = z;
       }
       this.colorBuffer = new Float32Array(count * 4);
+      // BUGFIX — "the whole world is behind a black wall".
+      //
+      // This buffer used to be handed to Babylon while still full of zeros,
+      // i.e. opaque BLACK, and was only repainted on the first `update()`
+      // call. The dome is a 2400-unit BACKSIDE sphere re-centred on the camera
+      // every frame, so for any frame drawn before that first repaint the
+      // player was sealed inside a solid black ball. Anything that delayed or
+      // suppressed the repaint (a paused render loop during the awakening
+      // cutscene, an exception earlier in the frame, or a recorded WebGPU
+      // snapshot) made that black ball permanent.
+      //
+      // Seeding the buffer with the daylight gradient means the dome is a
+      // correct sky from the very first frame it is drawn, and the per-frame
+      // repaint becomes a refinement rather than a prerequisite.
+      this.seedDaylightGradient();
       dome.setVerticesData(VertexBuffer.ColorKind, this.colorBuffer, true);
       dome.hasVertexAlpha = false;
     }
 
     this.dome = dome;
     this.material = material;
+  }
+
+  /**
+   * Fill the colour buffer with a plain daylight sky ramp.
+   *
+   * Used once at attach time so the dome is never black before the first
+   * `update()`. Deliberately uses the Overworld day palette directly rather
+   * than a profile, because at attach time the atmosphere has not resolved
+   * which biome the player spawned in yet.
+   */
+  private seedDaylightGradient(): void {
+    if (!this.colorBuffer || !this.vertexHeights) return;
+    // Overworld zenith/horizon day colours, matching OVERWORLD_SKY.
+    const zr = 0.18, zg = 0.40, zb = 0.78;
+    const hr = 0.62, hg = 0.79, hb = 0.95;
+    const count = this.vertexHeights.length;
+    for (let i = 0; i < count; i += 1) {
+      const t = Math.pow(Math.max(0, this.vertexHeights[i]), 0.58);
+      const o = i * 4;
+      this.colorBuffer[o] = hr + (zr - hr) * t;
+      this.colorBuffer[o + 1] = hg + (zg - hg) * t;
+      this.colorBuffer[o + 2] = hb + (zb - hb) * t;
+      this.colorBuffer[o + 3] = 1;
+    }
   }
 
   /**

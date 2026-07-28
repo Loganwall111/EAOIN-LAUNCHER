@@ -25,7 +25,7 @@
  * and a correctly sized device pixel ratio.
  * ========================================================================
  */
-import { Engine } from '@babylonjs/core';
+import { Engine, Scene } from '@babylonjs/core';
 import { WebGPUEngine } from '@babylonjs/core/Engines/webgpuEngine';
 import { Constants } from '@babylonjs/core/Engines/constants';
 import { GameSettings } from '../settings/GameSettings';
@@ -109,7 +109,11 @@ export async function createRuntimeEngine(
       applyRenderScale(engine, settings.renderScale);
 
       const adapter = await readAdapterInfo(engine);
-      const snapshotRendering = applyWebGpuOptimizations(engine, settings);
+      // NOTE: snapshot rendering is deliberately NOT armed here. It may only be
+      // enabled once a scene exists and reports ready — see
+      // `enableSnapshotRenderingWhenReady()`. Arming it at engine-creation time
+      // records an empty frame and replays it forever, which is a black screen.
+      const snapshotRendering = false;
 
       return {
         engine,
@@ -197,22 +201,88 @@ export function describeVulkanPath(adapter?: AdapterInfo): string {
  * FAST mode (which tolerates transform changes) and refreshed by the caller
  * whenever chunks stream in or out.
  *
- * @returns whether snapshot rendering was enabled.
+ * This function only selects the MODE. Enabling the feature is deferred to
+ * `enableSnapshotRenderingWhenReady()`, because arming it before the scene can
+ * draw records an empty frame and replays it forever (a black screen).
+ *
+ * @returns always `false` — snapshot rendering is never switched on here.
  */
-export function applyWebGpuOptimizations(engine: RuntimeBabylonEngine, settings: GameSettings): boolean {
+export function applyWebGpuOptimizations(engine: RuntimeBabylonEngine): boolean {
   if (!isWebGpu(engine)) return false;
   const webgpu = engine as WebGPUEngine;
 
   try {
-    // FAST allows per-frame uniform/transform updates while still skipping the
-    // command re-recording, which is exactly the voxel-streaming case.
+    // Only the MODE is safe to set up-front. Actually switching snapshot
+    // rendering ON is done by `enableSnapshotRenderingWhenReady()` once the
+    // scene has compiled its materials — see the warning on that function.
     webgpu.snapshotRenderingMode = Constants.SNAPSHOTRENDERING_FAST;
-    webgpu.snapshotRendering = settings.qualityPreset === 'performance' || settings.qualityPreset === 'balanced';
-    return webgpu.snapshotRendering;
+    return false;
   } catch {
     // Older Babylon builds or unusual adapters may not support it; harmless.
     return false;
   }
+}
+
+/**
+ * Turn snapshot rendering on **only after the scene can actually draw a frame**.
+ *
+ * ## The black-world bug this fixes
+ *
+ * Snapshot rendering records the WebGPU command bundle on the very next frame
+ * after it is enabled, then replays that recording every frame afterwards.
+ * Babylon's own documentation is explicit about the consequence:
+ *
+ *   > Make sure everything is ready in your scene to be rendered the next frame
+ *   > after you set `engine.snapshotRendering = true`! ... If some textures were
+ *   > not ready at that time, the mesh won't be rendered in the frame that is
+ *   > recorded and so **it will never be visible**.
+ *
+ * The old code armed it inside `createRuntimeEngine()` — before the `Scene`
+ * object even existed, and long before ~1,900 procedurally generated block
+ * textures had been uploaded and their materials compiled. So the bundle was
+ * recorded from an empty scene and replayed forever. The world was fully
+ * generated (the debug overlay still counted 585 chunks and 1,054,642
+ * triangles) but literally none of those draw calls were ever submitted to the
+ * GPU. Only the DOM HUD, which does not go through WebGPU at all, stayed
+ * visible — exactly the reported "everything is covered by a black wall".
+ *
+ * Gating on `scene.executeWhenReady()` plus a few settled frames means the
+ * recorded bundle contains the real world.
+ */
+export function enableSnapshotRenderingWhenReady(
+  engine: RuntimeBabylonEngine,
+  scene: Scene,
+  settings: GameSettings
+): void {
+  if (!isWebGpu(engine)) return;
+  // Snapshot rendering is a CPU-side optimisation for *largely static* scenes.
+  // EAOIN is the opposite: chunks stream in and out as you walk, creatures and
+  // the view model animate, and the celestial rig moves every frame. Each of
+  // those forces a bundle re-record, so the upside is small while the downside
+  // (a stale or empty bundle = an invisible world) is severe.
+  //
+  // It is therefore restricted to the explicit `performance` preset — a
+  // deliberate "I want maximum framerate" opt-in — instead of running on the
+  // default `balanced` preset where it previously blacked out the game for
+  // every WebGPU player.
+  if (settings.qualityPreset !== 'performance') return;
+
+  const webgpu = engine as WebGPUEngine;
+  scene.executeWhenReady(() => {
+    // executeWhenReady fires as soon as materials report ready; give the
+    // streamer a few more frames so the spawn chunks are in the bundle too.
+    let framesToSettle = 30;
+    const observer = scene.onAfterRenderObservable.add(() => {
+      if (framesToSettle-- > 0) return;
+      scene.onAfterRenderObservable.remove(observer);
+      try {
+        webgpu.snapshotRenderingMode = Constants.SNAPSHOTRENDERING_FAST;
+        webgpu.snapshotRendering = true;
+      } catch {
+        /* Non-fatal: the game renders fine without the optimisation. */
+      }
+    });
+  });
 }
 
 /**
