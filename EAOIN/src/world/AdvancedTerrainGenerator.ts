@@ -228,6 +228,15 @@ const RAVINE_MIN_DEPTH = 8;
 /** Extra depth at the centreline, on top of `RAVINE_MIN_DEPTH`. */
 const RAVINE_EXTRA_DEPTH = 26;
 
+/**
+ * Radius over which the deliberately flat, safe spawn platform eases back
+ * into procedural terrain.  The platform used to stop at block 26 while the
+ * next column could be a 60-block mountain.  From above that looked exactly
+ * like an X-ray hole: a low world inside a near-vertical ring of exposed cave
+ * walls.  Keep the playable core, but blend it into the surrounding heightmap.
+ */
+export const SPAWN_TERRAIN_BLEND_RADIUS = SPAWN_PROTECTED_RADIUS + 32;
+
 /* ---- biome region sizing (see `getBiomeAt`) ---- */
 /**
  * Climate sampling frequency for a `medium` biome. Divided by the region's
@@ -473,7 +482,6 @@ export class AdvancedTerrainGenerator {
   private computeTerrainHeight(worldX: number, worldZ: number): number {
     if (this.config.flatGroundY !== null) return this.config.flatGroundY;
     if (this.config.floatingIslands || this.config.skyIslands) return this.getFloatingIslandHeight(worldX, worldZ);
-    if (Math.hypot(worldX, worldZ) < SPAWN_PROTECTED_RADIUS + 2) return this.config.seaLevel - 6;
 
     let h = this.getRawTerrainHeight(worldX, worldZ);
     h = this.applyHydraulicErosion(h, worldX, worldZ);
@@ -494,6 +502,19 @@ export class AdvancedTerrainGenerator {
     // --- Inverted --------------------------------------------------------
     if (this.config.inverted) {
       h = invertHeight(h, this.config.seaLevel, this.config.worldDepth);
+    }
+
+    // Ease the safe spawn plateau into the real heightmap instead of cutting a
+    // hard cylindrical hole through it.  Smoothstep gives a zero slope at both
+    // ends, so neither the platform edge nor the procedural edge forms a wall.
+    const spawnDistance = Math.hypot(worldX, worldZ);
+    if (spawnDistance < SPAWN_TERRAIN_BLEND_RADIUS) {
+      const spawnHeight = this.config.seaLevel - 6;
+      if (spawnDistance <= SPAWN_PROTECTED_RADIUS) return spawnHeight;
+      const linear = (spawnDistance - SPAWN_PROTECTED_RADIUS)
+        / (SPAWN_TERRAIN_BLEND_RADIUS - SPAWN_PROTECTED_RADIUS);
+      const blend = linear * linear * (3 - 2 * linear);
+      h = spawnHeight + (h - spawnHeight) * blend;
     }
 
     return h;
@@ -754,6 +775,11 @@ export class AdvancedTerrainGenerator {
           + this.caveNoise.hash(cx, cz, 5, 216) * (RAVINE_MAX_WIDTH - RAVINE_MIN_WIDTH);
 
         this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
+          // Do not let an open ravine slice through the spawn transition. The
+          // ordinary sealed cave network may continue below it, but the first
+          // view of a world must remain coherent and walkable.
+          if (Math.hypot(wx, wz) < SPAWN_TERRAIN_BLEND_RADIUS) return;
+
           // Project onto the ravine's axis to get along/across coordinates.
           const relX = wx - centerX;
           const relZ = wz - centerZ;
@@ -794,7 +820,7 @@ export class AdvancedTerrainGenerator {
   private applySinkholes(chunk: Chunk): void {
     if (!this.config.sinkholes) return;
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
+      if (Math.hypot(wx, wz) < SPAWN_TERRAIN_BLEND_RADIUS) return;
       const cellX = Math.floor(wx / 12);
       const cellZ = Math.floor(wz / 12);
       const startX = cellX * 12;
@@ -1480,18 +1506,37 @@ export class AdvancedTerrainGenerator {
 
   private applyObjectiveClearings(chunk: Chunk): void {
     const layout = this.cachedLayout;
-    const clearings = [layout.rocket, layout.settlement, layout.portalCore, layout.woodenDoor, layout.dimensionalDoor, layout.palette, layout.marketplace];
+    const points = [layout.rocket, layout.settlement, layout.portalCore, layout.woodenDoor, layout.dimensionalDoor, layout.palette, layout.marketplace];
+    // A clearing belongs at the terrain height beneath its centre, not at one
+    // global sea-level Y. The old fixed Y=27 excavated enormous pits whenever
+    // an objective landed on a hill. Worse, it only erased six blocks above
+    // that floor and left the rest of the old hill suspended in the air — the
+    // giant floating roof / X-ray cross-section visible in player reports.
+    const clearings = points.map((point) => ({
+      ...point,
+      groundY: this.getTerrainHeight(Math.floor(point.x), Math.floor(point.z)),
+    }));
+
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       for (const c of clearings) {
         const d = Math.hypot(wx - c.x, wz - c.z);
         if (d <= c.radius) {
-          const groundY = this.config.seaLevel - 5;
+          const groundY = c.groundY;
           for (let y = 0; y < CHUNK_HEIGHT; y++) {
-            if (y < this.config.bedrockThickness) chunk.setBlock(lx, y, lz, BEDROCK_MIX[Math.min(BEDROCK_MIX.length - 1, y)]);
-            else if (y < groundY - 3) chunk.setBlock(lx, y, lz, BLOCK.STONE);
-            else if (y < groundY) chunk.setBlock(lx, y, lz, BLOCK.DIRT);
-            else if (y === groundY) chunk.setBlock(lx, y, lz, c.label === 'rocket' ? BLOCK.STONE : BLOCK.GRASS);
-            else if (y <= groundY + 6) chunk.setBlock(lx, y, lz, BLOCK.AIR);
+            if (y < this.config.bedrockThickness) {
+              chunk.setBlock(lx, y, lz, BEDROCK_MIX[Math.min(BEDROCK_MIX.length - 1, y)]);
+            } else if (y < groundY - 4) {
+              // Preserve deep caves; only the load-bearing cap needs refilling.
+              continue;
+            } else if (y < groundY) {
+              chunk.setBlock(lx, y, lz, y < groundY - 3 ? BLOCK.STONE : BLOCK.DIRT);
+            } else if (y === groundY) {
+              chunk.setBlock(lx, y, lz, c.label === 'rocket' ? BLOCK.STONE : BLOCK.GRASS);
+            } else {
+              // Clear the *entire* sky column. Restricting this to +6 retained
+              // the original hillside overhead as a detached terrain ceiling.
+              chunk.setBlock(lx, y, lz, BLOCK.AIR);
+            }
           }
           break;
         }

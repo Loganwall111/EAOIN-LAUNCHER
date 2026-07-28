@@ -103,12 +103,19 @@ describe('HUD layout stylesheet', () => {
     expect(block).toMatch(/display:\s*none/);
   });
 
-  it('moves the world action rail out of the abilities corner', () => {
+  it('moves the world action rail out of the abilities corner without stretching it', () => {
     const rail = ruleFor(LAYOUT, '.game-hud .world-action-rail');
     const abilities = ruleFor(LAYOUT, '.eaoin-hud .hud-abilities');
     expect(rail).toBeTruthy();
     // The rail sits well above the abilities row rather than on top of it.
     expect(pxValue(rail!, 'bottom')! - pxValue(abilities!, 'bottom')!).toBeGreaterThanOrEqual(100);
+    // eaoin-ui.css originally anchors this rail at top:12px/left:50% with a
+    // translation. If those properties survive alongside right/bottom, the
+    // flex children stretch into the giant RESET/EXIT bars from the report.
+    expect(rail).toMatch(/top:\s*auto/);
+    expect(rail).toMatch(/left:\s*auto/);
+    expect(rail).toMatch(/transform:\s*none/);
+    expect(rail).toMatch(/width:\s*max-content/);
   });
 
   it('moves the mining bar off the crosshair', () => {
