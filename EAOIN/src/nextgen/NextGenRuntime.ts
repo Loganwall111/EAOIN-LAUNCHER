@@ -197,7 +197,7 @@ export class NextGenRuntime {
     this.fireworksUntil = performance.now() + 4500;
     for (let i = 0; i < 6; i += 1) {
       const ps = new ParticleSystem(`incredible_mode_fireworks_${i}`, 160, this.scene);
-      ps.particleTexture = new Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', this.scene);
+      ps.particleTexture = Texture.CreateFromBase64String('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'nextgenTex', this.scene);
       ps.emitter = new Vector3(spawn.x + i * 1.4 - 4, spawn.y + 7 + i * 0.5, spawn.z - 4);
       ps.minLifeTime = 0.35;
       ps.maxLifeTime = 1.4;
@@ -429,7 +429,7 @@ export class NextGenRuntime {
 
   private createSmoke(pos: Vector3): void {
     const ps = new ParticleSystem('nextgen_fire_smoke_particles', 500, this.scene);
-    ps.particleTexture = new Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', this.scene);
+    ps.particleTexture = Texture.CreateFromBase64String('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'smokeTex', this.scene);
     ps.emitter = pos.add(new Vector3(2, 1.5, 0));
     ps.minLifeTime = 1.4;
     ps.maxLifeTime = 4.4;

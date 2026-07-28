@@ -76,7 +76,7 @@ export class RealityRift {
     grd.addColorStop(0.7, `rgba(${Math.floor(def.color1.r * 255)},${Math.floor(def.color1.g * 255)},${Math.floor(def.color1.b * 255)},0.5)`);
     grd.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
-    return new Texture(c.toDataURL(), scene, true, false);
+    return Texture.CreateFromBase64String(c.toDataURL(), 'riftTex', scene, true, false);
   }
 
   update(dt: number, camera: Vector3): void {

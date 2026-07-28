@@ -57,7 +57,7 @@ export class BiomeVFX {
   }
 
   attach(): void {
-    this.texture = new Texture(DOT_TEXTURE, this.scene);
+    this.texture = Texture.CreateFromBase64String(DOT_TEXTURE, 'dot', this.scene);
     this.createFireflies();
     this.createButterflies();
     this.createPollen();
