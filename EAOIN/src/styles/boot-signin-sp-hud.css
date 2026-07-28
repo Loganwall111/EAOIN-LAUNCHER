@@ -1225,40 +1225,55 @@
 /* Clean up the HUD button row — make it more integrated */
 .hud-buttons {
   position: absolute;
-  top: 12px;
+  top: 74px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 3px;
+  flex-wrap: nowrap;
+  gap: 5px;
   pointer-events: auto;
   z-index: 30;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 3px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(12, 16, 24, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 4px 8px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  max-width: min(94vw, 860px);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .hud-btn {
-  padding: 5px 9px;
-  font: 700 8.5px 'Segoe UI', Arial, sans-serif;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font: 600 10.5px/1.2 var(--ui-font, 'Segoe UI', system-ui, -apple-system, sans-serif);
+  letter-spacing: 0.03em;
+  color: #e2ecf8;
+  text-shadow: none;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
   cursor: pointer;
-  transition: background 100ms, transform 80ms, color 100ms;
+  transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .hud-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-1px);
 }
 
 .hud-btn:active {
   transform: translateY(0);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Clean up hotbar strip */

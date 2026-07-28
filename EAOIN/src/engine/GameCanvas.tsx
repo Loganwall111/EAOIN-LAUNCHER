@@ -305,14 +305,27 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.settlement.z))}m • 1.0 advanced world`
         : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
 
-      const camera = new UniversalCamera('player_camera', new Vector3(spawn.x, spawn.y, spawn.z), scene);
-      // BUGFIX: explicitly set the active camera. Without this, Babylon can
-      // render a black screen on some browsers / GPUs because no camera is
-      // active even though one exists in the scene.
+      // BUGFIX: ensure the camera never spawns inside a block (such as a tree,
+      // structure, or leaves above groundY), which caused backface culling to
+      // trap the player in a completely black screen with only the HUD visible.
+      let safeSpawnY = spawn.y;
+      for (let y = 126; y >= 1; y--) {
+        const bid = terrain.getBlockAt(Math.floor(spawn.x), y, Math.floor(spawn.z));
+        if (bid !== 0 && bid !== 5) {
+          safeSpawnY = Math.max(safeSpawnY, y + 1.95);
+          break;
+        }
+      }
+
+      const camera = new UniversalCamera('player_camera', new Vector3(spawn.x, safeSpawnY, spawn.z), scene);
+      // BUGFIX: explicitly set both activeCamera and activeCameras array.
+      // Without this, Babylon.js can render a black screen on some browsers /
+      // GPUs because no camera is active even though one exists in the scene.
       scene.activeCamera = camera;
+      scene.activeCameras = [camera];
       camera.attachControl(canvas, true);
-      camera.setTarget(new Vector3(spawn.x + 8, spawn.y - 0.35, spawn.z + 8));
-      camera.minZ = 0.05; camera.maxZ = 1500;
+      camera.setTarget(new Vector3(spawn.x + 8, safeSpawnY - 0.35, spawn.z + 8));
+      camera.minZ = 0.1; camera.maxZ = 1500;
       camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
       camera.inertia = 0; camera.angularSensibility = 900; camera.applyGravity = false; camera.checkCollisions = true;
       camera.ellipsoid = new Vector3(0.32, 0.82, 0.32); camera.ellipsoidOffset = new Vector3(0, 0.82, 0);
@@ -442,12 +455,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // the depth buffer for reflections, contact shadows and AO. It is NOT
       // hardware RT and the UI says so; see ScreenSpaceRayTracing.ts.
       const rayTracer = new ScreenSpaceRayTracer(scene, camera);
-      rayTracer.configure({
-        quality: settingsRef.current.rayTracingQuality,
-        reflections: settingsRef.current.rayTracedReflections,
-        contactShadows: settingsRef.current.rayTracedShadows,
-        ambientOcclusion: settingsRef.current.rayTracedAO,
-      });
+      try {
+        rayTracer.configure({
+          quality: settingsRef.current.rayTracingQuality,
+          reflections: settingsRef.current.rayTracedReflections,
+          contactShadows: settingsRef.current.rayTracedShadows,
+          ambientOcclusion: settingsRef.current.rayTracedAO,
+        });
+      } catch (error) {
+        console.warn('[Render] Screen space RT failed to configure; disabling to keep world visible.', error);
+      }
       let lastRayTracingQuality = settingsRef.current.rayTracingQuality;
 
       // 2.0 — ONE atmosphere system owns the sky dome, celestial bodies,
@@ -697,7 +714,14 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
        * mode have stakes.
        */
       const respawnPlayer = (reason: string): string => {
-        const safeY = terrain.getHeightAt(spawn.x, spawn.z) + 2;
+        let safeY = terrain.getHeightAt(spawn.x, spawn.z) + 2;
+        for (let y = 126; y >= 1; y--) {
+          const bid = terrain.getBlockAt(Math.floor(spawn.x), y, Math.floor(spawn.z));
+          if (bid !== 0 && bid !== 5) {
+            safeY = Math.max(safeY, y + 1.95);
+            break;
+          }
+        }
         camera.position.set(spawn.x, safeY, spawn.z);
         velocityY = 0;
         fallStartY = safeY;
@@ -1561,9 +1585,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       window.addEventListener('eaoin-travel-dimension', handleTravelEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       reportLoadingProgress(76, 'Controls and gameplay systems wired', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
-      if (!renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
-        reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
-      }
+      // BUGFIX: The spawn chunks (INITIAL_CHUNK_RADIUS) are synchronously generated and
+      // meshed above, and gameplay controls are now wired. Mark the world ready immediately
+      // so WorldLoadingScreen never traps the player waiting for distant background chunks.
+      reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       let recoveredFromRenderError = false;
       let consecutiveRenderFailures = 0;
       engine.runRenderLoop(() => {
@@ -1777,8 +1802,8 @@ function updateWorldLighting(
   // Carried light: subtle outdoors in daylight, strong in caves and at night.
   if (playerPosition) lighting.playerLight.position.copyFrom(playerPosition);
   const nightNeed = 1 - frame.dayFactor;
-  lighting.playerLight.intensity = 0.22 + enclosure * 0.85 + nightNeed * 0.35;
-  lighting.playerLight.range = 12 + enclosure * 10;
+  lighting.playerLight.intensity = 0.28 + enclosure * 0.85 + nightNeed * 0.40;
+  lighting.playerLight.range = 14 + enclosure * 10;
 }
 
 /**
