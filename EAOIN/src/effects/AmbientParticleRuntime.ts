@@ -6,7 +6,7 @@ export class AmbientParticleRuntime {
 
   constructor(scene: Scene, spawn: SpawnPoint) {
     this.particles = new ParticleSystem('release_to_life_ambient_particles', 900, scene);
-    this.particles.particleTexture = new Texture('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', scene);
+    this.particles.particleTexture = Texture.CreateFromBase64String('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'particleTex', scene);
     this.particles.emitter = new Vector3(spawn.x, spawn.y + 8, spawn.z);
     this.particles.minEmitBox = new Vector3(-35, 0, -35);
     this.particles.maxEmitBox = new Vector3(35, 12, 35);

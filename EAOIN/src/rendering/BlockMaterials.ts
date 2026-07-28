@@ -125,6 +125,10 @@ function createMaterial(
       material.alphaCutOff = 0.35;
       material.backFaceCulling = false;
     }
+  } else {
+    texture.hasAlpha = false;
+    material.useAlphaFromDiffuseTexture = false;
+    material.transparencyMode = 0; // Material.MATERIAL_OPAQUE
   }
 
   return material;

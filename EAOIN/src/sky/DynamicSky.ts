@@ -141,7 +141,7 @@ export class DynamicSky {
 
   private makeStarTexture(): Texture {
     const size = 1024;
-    const tex = new Texture(this.dataURL(size), this.scene, true, false);
+    const tex = Texture.CreateFromBase64String(this.dataURL(size), 'starTex', this.scene, true, false);
     return tex;
   }
 
@@ -253,7 +253,7 @@ export class DynamicSky {
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
-    const tex = new Texture(c.toDataURL(), this.scene, true, false);
+    const tex = Texture.CreateFromBase64String(c.toDataURL(), 'cloudTex', this.scene, true, false);
     return tex;
   }
 
@@ -287,7 +287,7 @@ export class DynamicSky {
     grd.addColorStop(0.5, 'rgba(120,255,200,0.7)');
     grd.addColorStop(1, 'rgba(0,255,200,0)');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
-    return new Texture(c.toDataURL(), this.scene, true, false);
+    return Texture.CreateFromBase64String(c.toDataURL(), 'auroraTex', this.scene, true, false);
   }
 
   /* ----- Update ----- */

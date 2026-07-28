@@ -4,7 +4,7 @@
  * The existing architecture already owns chunk/block logic; this renderer is the
  * missing runtime bridge that turns that data into physical terrain.
  */
-import { Mesh, Scene, Vector3, VertexData, StandardMaterial } from '@babylonjs/core';
+import { Mesh, Scene, Vector3, VertexData } from '@babylonjs/core';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
 import { BlockMaterialMap, createMissingBlockMaterial } from './BlockMaterials';

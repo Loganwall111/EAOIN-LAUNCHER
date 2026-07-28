@@ -144,7 +144,7 @@ export class PortalInstance {
     grd.addColorStop(0.5, hex(def.color1) + '0.6)');
     grd.addColorStop(1, hex(def.color1) + '0)');
     ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
-    return new Texture(c.toDataURL(), scene, true, false);
+    return Texture.CreateFromBase64String(c.toDataURL(), 'portalTex', scene, true, false);
   }
 
   update(dt: number, camera: Vector3): void {

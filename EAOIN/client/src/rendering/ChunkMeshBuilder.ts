@@ -33,6 +33,7 @@
  *    air. It is now bounded by the chunk's highest occupied layer.
  */
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
+import { getBlock } from '@shared/blocks/BlockRegistry';
 
 export interface MeshData {
   vertices: Float32Array;
@@ -137,7 +138,14 @@ export class ChunkMeshBuilder {
 
           for (let face = 0; face < 6; face++) {
             const [dx, dy, dz] = FACE_NORMALS[face];
-            if (blockAt(x + dx, y + dy, z + dz) !== 0) continue; // hidden
+            const neighborId = blockAt(x + dx, y + dy, z + dz);
+            if (neighborId !== 0) {
+              const currentBlock = getBlock(block);
+              const neighborBlock = getBlock(neighborId);
+              if (neighborId === block || (!currentBlock.transparent && !neighborBlock.transparent)) {
+                continue; // hidden
+              }
+            }
 
             // Capture the base index BEFORE appending this face's vertices,
             // and build both triangles from those four vertices only.
