@@ -188,7 +188,9 @@ export class SettlementRuntime {
   }
 
   private groundPosition(worldX: number, worldZ: number): Vector3 {
-    const y = this.terrain.getHeightAt(Math.floor(worldX), Math.floor(worldZ)) + 1;
+    // Villagers stand on the real, post-carve surface. The analytic heightmap
+    // ignores caves and ravines, which left NPCs walking through the air.
+    const y = this.terrain.getSurfaceHeight(Math.floor(worldX), Math.floor(worldZ)) + 1;
     return new Vector3(worldX, y, worldZ);
   }
 

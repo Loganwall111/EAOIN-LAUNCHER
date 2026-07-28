@@ -641,7 +641,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const spawnAt = camera.position.add(
           new Vector3(forward.x, 0, forward.z).normalize().scale(14 + def.size.depth * 0.5)
         );
-        spawnAt.y = terrain.getHeightAt(spawnAt.x, spawnAt.z) + 1;
+        // Stand the boss on the real surface. `getHeightAt` is the pre-carve
+        // analytic height, so over a cave mouth it dropped the encounter into
+        // mid-air.
+        spawnAt.y = terrain.getSurfaceHeight(spawnAt.x, spawnAt.z) + 1;
 
         const boss = new BossEncounter(scene, def, spawnAt);
 

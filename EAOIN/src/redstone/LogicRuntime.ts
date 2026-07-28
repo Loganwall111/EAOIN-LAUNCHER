@@ -130,7 +130,7 @@ export class LogicRuntime {
   private createSignalRig(spawn: SpawnPoint): void {
     const baseX = Math.floor(spawn.x + 9);
     const baseZ = Math.floor(spawn.z + 2);
-    const groundY = this.terrain.getHeightAt(baseX, baseZ) + 1;
+    const groundY = this.terrain.getSurfaceHeight(baseX, baseZ) + 1;
 
     for (let i = 0; i < 5; i += 1) {
       const node = MeshBuilder.CreateBox(`logic_signal_wire_${i}`, { width: 0.8, height: 0.12, depth: 0.8 }, this.scene);
