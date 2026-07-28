@@ -254,35 +254,18 @@ export function enableSnapshotRenderingWhenReady(
   scene: Scene,
   settings: GameSettings
 ): void {
-  if (!isWebGpu(engine)) return;
-  // Snapshot rendering is a CPU-side optimisation for *largely static* scenes.
-  // EAOIN is the opposite: chunks stream in and out as you walk, creatures and
-  // the view model animate, and the celestial rig moves every frame. Each of
-  // those forces a bundle re-record, so the upside is small while the downside
-  // (a stale or empty bundle = an invisible world) is severe.
+  // Intentionally disabled for every preset.
   //
-  // It is therefore restricted to the explicit `performance` preset — a
-  // deliberate "I want maximum framerate" opt-in — instead of running on the
-  // default `balanced` preset where it previously blacked out the game for
-  // every WebGPU player.
-  if (settings.qualityPreset !== 'performance') return;
-
-  const webgpu = engine as WebGPUEngine;
-  scene.executeWhenReady(() => {
-    // executeWhenReady fires as soon as materials report ready; give the
-    // streamer a few more frames so the spawn chunks are in the bundle too.
-    let framesToSettle = 30;
-    const observer = scene.onAfterRenderObservable.add(() => {
-      if (framesToSettle-- > 0) return;
-      scene.onAfterRenderObservable.remove(observer);
-      try {
-        webgpu.snapshotRenderingMode = Constants.SNAPSHOTRENDERING_FAST;
-        webgpu.snapshotRendering = true;
-      } catch {
-        /* Non-fatal: the game renders fine without the optimisation. */
-      }
-    });
-  });
+  // Snapshot command bundles are only correct for a stable draw list. EAOIN
+  // continuously creates/disposes chunk meshes and swaps materials while the
+  // world streams. Resetting the bundle after each batch was still racy with
+  // async texture compilation: individual block groups could be absent from
+  // the newly recorded frame forever, producing the reported X-ray holes.
+  // Normal WebGPU submission is fast enough after the chunk/draw-distance
+  // fixes, and correctness is more important than this risky micro-optimisation.
+  void engine;
+  void scene;
+  void settings;
 }
 
 /**

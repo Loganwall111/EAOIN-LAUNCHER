@@ -15,6 +15,7 @@ export type BiomeID = 'Plains' | 'Forest' | 'Desert' | 'Highlands' | 'Lake' | 'M
 const WATER_LEVEL = 8;
 const SPAWN_GROUND_Y = 12;
 const BASE_GROUND = 18;
+const CHUNK_CACHE_LIMIT = 512;
 
 export class TerrainGenerator {
   private readonly chunks = new Map<string, Chunk>();
@@ -28,14 +29,18 @@ export class TerrainGenerator {
   }
 
   private getLayout(): ReturnType<typeof getWorldLayout> {
-    if (!this.cachedLayout) this.cachedLayout = getWorldLayout(this.seed, { x: 0.5, y: SPAWN_GROUND_Y + 1.95, z: 0.5 });
+    if (!this.cachedLayout) this.cachedLayout = getWorldLayout(this.seed, { x: 0.5, y: SPAWN_GROUND_Y + 1 + 1.62, z: 0.5 });
     return this.cachedLayout!;
   }
 
   generateChunk(cx: number, cz: number): Chunk {
     const key = this.chunkKey(cx, cz);
     const cached = this.chunks.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.chunks.delete(key);
+      this.chunks.set(key, cached);
+      return cached;
+    }
     const chunk = new Chunk(cx, cz, this.seed, { generate: false });
     this.applyHeightmapPass(chunk); // Minecraft-like solid overworld columns by default
     if (!this.floatingIslandsPreset) this.applyCavePass(chunk); // Regular main worlds keep caves underground, never sky islands
@@ -45,6 +50,10 @@ export class TerrainGenerator {
     this.applyObjectiveClearings(chunk);
     this.addDispersedLandmarks(chunk);
     this.applySavedEdits(chunk);
+    if (this.chunks.size >= CHUNK_CACHE_LIMIT) {
+      const oldest = this.chunks.keys().next().value as string | undefined;
+      if (oldest !== undefined) this.chunks.delete(oldest);
+    }
     this.chunks.set(key, chunk);
     return chunk;
   }
@@ -101,7 +110,7 @@ export class TerrainGenerator {
   getSpawnPoint(): SpawnPoint {
     const x = 0.5, z = 0.5;
     const groundY = this.getTerrainHeight(Math.floor(x), Math.floor(z));
-    return { x, y: groundY + 1.95, z };
+    return { x, y: groundY + 1 + 1.62, z };
   }
 
   // === NEW NOISE SYSTEM — Minecraft-like ===

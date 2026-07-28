@@ -58,7 +58,8 @@ export function createDefaultSettings(): GameSettings {
   return {
     muted: false,
     volume: 0.28,
-    showStats: true,
+    // Debug telemetry forces regular React updates; keep it opt-in during play.
+    showStats: false,
     showObjectives: true,
     highContrast: false,
     reducedMotion: false,
@@ -123,11 +124,14 @@ export function clampSettings(settings: GameSettings): GameSettings {
 }
 
 export function qualityRenderDistance(preset: QualityPreset): number {
-  // Increased render distance as requested — smooth terrain + bigger mountains visible far away
-  if (preset === 'performance') return 6; // was 2
-  if (preset === 'quality') return 12; // was 4
-  if (preset === 'cinematic') return 16; // was 5, now a lot more
-  return 8; // balanced was 3 -> 8
+  // Chunk count grows with the square of radius: radius 16 is 1,089 chunks,
+  // not "twice" radius 8's 289. Those old defaults kept generation running
+  // for minutes and created thousands of draw calls. These are still generous
+  // browser distances (up to 272 blocks across on cinematic) but are playable.
+  if (preset === 'performance') return 3;
+  if (preset === 'quality') return 6;
+  if (preset === 'cinematic') return 8;
+  return 4;
 }
 
 export function qualityCreatureMultiplier(preset: QualityPreset): number {

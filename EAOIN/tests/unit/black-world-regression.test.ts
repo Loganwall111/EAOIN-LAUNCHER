@@ -196,7 +196,7 @@ describe('WebGPU snapshot rendering is never armed before the scene can draw', (
     babylonEngine.dispose();
   });
 
-  it('DOES enable it on the performance preset, but only after the scene settles', () => {
+  it('stays off on performance because streamed meshes make snapshots unsafe', () => {
     const babylonEngine = new NullEngine();
     const scene = new Scene(babylonEngine);
     new FreeCamera('probe_camera', Vector3.Zero(), scene);
@@ -204,16 +204,11 @@ describe('WebGPU snapshot rendering is never armed before the scene can draw', (
     const settings = { ...createDefaultSettings(), qualityPreset: 'performance' as const };
 
     enableSnapshotRenderingWhenReady(fake as never, scene, settings);
-
-    // A couple of frames in it must still be off — the world is not settled.
-    scene.render();
-    scene.render();
-    expect(fake.snapshotRendering).toBe(false);
-
-    // After the settle window it may switch on, and only in FAST mode.
     for (let i = 0; i < 60; i += 1) scene.render();
-    expect(fake.snapshotRendering).toBe(true);
-    expect(fake.snapshotRenderingMode).toBe(1); // SNAPSHOTRENDERING_FAST
+
+    // A stale bundle can omit newly streamed block/material groups forever,
+    // which presents as X-ray holes despite the underlying voxels existing.
+    expect(fake.snapshotRendering).toBe(false);
 
     scene.dispose();
     babylonEngine.dispose();

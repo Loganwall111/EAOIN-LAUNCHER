@@ -146,7 +146,9 @@ describe('TerrainGenerator.getSpawnPoint', () => {
 
     expect(spawn.x).toBe(0.5);
     expect(spawn.z).toBe(0.5);
-    expect(spawn.y).toBeCloseTo(ground + 1.95, 5);
+    // Spawn Y is the camera/eye. Feet are 1.62 blocks below it and rest on
+    // the top face (ground + 1), matching the runtime collision controller.
+    expect(spawn.y).toBeCloseTo(ground + 1 + 1.62, 5);
 
     // Solid block underfoot, breathable space above, and never underwater.
     expect(generator.getBlockAt(0, ground, 0)).not.toBe(0);
@@ -177,8 +179,8 @@ describe('TerrainGenerator.getSpawnPoint', () => {
       ] as const) {
         const x = Math.floor(spawn.x);
         const z = Math.floor(spawn.z);
-        // Feet rest on the block below the spawn Y.
-        const ground = Math.floor(spawn.y) - 1;
+        // Camera Y is eye level; sample just beneath the feet to find support.
+        const ground = Math.floor(spawn.y - 1.62 - 0.01);
         expect(blockAt(x, ground, z), `${seed}/${label} ground`).not.toBe(0);
         expect(blockAt(x, ground, z), `${seed}/${label} not in water`).not.toBe(5);
         expect(blockAt(x, ground + 1, z), `${seed}/${label} body`).toBe(0);

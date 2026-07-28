@@ -108,12 +108,18 @@ export interface WorldGenConfig {
 export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
   seed: 'eaoin_seed_2026',
   seaLevel: 32,
-  worldDepth: 256,
+  // Chunk storage is 128 blocks tall. Keeping this at 256 made amplified
+  // height queries report ground that could never exist in the chunk, so
+  // creatures and structures floated over a clipped/invisible world.
+  worldDepth: CHUNK_HEIGHT,
   bedrockThickness: 4,
   continentScale: 0.0012,
   detailScale: 0.018,
   mountainIntensity: 1.4,
-  erosionIterations: 3,
+  // One wide smoothing pass gives the intended rounded ridges. Three passes
+  // multiplied raw height-noise work during every streamed chunk for little
+  // visible difference.
+  erosionIterations: 1,
   caveScale: 2,
   floatingIslands: false,
   skyIslands: false,
@@ -281,6 +287,12 @@ function columnKey(x: number, z: number): number {
 
 /** Max columns kept in the height caches (~a few MB at most). */
 const HEIGHT_CACHE_LIMIT = 262144;
+/**
+ * Generated chunks used to accumulate forever as the player explored. This is
+ * above the largest supported visible set (radius 10 = 441 chunks), leaving a
+ * safety ring while preventing an hours-long session consuming unbounded RAM.
+ */
+const CHUNK_CACHE_LIMIT = 512;
 
 export class AdvancedTerrainGenerator {
   private readonly chunks = new Map<string, Chunk>();
@@ -307,8 +319,13 @@ export class AdvancedTerrainGenerator {
   public readonly config: WorldGenConfig;
 
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
-    this.config = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
-    this.cachedLayout = getWorldLayout(this.config.seed, { x: 0.5, y: this.config.seaLevel + 1.95, z: 0.5 });
+    const merged = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
+    // This generator writes one 128-block-tall Chunk. A larger logical depth
+    // used to return heights above the actual storage ceiling, leaving a solid
+    // cut-off chunk while gameplay objects were positioned in empty air.
+    merged.worldDepth = Math.max(merged.bedrockThickness + 12, Math.min(CHUNK_HEIGHT, merged.worldDepth));
+    this.config = merged;
+    this.cachedLayout = getWorldLayout(this.config.seed, { x: 0.5, y: this.config.seaLevel + 2.62, z: 0.5 });
     this.noise = new AdvancedNoise(this.config.seed + ':continent');
     this.caveNoise = new AdvancedNoise(this.config.seed + ':cave');
     this.detailNoise = new AdvancedNoise(this.config.seed + ':detail');
@@ -329,7 +346,12 @@ export class AdvancedTerrainGenerator {
   generateChunk(cx: number, cz: number): Chunk {
     const key = this.chunkKey(cx, cz);
     const cached = this.chunks.get(key);
-    if (cached) return cached;
+    if (cached) {
+      // Refresh insertion order so active chunks stay in this small LRU.
+      this.chunks.delete(key);
+      this.chunks.set(key, cached);
+      return cached;
+    }
     const chunk = new Chunk(cx, cz, this.config.seed, { generate: false });
     if (this.config.floatingIslands || this.config.skyIslands) {
       this.fillSkyIslands(chunk);
@@ -340,7 +362,13 @@ export class AdvancedTerrainGenerator {
     // 2.0 — widen the underground into real caverns with their own biomes.
     // Strictly below the surface; the overworld terrain is untouched.
     if (!this.config.floatingIslands && !this.config.skyIslands) {
-      this.deepCaves.apply(chunk, (x, z) => this.getTerrainHeight(x, z));
+      this.deepCaves.apply(
+        chunk,
+        (x, z) => this.getTerrainHeight(x, z),
+        // Spawn is flattened and refilled later; carving/dressing it first was
+        // expensive throwaway work on every startup chunk.
+        (x, z) => Math.hypot(x, z) <= SPAWN_PROTECTED_RADIUS + 2
+      );
     }
     this.applyRavines(chunk);
     this.applySinkholes(chunk);
@@ -352,7 +380,11 @@ export class AdvancedTerrainGenerator {
     this.applySurfacePass(chunk);
     this.applyVegetation(chunk);
     this.applyStructures(chunk);
-    this.applyBedrockFoundation(chunk);
+    // Skylands must really have a void below their islands. The old
+    // unconditional foundation painted a walkable floor across y=0.
+    if (!this.config.floatingIslands && !this.config.skyIslands) {
+      this.applyBedrockFoundation(chunk);
+    }
     // 5.0 — the exotic presets that used to be config-only. These run after
     // bedrock so they can legitimately replace it: in a Sub-Bedrock world the
     // floor is no longer the end of the world.
@@ -364,6 +396,10 @@ export class AdvancedTerrainGenerator {
     this.applyPlayableSpawnPatch(chunk);
     this.applyObjectiveClearings(chunk);
     this.applySavedEdits(chunk);
+    if (this.chunks.size >= CHUNK_CACHE_LIMIT) {
+      const oldest = this.chunks.keys().next().value as string | undefined;
+      if (oldest !== undefined) this.chunks.delete(oldest);
+    }
     this.chunks.set(key, chunk);
     return chunk;
   }
@@ -529,21 +565,25 @@ export class AdvancedTerrainGenerator {
 
   private fillContinents(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      const surface = this.getTerrainHeight(wx, wz);
-      for (let y = 0; y < CHUNK_HEIGHT; y++) {
-        const id = this.pickColumnBlock(y, surface, wx, wz);
-        chunk.setBlock(lx, y, lz, id);
+      const surface = Math.min(CHUNK_HEIGHT - 1, this.getTerrainHeight(wx, wz));
+      // Chunks are born empty. Writing another ~90 AIR values per column was
+      // doing tens of thousands of redundant setBlock calls on the hottest
+      // startup path.
+      for (let y = 0; y <= surface; y++) {
+        chunk.setBlock(lx, y, lz, this.pickColumnBlock(y, surface, wx, wz));
       }
     });
   }
 
   private fillSkyIslands(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      const top = this.getFloatingIslandHeight(wx, wz);
+      const top = Math.min(CHUNK_HEIGHT - 1, this.getFloatingIslandHeight(wx, wz));
       const bottom = Math.max(this.config.bedrockThickness, top - (8 + Math.floor(this.noise.fbm2D(wx * 0.018, wz * 0.018, 3, 2.0, 0.5, 31) * 12)));
-      for (let y = 0; y < CHUNK_HEIGHT; y++) {
-        if (y < bottom) chunk.setBlock(lx, y, lz, BLOCK.AIR);
-        else if (y < top - 4) chunk.setBlock(lx, y, lz, BLOCK.STONE);
+      // Only the finite island body is solid. The previous `else` wrote grass
+      // from `top` all the way to y=127, turning every sky island into an
+      // upside-down solid column and making the intended void nonsensical.
+      for (let y = bottom; y <= top; y++) {
+        if (y < top - 4) chunk.setBlock(lx, y, lz, BLOCK.STONE);
         else if (y < top) chunk.setBlock(lx, y, lz, BLOCK.DIRT);
         else chunk.setBlock(lx, y, lz, BLOCK.GRASS);
       }
@@ -597,6 +637,8 @@ export class AdvancedTerrainGenerator {
     const cs = this.config.caveScale;
 
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
+      // This whole column is replaced by the safe spawn patch later.
+      if (Math.hypot(wx, wz) <= SPAWN_PROTECTED_RADIUS + 2) return;
       const surface = this.getTerrainHeight(wx, wz);
       // Regional mask: some areas are simply more caved than others, which is
       // what makes spelunking feel like finding something.
@@ -639,15 +681,15 @@ export class AdvancedTerrainGenerator {
         // majority of blocks. That halves the noise work on this path.
         const radius = radiusBase * falloff;
         const radiusSq = radius * radius;
-        const w1 = this.caveNoise.fbm3D(wx * 0.014, y * 0.026, wz * 0.014, 3, 2.0, 0.5, 1) - 0.5;
+        const w1 = this.caveNoise.fbm3D(wx * 0.014, y * 0.026, wz * 0.014, 2, 2.0, 0.5, 1) - 0.5;
         if (w1 * w1 < radiusSq) {
-          const w2 = this.caveNoise.fbm3D((wx + 211) * 0.014, y * 0.026, (wz - 503) * 0.014, 3, 2.0, 0.5, 2) - 0.5;
+          const w2 = this.caveNoise.fbm3D((wx + 211) * 0.014, y * 0.026, (wz - 503) * 0.014, 2, 2.0, 0.5, 2) - 0.5;
           if (w1 * w1 + w2 * w2 < radiusSq) hollow = true;
         }
 
         // --- cheese chambers ---------------------------------------------
         if (!hollow) {
-          const room = this.caveNoise.fbm3D(wx * 0.0075, y * 0.011, wz * 0.0075, 3, 2.0, 0.5, 3);
+          const room = this.caveNoise.fbm3D(wx * 0.0075, y * 0.011, wz * 0.0075, 2, 2.0, 0.5, 3);
           // High threshold => rare. Slightly easier to satisfy deeper down.
           if (room > roomBase - falloff * 0.07) hollow = true;
         }
@@ -1521,7 +1563,8 @@ export class AdvancedTerrainGenerator {
   getSpawnPoint(): SpawnPoint {
     const x = 0.5, z = 0.5;
     const groundY = this.getTerrainHeight(Math.floor(x), Math.floor(z));
-    return { x, y: groundY + 1.95, z };
+    // Camera.position is the eye, matching Minecraft's 1.62-block eye height.
+    return { x, y: groundY + 1 + 1.62, z };
   }
 
   /* ============= HELPERS ============= */

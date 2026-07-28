@@ -305,13 +305,18 @@ export class DeepCaveGenerator {
    * Called after the base terrain and the existing thin-tunnel cave pass, so it
    * only ever widens and decorates — it never touches the surface.
    */
-  apply(chunk: Chunk, getSurfaceHeight: (x: number, z: number) => number): void {
+  apply(
+    chunk: Chunk,
+    getSurfaceHeight: (x: number, z: number) => number,
+    skipColumn: (x: number, z: number) => boolean = () => false
+  ): void {
     const { bedrockThickness } = this.config;
 
     for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
       for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
         const wx = chunk.x * CHUNK_SIZE + lx;
         const wz = chunk.z * CHUNK_SIZE + lz;
+        if (skipColumn(wx, wz)) continue;
         const surface = getSurfaceHeight(wx, wz);
 
         // Available rock column, and the roof we must leave intact so the
@@ -363,7 +368,7 @@ export class DeepCaveGenerator {
             wx * 0.0125,
             y * 0.028,
             wz * 0.0125,
-            4,
+            3,
             2.0,
             0.5,
             77

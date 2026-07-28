@@ -124,10 +124,18 @@ const BLOCK_REACH = 7;
 const GRAVITY_BASE = -20;
 const JUMP_VELOCITY_BASE = 7.5;
 const TERMINAL_VELOCITY = -28;
+/** Minecraft-like player dimensions: camera position is the eye, not the body centre. */
+const PLAYER_EYE_HEIGHT = 1.62;
+const PLAYER_HEIGHT = 1.8;
+const PLAYER_HALF_HEIGHT = PLAYER_HEIGHT / 2;
+const PLAYER_COLLIDER_OFFSET_Y = PLAYER_HALF_HEIGHT - PLAYER_EYE_HEIGHT;
+const PLAYER_FOOTPRINT: ReadonlyArray<readonly [number, number]> = [
+  [0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22],
+];
 /** Chunks meshed synchronously before the first frame is presented. */
-const INITIAL_CHUNK_RADIUS = 2;
+const INITIAL_CHUNK_RADIUS = 1;
 /** Chunks generated + meshed per frame while streaming the render radius in. */
-const CHUNKS_PER_FRAME = 4;
+const CHUNKS_PER_FRAME = 1;
 /**
  * Wall-clock budget for chunk streaming per frame, in ms.
  *
@@ -319,7 +327,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       for (let y = 126; y >= 1; y--) {
         const bid = terrain.getBlockAt(Math.floor(spawn.x), y, Math.floor(spawn.z));
         if (bid !== 0 && bid !== 5) {
-          safeSpawnY = Math.max(safeSpawnY, y + 1.95);
+          safeSpawnY = Math.max(safeSpawnY, y + 1 + PLAYER_EYE_HEIGHT);
           break;
         }
       }
@@ -335,7 +343,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       camera.minZ = 0.1; camera.maxZ = 1500;
       camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
       camera.inertia = 0; camera.angularSensibility = 900; camera.applyGravity = false; camera.checkCollisions = true;
-      camera.ellipsoid = new Vector3(0.32, 0.82, 0.32); camera.ellipsoidOffset = new Vector3(0, 0.82, 0);
+      camera.ellipsoid = new Vector3(0.32, PLAYER_HALF_HEIGHT, 0.32);
+      // Babylon centres the collision ellipsoid at camera + offset. The old
+      // +0.82 offset put the entire collider above the player's eyes, allowing
+      // the camera itself to enter terrain; back-face culling then exposed the
+      // whole underground like X-ray vision.
+      camera.ellipsoidOffset = new Vector3(0, PLAYER_COLLIDER_OFFSET_Y, 0);
       camera.keysUp = [87, 38]; camera.keysDown = [83, 40]; camera.keysLeft = [65, 37]; camera.keysRight = [68, 39];
 
       const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
@@ -420,6 +433,19 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const initialLoadedChunks = Math.min(renderer.getStats().loadedChunks, startupChunkTotal);
       reportLoadingProgress(55, `Meshed spawn chunks ${Math.min(initialLoadedChunks, initialChunkTotal)}/${initialChunkTotal}`, false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       const lighting = configureSceneLighting(scene, spawn);
+      const configureTerrainShadow = (mesh: Mesh): void => {
+        const enabled = effectSettingsFor(effectTier).shadowsEnabled;
+        if (enabled) lighting.shadowGenerator.addShadowCaster(mesh, false);
+        else lighting.shadowGenerator.removeShadowCaster(mesh, false);
+        mesh.receiveShadows = enabled;
+      };
+      renderer.setMeshLifecycleHandlers(
+        configureTerrainShadow,
+        (mesh) => lighting.shadowGenerator.removeShadowCaster(mesh, false)
+      );
+      // Spawn chunks were meshed before the lighting rig existed; register
+      // those once. Future meshes go through the lifecycle hook directly.
+      renderer.forEachMesh(configureTerrainShadow);
 
       const glow = new GlowLayer('voxel_bloom', scene, { blurKernelSize: 64 });
       glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.22 : 0.08;
@@ -719,11 +745,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
        * mode have stakes.
        */
       const respawnPlayer = (reason: string): string => {
-        let safeY = terrain.getHeightAt(spawn.x, spawn.z) + 2;
+        let safeY = terrain.getHeightAt(spawn.x, spawn.z) + 1 + PLAYER_EYE_HEIGHT;
         for (let y = 126; y >= 1; y--) {
           const bid = terrain.getBlockAt(Math.floor(spawn.x), y, Math.floor(spawn.z));
           if (bid !== 0 && bid !== 5) {
-            safeY = Math.max(safeY, y + 1.95);
+            safeY = Math.max(safeY, y + 1 + PLAYER_EYE_HEIGHT);
             break;
           }
         }
@@ -806,14 +832,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const toggleFlightMode = (): void => setFlightMode(!flightEnabledRef.current);
       const handleFlightButton = (): void => toggleFlightMode();
       const isGroundedCheck = (pos: Vector3): boolean => {
-        const footY = Math.floor(pos.y - 0.84 - 0.08); const blockTop = footY + 1;
-        const checks: Array<[number, number]> = [[0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22]];
-        for (const [ox, oz] of checks) {
-          const bx = Math.floor(pos.x + ox); const bz = Math.floor(pos.z + oz);
-          const id = terrain.getBlockAt(bx, footY, bz);
-          if (id !== 0 && id !== 5) { if (pos.y - 0.84 >= blockTop - 0.15) return true; }
-          const idBelow = terrain.getBlockAt(bx, footY - 1, bz);
-          if (id !== 0 && idBelow !== 0 && id !== 5) { if (pos.y - 0.84 >= blockTop - 0.35 && pos.y - 0.84 <= blockTop + 0.25) return true; }
+        const feet = pos.y - PLAYER_EYE_HEIGHT;
+        const supportY = Math.floor(feet - 0.06);
+        const blockTop = supportY + 1;
+        // Reused immutable offsets: sample the centre and four edges of the
+        // collision footprint, just like a voxel character controller.
+        for (const [ox, oz] of PLAYER_FOOTPRINT) {
+          const bx = Math.floor(pos.x + ox);
+          const bz = Math.floor(pos.z + oz);
+          const id = terrain.getBlockAt(bx, supportY, bz);
+          if (id !== 0 && id !== 5 && feet >= blockTop - 0.16 && feet <= blockTop + 0.24) return true;
         }
         return false;
       };
@@ -834,8 +862,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             const map = shadowGenerator.getShadowMap();
             if (map) map.refreshRate = fx.shadowsEnabled ? 1 : 0;
             shadowGenerator.setDarkness(fx.shadowsEnabled ? 0.35 : 1);
+            // Tier changes are rare, so update the live caster set here once.
+            // Chunk streaming itself uses lifecycle hooks and never scans the
+            // whole scene per loaded chunk.
+            renderer.forEachMesh(configureTerrainShadow);
           }
           glow.intensity = fx.bloomEnabled ? 0.22 : 0.0;
+          glow.isEnabled = fx.bloomEnabled;
           if (pipeline) {
             pipeline.bloomEnabled = fx.bloomEnabled;
             pipeline.depthOfFieldEnabled = fx.depthOfFieldEnabled;
@@ -1208,7 +1241,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           if (Math.abs(velocityY) > 0.001) {
             tempVerticalMove.set(0, velocityY * deltaSeconds, 0);
             (camera as any).moveWithCollisions?.(tempVerticalMove);
-            if (!(camera as any).moveWithCollisions) { const nextY = camera.position.y + velocityY * deltaSeconds; const footId = terrain.getBlockAt(Math.floor(camera.position.x), Math.floor(nextY - 0.84), Math.floor(camera.position.z)); if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY; else velocityY = 0; }
+            if (!(camera as any).moveWithCollisions) {
+              const nextY = camera.position.y + velocityY * deltaSeconds;
+              const supportY = Math.floor(nextY - PLAYER_EYE_HEIGHT - 0.05);
+              const footId = terrain.getBlockAt(Math.floor(camera.position.x), supportY, Math.floor(camera.position.z));
+              if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY;
+              else {
+                camera.position.y = supportY + 1 + PLAYER_EYE_HEIGHT;
+                velocityY = 0;
+              }
+            }
           }
           if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
         }
@@ -1245,7 +1287,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           nextSurvival = { ...nextSurvival, stamina: survivalStatsRef.current.stamina + regained * hydrationTick.staminaScale };
         }
 
-        survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 8 === 0) publishSurvivalStats(nextSurvival);
+        survivalStatsRef.current = nextSurvival; survivalFrame += 1; if (survivalFrame % 12 === 0) publishSurvivalStats(nextSurvival);
 
         // --- death ------------------------------------------------------------
         // Health could previously reach zero and simply stay there: starving,
@@ -1260,7 +1302,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);
         const centerChanged = movedChunk.cx !== streamCenter.cx || movedChunk.cz !== streamCenter.cz;
         if (centerChanged) streamCenter = movedChunk;
-        if (centerChanged || renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius)) {
+        const visibleSetDirty = renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
+        // Fill startup every frame behind the loading cover. Once playable,
+        // spread generation across every third frame; the already-loaded
+        // radius gives several chunks of runway, while ordinary frames remain
+        // smooth instead of becoming one continuous generation hitch.
+        const shouldStreamThisFrame = centerChanged || !startupLoadingComplete || streamFrame % 3 === 0;
+        if (visibleSetDirty && shouldStreamThisFrame) {
           const result = renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, renderRadius,
             chunkSource.generateChunk,
@@ -1273,17 +1321,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             // The drawn mesh set changed, so a cached WebGPU command bundle
             // would be replaying stale draws. Force it to re-record.
             invalidateRenderSnapshot(engine);
-            try {
-              const sg = lighting.shadowGenerator;
-              const fx = effectSettingsFor(effectTier);
-              for (const m of scene.meshes) {
-                if (!m.name.startsWith('voxel_world_')) continue;
-                // Only register shadow casters when the tier actually draws
-                // shadows — the shadow map cost scales with caster count.
-                if (fx.shadowsEnabled) sg.addShadowCaster(m as Mesh, true);
-                (m as Mesh).receiveShadows = fx.shadowsEnabled;
-              }
-            } catch {}
+            // New/rebuilt terrain meshes update their own shadow membership
+            // through ChunkRenderManager's lifecycle hook. Do not rescan every
+            // mesh in the scene here — that made streaming O(n²).
           }
           if (!startupLoadingComplete) {
             const loadedVisibleChunks = Math.max(0, Math.min(startupChunkTotal, startupChunkTotal - result.pending));
@@ -1306,7 +1346,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           }
         }
         streamFrame += 1;
-        if (streamFrame % 12 === 0) {
+        if (streamFrame % 20 === 0) {
           logicRuntime.scanPlacedNetwork(camera.position); publishRuntimeStatus();
           const targetPick = scene.pickWithRay(camera.getForwardRay(BLOCK_REACH));
           const creatureId = targetPick?.pickedMesh?.metadata?.creatureId as string | undefined;
@@ -1315,10 +1355,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             const normal = targetPick.getNormal(true);
             if (normal) { normal.normalize(); const target = toBlockCoordinate(targetPick.pickedPoint.add(normal.scale(-0.01))); const blockId = terrain.getBlockAt(target.x, target.y, target.z); setTargetLabel(blockId === 0 ? '' : getBlock(blockId).name); }
           } else setTargetLabel('');
-          publishRenderStats();
+          if (settingsRef.current.showStats || settingsRef.current.showPerformanceOverlay) publishRenderStats();
         }
         positionFrame += 1;
-        if (positionFrame % 8 === 0) {
+        if (positionFrame % 15 === 0) {
           // Sync the in-world clock with the dynamic sky.
           const synced: WorldTimeState = { ...timeState, timeOfDay: atmosphere.timeOfDay };
           worldTimeRef.current = synced;
@@ -1626,15 +1666,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       window.addEventListener('eaoin-travel-dimension', handleTravelEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
-      reportLoadingProgress(76, 'Controls and gameplay systems wired', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
-      // BUGFIX: The spawn chunks (INITIAL_CHUNK_RADIUS) are synchronously generated and
-      // meshed above, and gameplay controls are now wired. Mark the world ready immediately
-      // so WorldLoadingScreen never traps the player waiting for distant background chunks.
-      reportLoadingProgress(100, `World ready — ${initialLoadedChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
-      // WebGPU snapshot rendering may only be armed once the scene can really
-      // draw. Doing it at engine-creation time recorded an empty command
-      // bundle and replayed it forever, which showed the HUD over a totally
-      // black world. See RendererBackend.enableSnapshotRenderingWhenReady().
+      reportLoadingProgress(76, 'Controls ready — finishing visible terrain', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
+      // Keep the loading cover up while the visible radius streams. Exposing
+      // gameplay after only the 3×3 spawn set made the still-missing outer
+      // chunks look like holes to the void. The frame-loop progress path above
+      // closes this as soon as the radius is complete, with an 18s hard cap so
+      // a slow device can never be trapped here.
+      // Kept as a compatibility call; the backend now deliberately leaves
+      // snapshot bundles disabled because a streaming voxel draw list is never
+      // stable enough to record safely.
       enableSnapshotRenderingWhenReady(engine, scene, settingsRef.current);
 
       /* ------------------------------------------------------------------ *
@@ -1843,7 +1883,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           <button className="world-action" onClick={resetSavedWorld}>RESET</button>
           <button className="world-action danger" onClick={onExit}>EXIT</button>
         </div>
-        {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 16 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
+        {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 8 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
       </div>
     </div>
   );

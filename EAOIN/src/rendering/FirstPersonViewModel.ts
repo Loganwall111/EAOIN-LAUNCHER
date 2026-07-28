@@ -88,7 +88,7 @@ export class FirstPersonViewModel {
     this.root = new TransformNode('first_person_root', scene);
     this.root.parent = camera;
     // Lower-right of the screen, angled inward, like every FPS view model.
-    this.root.position = new Vector3(0.42, -0.36, 0.62);
+    this.root.position = new Vector3(0.44, -0.28, 0.68);
 
     this.shoulder = new TransformNode('first_person_shoulder', scene);
     this.shoulder.parent = this.root;
@@ -99,16 +99,28 @@ export class FirstPersonViewModel {
     const skinMaterial = this.pixelMaterial('fp_skin', skin.skin, 'skin');
     const sleeveMaterial = this.pixelMaterial('fp_sleeve', skin.sleeve, 'sleeve');
 
-    // Minecraft's arm is a 4x12x4 cuboid. These proportions match, scaled to
-    // view-model size, with the sleeve covering the upper two thirds.
-    const upper = MeshBuilder.CreateBox('fp_arm_upper', { width: 0.16, height: 0.34, depth: 0.16 }, scene);
+    // Minecraft's arm is a 4×12×4 cuboid: exactly three times longer than it
+    // is wide/deep. Keep the two material sections perfectly contiguous so
+    // they read as one long rectangular arm, not two square boxes.
+    const armWidth = 0.20;
+    const sleeveHeight = 0.40;
+    const handHeight = 0.20;
+    const upper = MeshBuilder.CreateBox(
+      'fp_arm_upper',
+      { width: armWidth, height: sleeveHeight, depth: armWidth },
+      scene
+    );
     upper.parent = this.shoulder;
-    upper.position.y = -0.19;
+    upper.position.y = -sleeveHeight / 2;
     upper.material = sleeveMaterial;
 
-    const hand = MeshBuilder.CreateBox('fp_arm_hand', { width: 0.165, height: 0.15, depth: 0.165 }, scene);
+    const hand = MeshBuilder.CreateBox(
+      'fp_arm_hand',
+      { width: armWidth, height: handHeight, depth: armWidth },
+      scene
+    );
     hand.parent = this.shoulder;
-    hand.position.y = -0.43;
+    hand.position.y = -sleeveHeight - handHeight / 2;
     hand.material = skinMaterial;
 
     this.armMeshes.push(upper, hand);
@@ -122,7 +134,7 @@ export class FirstPersonViewModel {
 
     this.itemPivot = new TransformNode('first_person_item', scene);
     this.itemPivot.parent = this.shoulder;
-    this.itemPivot.position = new Vector3(0.02, -0.46, 0.06);
+    this.itemPivot.position = new Vector3(0.02, -0.59, 0.06);
   }
 
   /** Show or hide the whole view model (hidden in third person). */
@@ -196,9 +208,9 @@ export class FirstPersonViewModel {
     // made it look like a box sliding around the screen.
     this.shoulder.rotation.x = 0.32 - swingAmount * 1.25;
     this.shoulder.rotation.z = -0.14 + swingAmount * 0.22;
-    this.root.position.x = 0.42 + bobX - swingAmount * 0.05;
-    this.root.position.y = -0.36 - bobY + swingAmount * 0.03;
-    this.root.position.z = 0.62 + swingAmount * 0.10;
+    this.root.position.x = 0.44 + bobX - swingAmount * 0.05;
+    this.root.position.y = -0.28 - bobY + swingAmount * 0.03;
+    this.root.position.z = 0.68 + swingAmount * 0.10;
   }
 
   dispose(): void {
