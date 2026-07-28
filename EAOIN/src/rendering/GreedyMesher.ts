@@ -95,10 +95,19 @@ export function decodeSurfaceKey(key: SurfaceKey): { blockId: BlockID; variant: 
 /** Which of the 6 directions a face points, for variant selection. */
 export type FaceDirection = 'top' | 'bottom' | 'side';
 
+export interface GreedyMeshStats {
+  /** Unit block faces represented by the output, before rectangle merging. */
+  visibleFaces: number;
+  /** Quads left after greedy merging. */
+  mergedQuads: number;
+}
+
 export interface GreedyMeshOptions {
   sizeX: number;
   sizeY: number;
   sizeZ: number;
+  /** Optional zero-allocation stats sink populated during the existing sweep. */
+  stats?: GreedyMeshStats;
   /** Samples inside the chunk. */
   getBlock: BlockSampler;
   /**
@@ -173,6 +182,10 @@ export function greedyMesh(options: GreedyMeshOptions): Map<SurfaceKey, MeshBuff
   const aoEnabled = options.ambientOcclusion === true;
   const isOccluder = options.isOccluder ?? ((id: BlockID) => id !== 0);
   const faceVariantOf = options.faceVariantOf;
+  if (options.stats) {
+    options.stats.visibleFaces = 0;
+    options.stats.mergedQuads = 0;
+  }
 
   const groups = new Map<SurfaceKey, MeshBuffers>();
   const dims = [sizeX, sizeY, sizeZ];
@@ -217,6 +230,7 @@ export function greedyMesh(options: GreedyMeshOptions): Map<SurfaceKey, MeshBuff
           if (isFaceVisible(blockId, neighborId)) {
             mask[vi * uCount + ui] = blockId;
             anyFace = true;
+            if (options.stats) options.stats.visibleFaces += 1;
             if (aoEnabled) {
               aoMask[vi * uCount + ui] = packCornerAo(
                 axis, sign, slice, u, v, ui, vi, getNeighbor, isOccluder
@@ -262,6 +276,7 @@ export function greedyMesh(options: GreedyMeshOptions): Map<SurfaceKey, MeshBuff
             axis, sign, slice, u, v, ui, vi, width, height,
             offsetX, offsetZ, aoEnabled ? ao : null
           );
+          if (options.stats) options.stats.mergedQuads += 1;
 
           // Clear the consumed rectangle so it is not emitted again.
           for (let dv = 0; dv < height; dv += 1) {

@@ -107,10 +107,36 @@ export class ChunkRenderManager {
   private rebuildCount = 0;
   /** Greedy face merging. Kept switchable so the old path stays testable. */
   private greedyEnabled = true;
-  /** Baked contact shading. See `setAmbientOcclusion`. */
-  private ambientOcclusionEnabled = true;
+  /**
+   * Baked AO is optional. It samples twelve neighbouring voxels per face and
+   * prevents otherwise identical faces with different corner shades merging.
+   * The balanced runtime uses the much cheaper lighting fill by default.
+   */
+  private ambientOcclusionEnabled = false;
+  private lastBuildNaiveTriangles = 0;
+  private onMeshCreated: ((mesh: Mesh) => void) | null = null;
+  private onMeshDisposed: ((mesh: Mesh) => void) | null = null;
 
   constructor(private readonly scene: Scene, private readonly materials: BlockMaterialMap) {}
+
+  /**
+   * Hooks used by the lighting rig to maintain the shadow-caster list without
+   * rescanning every mesh in the scene after each streamed chunk.
+   */
+  setMeshLifecycleHandlers(
+    onCreated: ((mesh: Mesh) => void) | null,
+    onDisposed: ((mesh: Mesh) => void) | null = null
+  ): void {
+    this.onMeshCreated = onCreated;
+    this.onMeshDisposed = onDisposed;
+  }
+
+  /** Visit the currently live terrain meshes (used once when lighting starts). */
+  forEachMesh(visit: (mesh: Mesh) => void): void {
+    for (const chunkMeshes of this.meshes.values()) {
+      for (const mesh of chunkMeshes) visit(mesh);
+    }
+  }
 
   /** Toggle greedy meshing. Disabling forces the naive one-quad-per-face path. */
   setGreedyMeshing(enabled: boolean): void {
@@ -206,8 +232,13 @@ export class ChunkRenderManager {
     return { loaded, unloaded, pending: Math.max(0, missing.length - loaded) };
   }
 
-  /** True when the render radius around this center is fully meshed. */
+  /** True when the render radius around this center is not the exact live set. */
   hasPendingChunks(centerChunkX: number, centerChunkZ: number, radius: number): boolean {
+    const expected = (radius * 2 + 1) ** 2;
+    // Also catch surplus chunks after adaptive performance lowers the radius.
+    // The old check only looked for missing chunks, so a downgrade changed the
+    // HUD number but never disposed any of the expensive outer meshes.
+    if (this.chunks.size !== expected) return true;
     for (let cx = centerChunkX - radius; cx <= centerChunkX + radius; cx += 1) {
       for (let cz = centerChunkZ - radius; cz <= centerChunkZ + radius; cz += 1) {
         if (!this.chunks.has(this.key(cx, cz))) return true;
@@ -268,6 +299,7 @@ export class ChunkRenderManager {
     const groups = this.greedyEnabled
       ? this.buildGreedyGroups(chunk)
       : this.buildNaiveGroups(chunk);
+    const naiveTriangleCount = this.lastBuildNaiveTriangles;
 
     const chunkMeshes: Mesh[] = [];
     let triangleCount = 0;
@@ -319,12 +351,16 @@ export class ChunkRenderManager {
       mesh.material?.freeze();
 
       chunkMeshes.push(mesh);
+      this.onMeshCreated?.(mesh);
       triangleCount += data.indices.length / 3;
     }
 
     this.meshes.set(key, chunkMeshes);
     this.triangles.set(key, triangleCount);
-    this.naiveTriangles.set(key, this.countNaiveTriangles(chunk));
+    // Collected inside the mesher's existing visibility sweep. The previous
+    // implementation scanned all 32,768 voxels a second time only for a HUD
+    // statistic, nearly doubling rebuild work while chunks streamed.
+    this.naiveTriangles.set(key, naiveTriangleCount);
     this.rebuildCount += 1;
   }
 
@@ -332,11 +368,20 @@ export class ChunkRenderManager {
   private buildGreedyGroups(chunk: Chunk): Map<SurfaceKey, MutableMeshData> {
     const originX = chunk.x * CHUNK_SIZE;
     const originZ = chunk.z * CHUNK_SIZE;
+    const sizeY = chunk.getHighestOccupiedY() + 1;
+    const stats = { visibleFaces: 0, mergedQuads: 0 };
+    if (sizeY <= 0) {
+      this.lastBuildNaiveTriangles = 0;
+      return new Map();
+    }
 
-    return greedyMesh({
+    const groups = greedyMesh({
       sizeX: CHUNK_SIZE,
-      sizeY: CHUNK_HEIGHT,
+      // Most overworld chunks end around y=30-60. Sweeping all 128 layers in
+      // all six directions wasted the majority of meshing time on known air.
+      sizeY,
       sizeZ: CHUNK_SIZE,
+      stats,
       offsetX: originX,
       offsetZ: originZ,
       ambientOcclusion: this.ambientOcclusionEnabled,
@@ -360,33 +405,18 @@ export class ChunkRenderManager {
       // shadows itself into the unreadable black the player reported.
       isOccluder: (blockId) => blockId !== 0 && !getBlock(blockId).transparent,
     }) as Map<SurfaceKey, MutableMeshData>;
+    this.lastBuildNaiveTriangles = stats.visibleFaces * 2;
+    return groups;
   }
 
   /** The original one-quad-per-face path, kept for comparison and fallback. */
   private buildNaiveGroups(chunk: Chunk): Map<SurfaceKey, MutableMeshData> {
     const groups = new Map<SurfaceKey, MutableMeshData>();
     this.appendChunkFaces(chunk, groups);
+    let triangles = 0;
+    for (const data of groups.values()) triangles += data.indices.length / 3;
+    this.lastBuildNaiveTriangles = triangles;
     return groups;
-  }
-
-  /** How many triangles the naive mesher would emit, for the savings stat. */
-  private countNaiveTriangles(chunk: Chunk): number {
-    let faces = 0;
-    for (let x = 0; x < CHUNK_SIZE; x += 1) {
-      for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
-        for (let z = 0; z < CHUNK_SIZE; z += 1) {
-          const blockId = chunk.getBlock(x, y, z);
-          if (blockId === 0) continue;
-          const worldX = chunk.x * CHUNK_SIZE + x;
-          const worldZ = chunk.z * CHUNK_SIZE + z;
-          for (let faceIndex = 0; faceIndex < FACE_OFFSETS.length; faceIndex += 1) {
-            const [dx, dy, dz] = FACE_OFFSETS[faceIndex];
-            if (this.shouldDrawFace(blockId, worldX + dx, y + dy, worldZ + dz)) faces += 1;
-          }
-        }
-      }
-    }
-    return faces * 2;
   }
 
   private disposeChunk(cx: number, cz: number): void {
@@ -401,6 +431,7 @@ export class ChunkRenderManager {
       // Materials are shared between chunks, so unfreeze before disposing the
       // mesh — a frozen material on a disposed mesh leaks its cached effect.
       for (const mesh of existing) {
+        this.onMeshDisposed?.(mesh);
         mesh.material?.unfreeze();
         mesh.dispose();
       }
@@ -411,8 +442,9 @@ export class ChunkRenderManager {
   }
 
   private appendChunkFaces(chunk: Chunk, groups: Map<SurfaceKey, MutableMeshData>): void {
+    const height = chunk.getHighestOccupiedY() + 1;
     for (let x = 0; x < CHUNK_SIZE; x += 1) {
-      for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
+      for (let y = 0; y < height; y += 1) {
         for (let z = 0; z < CHUNK_SIZE; z += 1) {
           const blockId = chunk.getBlock(x, y, z);
           if (blockId === 0) continue;

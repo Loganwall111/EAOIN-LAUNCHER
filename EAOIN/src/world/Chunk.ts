@@ -21,7 +21,17 @@ export class Chunk {
   public readonly x: number;
   public readonly z: number;
   public readonly seed: string;
-  private blocks: Uint8Array;
+  /**
+   * Block ids run through 302, so an 8-bit array is not large enough.
+   *
+   * The old Uint8Array silently wrapped id 256 to AIR, 257 to GRASS, etc. That
+   * made many creative blocks disappear as soon as they were placed and was a
+   * direct cause of apparently X-rayed holes in otherwise solid terrain.
+   */
+  private blocks: Uint16Array;
+  /** Number of non-air voxels on each Y layer, used to bound mesh sweeps. */
+  private readonly occupiedPerLayer = new Uint16Array(CHUNK_HEIGHT);
+  private highestOccupiedY = -1;
   public modified = false;
   public meshDirty = true;
 
@@ -29,7 +39,7 @@ export class Chunk {
     this.x = x;
     this.z = z;
     this.seed = seed;
-    this.blocks = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
+    this.blocks = new Uint16Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
     if (options.generate !== false) this.generate();
   }
 
@@ -45,11 +55,30 @@ export class Chunk {
   setBlock(x: number, y: number, z: number, block: BlockID): void {
     if (x < 0 || x >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE || y < 0 || y >= CHUNK_HEIGHT) return;
     const i = this.index(x, y, z);
-    if (this.blocks[i] !== block) {
+    const previous = this.blocks[i];
+    if (previous !== block) {
       this.blocks[i] = block;
+
+      if (previous === 0 && block !== 0) {
+        this.occupiedPerLayer[y] += 1;
+        if (y > this.highestOccupiedY) this.highestOccupiedY = y;
+      } else if (previous !== 0 && block === 0) {
+        this.occupiedPerLayer[y] -= 1;
+        if (y === this.highestOccupiedY && this.occupiedPerLayer[y] === 0) {
+          while (this.highestOccupiedY >= 0 && this.occupiedPerLayer[this.highestOccupiedY] === 0) {
+            this.highestOccupiedY -= 1;
+          }
+        }
+      }
+
       this.modified = true;
       this.meshDirty = true;
     }
+  }
+
+  /** Highest Y containing any non-air voxel, or -1 for an empty chunk. */
+  getHighestOccupiedY(): number {
+    return this.highestOccupiedY;
   }
 
   isSolid(x: number, y: number, z: number): boolean {

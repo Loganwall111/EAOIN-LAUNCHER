@@ -25,9 +25,9 @@ import type { BlockID } from '../../shared/src/blocks/BlockRegistry';
 
 /** A little voxel volume backed by a flat array, for deterministic tests. */
 class TestVolume {
-  readonly data: Uint8Array;
+  readonly data: Uint16Array;
   constructor(readonly sx: number, readonly sy: number, readonly sz: number) {
-    this.data = new Uint8Array(sx * sy * sz);
+    this.data = new Uint16Array(sx * sy * sz);
   }
   idx(x: number, y: number, z: number): number {
     return x + this.sx * (z + this.sz * y);
@@ -215,6 +215,15 @@ describe('GreedyMesher — correctness', () => {
     const maxU = Math.max(...buffers.uvs.filter((_, i) => i % 2 === 0));
     expect(maxU).toBe(8);
   });
+
+  it('keeps block ids above 255 as visible material groups', () => {
+    const volume = new TestVolume(1, 1, 1);
+    volume.set(0, 0, 0, 302);
+    const groups = meshVolume(volume);
+
+    expect(groups.has(302 as BlockID)).toBe(true);
+    expect(countTriangles(groups)).toBe(12);
+  });
 });
 
 describe('GreedyMesher — the actual speedup', () => {
@@ -287,14 +296,15 @@ describe('AdaptivePerformance', () => {
   });
 
   it('drops resolution before it drops view distance', () => {
+    const startingDistance = BUDGET_PRESETS.balanced.maxRenderDistance;
     const tuner = new AdaptivePerformance(BUDGET_PRESETS.balanced, {
-      renderScale: 1.0, renderDistance: 12, effectTier: 'high',
+      renderScale: 1.0, renderDistance: startingDistance, effectTier: 'high',
     });
     runAt(tuner, 40, 1.2);
     const after = tuner.getState();
     // Resolution is the least intrusive dial, so it must move first.
     expect(after.renderScale).toBeLessThan(1.0);
-    expect(after.renderDistance).toBe(12);
+    expect(after.renderDistance).toBe(startingDistance);
   });
 
   it('restores quality after sustained headroom', () => {

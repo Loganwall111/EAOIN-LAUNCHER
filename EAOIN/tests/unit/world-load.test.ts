@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import AdvancedTerrainGenerator from '../../src/world/AdvancedTerrainGenerator';
 import { ChunkRenderManager } from '../../src/rendering/ChunkRenderManager';
+import { Chunk } from '../../src/world/Chunk';
 
 /**
  * Regression tests for the "black screen on entering the main world" bug.
@@ -39,6 +40,31 @@ describe('main world load', () => {
     }
   });
 
+  it('never reports terrain above the 128-block chunk storage ceiling', () => {
+    const terrain = new AdvancedTerrainGenerator({ seed: 'amplified__height-limit', mountainIntensity: 2.6, worldDepth: 256 });
+    for (let x = -512; x <= 512; x += 32) {
+      for (let z = -512; z <= 512; z += 32) {
+        expect(terrain.getTerrainHeight(x, z)).toBeLessThan(128);
+      }
+    }
+  });
+
+  it('keeps skylands air above islands and preserves the void below', () => {
+    const terrain = new AdvancedTerrainGenerator({
+      seed: 'skylands__void-regression', floatingIslands: true, skyIslands: true,
+    });
+    const chunk = terrain.generateChunk(8, 8);
+
+    // The broken fill loop painted grass from each island top through y=127,
+    // and the foundation pass then painted a floor across y=0.
+    for (let x = 0; x < 16; x += 1) {
+      for (let z = 0; z < 16; z += 1) {
+        expect(chunk.getBlock(x, 127, z)).toBe(0);
+        expect(chunk.getBlock(x, 0, z)).toBe(0);
+      }
+    }
+  });
+
   it('streams the render radius incrementally instead of in one blocking burst', () => {
     const terrain = new AdvancedTerrainGenerator({ seed: 'streaming' });
     const manager = new ChunkRenderManager({} as never, new Map() as never);
@@ -63,5 +89,20 @@ describe('main world load', () => {
     expect(manager.getStats().loadedChunks).toBe(total);
     expect(frames).toBeGreaterThanOrEqual(total / budget);
     expect(first.pending).toBe(0);
+  });
+
+  it('actually unloads outer meshes when adaptive render distance drops', () => {
+    const manager = new ChunkRenderManager({} as never, new Map() as never);
+    (manager as unknown as { rebuildChunk(cx: number, cz: number): void }).rebuildChunk = () => {};
+    const generate = (cx: number, cz: number) => new Chunk(cx, cz, 'radius-drop');
+
+    manager.updateVisibleChunks(0, 0, 2, generate);
+    expect(manager.getStats().loadedChunks).toBe(25);
+    expect(manager.hasPendingChunks(0, 0, 1)).toBe(true);
+
+    const result = manager.updateVisibleChunks(0, 0, 1, generate);
+    expect(result.unloaded).toBe(16);
+    expect(manager.getStats().loadedChunks).toBe(9);
+    expect(manager.hasPendingChunks(0, 0, 1)).toBe(false);
   });
 });

@@ -76,25 +76,25 @@ export const BUDGET_PRESETS: Record<string, PerformanceBudget> = {
   performance: {
     targetFps: 60,
     minRenderScale: 0.5, maxRenderScale: 1.0,
-    minRenderDistance: 4, maxRenderDistance: 8,
+    minRenderDistance: 2, maxRenderDistance: 4,
     minEffectTier: 'minimal', maxEffectTier: 'medium',
   },
   balanced: {
     targetFps: 60,
     minRenderScale: 0.62, maxRenderScale: 1.0,
-    minRenderDistance: 5, maxRenderDistance: 12,
+    minRenderDistance: 3, maxRenderDistance: 6,
     minEffectTier: 'low', maxEffectTier: 'high',
   },
   quality: {
     targetFps: 50,
     minRenderScale: 0.72, maxRenderScale: 1.0,
-    minRenderDistance: 6, maxRenderDistance: 16,
+    minRenderDistance: 4, maxRenderDistance: 8,
     minEffectTier: 'medium', maxEffectTier: 'ultra',
   },
   cinematic: {
     targetFps: 40,
     minRenderScale: 0.8, maxRenderScale: 1.0,
-    minRenderDistance: 8, maxRenderDistance: 20,
+    minRenderDistance: 6, maxRenderDistance: 10,
     minEffectTier: 'high', maxEffectTier: 'ultra',
   },
 };
@@ -327,8 +327,11 @@ const EFFECT_SETTINGS: Record<EffectTier, EffectSettings> = {
     ssaoEnabled: false, particleScale: 0.45, cloudScale: 0.55, samples: 1, creatureScale: 0.7,
   },
   medium: {
-    shadowsEnabled: true, shadowMapSize: 1024, bloomEnabled: true, depthOfFieldEnabled: false,
-    ssaoEnabled: false, particleScale: 0.75, cloudScale: 0.8, samples: 2, creatureScale: 1.0,
+    // Dynamic shadows duplicate-draw every terrain mesh into a shadow map.
+    // Reserve that cost for explicit High/Ultra; directional + hemispheric
+    // lighting still gives Balanced clear Minecraft-style face shading.
+    shadowsEnabled: false, shadowMapSize: 1024, bloomEnabled: true, depthOfFieldEnabled: false,
+    ssaoEnabled: false, particleScale: 0.75, cloudScale: 0.8, samples: 1, creatureScale: 1.0,
   },
   high: {
     shadowsEnabled: true, shadowMapSize: 2048, bloomEnabled: true, depthOfFieldEnabled: false,
