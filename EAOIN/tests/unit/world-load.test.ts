@@ -126,3 +126,125 @@ describe('main world load', () => {
     expect(manager.hasPendingChunks(0, 0, 1)).toBe(false);
   });
 });
+
+/* ========================================================================== *
+ * STALE MESH GEOMETRY AFTER A CROSS-CHUNK WRITE
+ *
+ * `AdvancedTerrainGenerator.spillBlock` routes decoration that overhangs a
+ * chunk border (a tree canopy, a ruin) into the neighbour that owns it. When
+ * that neighbour is already built it is edited in place and flagged with
+ * `chunk.meshDirty = true`.
+ *
+ * Nothing ever read that flag. The voxels existed in the array but their
+ * geometry was never uploaded, so the decoration was invisible and any face it
+ * should have hidden stayed exposed. Measured while streaming a forest at
+ * radius 3: two of 49 chunks finished dirty with 12 faces missing.
+ *
+ * `updateVisibleChunks` now sweeps the live set for `meshDirty` chunks, and
+ * `rebuildChunk` clears the flag as it meshes.
+ * ========================================================================== */
+
+describe('mesh invalidation after cross-chunk decoration writes', () => {
+  /** A manager whose GPU upload is stubbed out, tracking rebuilds. */
+  const makeManager = () => {
+    const manager = new ChunkRenderManager({} as never, new Map() as never);
+    const internals = manager as unknown as {
+      chunks: Map<string, Chunk>;
+      rebuildChunk(cx: number, cz: number): void;
+      key(cx: number, cz: number): string;
+    };
+    let rebuilds = 0;
+    internals.rebuildChunk = (cx: number, cz: number) => {
+      const chunk = internals.chunks.get(internals.key(cx, cz));
+      if (!chunk) return;
+      rebuilds += 1;
+      // Mirrors the real rebuild: meshing the chunk consumes its dirty flag.
+      chunk.meshDirty = false;
+    };
+    return { manager, internals, rebuilds: () => rebuilds };
+  };
+
+  const streamUntilSettled = (
+    manager: ChunkRenderManager,
+    radius: number,
+    generate: (cx: number, cz: number) => Chunk
+  ) => {
+    let guard = 0;
+    do {
+      manager.updateVisibleChunks(0, 0, radius, generate, { budget: 1 });
+    } while (manager.hasPendingChunks(0, 0, radius) && (guard += 1) < 500);
+  };
+
+  it('leaves no chunk dirty once streaming settles', () => {
+    // A forced forest maximises canopy overhang across chunk borders.
+    const terrain = new AdvancedTerrainGenerator({ seed: 'canopy-spill', forcedBiome: 'forest' });
+    const { manager, internals } = makeManager();
+
+    streamUntilSettled(manager, 3, (cx, cz) => terrain.generateChunk(cx, cz));
+
+    let stillDirty = 0;
+    for (const chunk of internals.chunks.values()) if (chunk.meshDirty) stillDirty += 1;
+
+    expect(internals.chunks.size).toBe(49);
+    expect(stillDirty).toBe(0);
+  });
+
+  it('clears the dirty flag as part of the real rebuild', () => {
+    // Exercises the PRODUCTION `rebuildChunk`, not a stub, so the flag clear
+    // is genuinely covered. Without it the sweep above would re-mesh every
+    // chunk on every frame for the rest of the session.
+    //
+    // An empty chunk meshes to zero geometry, so `rebuildChunk` returns before
+    // it touches Babylon and needs no live GPU scene.
+    const manager = new ChunkRenderManager({} as never, new Map() as never);
+    const internals = manager as unknown as {
+      chunks: Map<string, Chunk>;
+      rebuildChunk(cx: number, cz: number): void;
+      key(cx: number, cz: number): string;
+    };
+
+    const chunk = new Chunk(4, -2, 'flag-clear', { generate: false });
+    expect(chunk.meshDirty).toBe(true);
+    internals.chunks.set(internals.key(4, -2), chunk);
+
+    internals.rebuildChunk(4, -2);
+
+    expect(chunk.meshDirty).toBe(false);
+  });
+
+  it('does not re-mesh settled chunks on every subsequent frame', () => {
+    // End-to-end guard on the same property: once streaming settles, an idle
+    // player must pay nothing. The stub mirrors production by consuming the
+    // flag, so this fails if the sweep ever stops being self-limiting.
+    const terrain = new AdvancedTerrainGenerator({ seed: 'canopy-spill', forcedBiome: 'forest' });
+    const { manager, rebuilds } = makeManager();
+
+    streamUntilSettled(manager, 3, (cx, cz) => terrain.generateChunk(cx, cz));
+
+    const settled = rebuilds();
+    for (let frame = 0; frame < 5; frame += 1) {
+      manager.updateVisibleChunks(0, 0, 3, (cx, cz) => terrain.generateChunk(cx, cz), { budget: 1 });
+    }
+    expect(rebuilds() - settled).toBe(0);
+  });
+
+  it('rebuilds a chunk that is edited after it was already meshed', () => {
+    // The direct mechanism, isolated from world generation.
+    const { manager, internals, rebuilds } = makeManager();
+    const generate = (cx: number, cz: number) => new Chunk(cx, cz, 'dirty-sweep');
+
+    streamUntilSettled(manager, 1, generate);
+    const settled = rebuilds();
+
+    // Simulate a neighbour spilling a canopy voxel into an already-built chunk.
+    const victim = internals.chunks.get(internals.key(1, 0));
+    expect(victim).toBeDefined();
+    victim!.setBlock(0, 40, 0, 7);
+    expect(victim!.meshDirty).toBe(true);
+
+    manager.updateVisibleChunks(0, 0, 1, generate, { budget: 1 });
+
+    expect(rebuilds()).toBeGreaterThan(settled);
+    expect(victim!.meshDirty).toBe(false);
+  });
+});
