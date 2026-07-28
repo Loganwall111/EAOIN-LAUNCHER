@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { GAME_MODES, GameMode } from '../modes/GameMode';
 import { GameAudio } from '../audio/GameAudio';
 import { AmbienceEngine } from '../audio/AmbienceEngine';
-import { seedForWorldType, WORLD_TYPES, WorldTypeID } from '../world/WorldTypes';
+import { baseSeed, seedForWorldType, WORLD_TYPES, worldTypeFromSeed, WorldTypeID } from '../world/WorldTypes';
 
 interface MainMenuProps {
   onStart: (seed?: string, mode?: GameMode) => void;
@@ -43,12 +43,17 @@ const MODE_BACKGROUNDS: Record<GameMode, { label: string; gradient: string; emoj
 function loadWorlds(defaultSeed: string): WorldEntry[] {
   try {
     const raw = localStorage.getItem('eaoin_worlds');
-    if (raw) return JSON.parse(raw) as WorldEntry[];
+    if (raw) {
+      return (JSON.parse(raw) as WorldEntry[]).map((world) => ({
+        ...world,
+        worldType: world.worldType ?? worldTypeFromSeed(world.seed),
+      }));
+    }
   } catch {}
   return [
-    { id: 'world_1', name: 'New World', seed: defaultSeed, mode: 'survival', lastPlayed: new Date().toLocaleString(), size: '42 MB', growth: '184 chunks explored • 12h played', icon: '🌍', cheats: false, mods: false },
-    { id: 'world_2', name: 'Creative Flat', seed: 'flat_' + defaultSeed.slice(0, 6), mode: 'creative', lastPlayed: 'Yesterday', size: '18 MB', growth: '92 chunks • 3h', icon: '🏗️', cheats: true, mods: true },
-    { id: 'world_3', name: 'Incredible Rare', seed: 'incredible_mcdonalds_' + defaultSeed.slice(0, 4), mode: 'incredible', lastPlayed: '2 days ago', size: '89 MB', growth: '412 chunks • 28h', icon: '🍔', cheats: true, mods: true },
+    { id: 'world_1', name: 'New World', seed: defaultSeed, mode: 'survival', lastPlayed: new Date().toLocaleString(), size: '42 MB', growth: '184 chunks explored • 12h played', icon: '🌍', cheats: false, mods: false, worldType: worldTypeFromSeed(defaultSeed) },
+    { id: 'world_2', name: 'Creative Flat', seed: 'flat_' + defaultSeed.slice(0, 6), mode: 'creative', lastPlayed: 'Yesterday', size: '18 MB', growth: '92 chunks • 3h', icon: '🏗️', cheats: true, mods: true, worldType: 'flat' },
+    { id: 'world_3', name: 'Incredible Rare', seed: 'incredible_mcdonalds_' + defaultSeed.slice(0, 4), mode: 'incredible', lastPlayed: '2 days ago', size: '89 MB', growth: '412 chunks • 28h', icon: '🍔', cheats: true, mods: true, worldType: 'default' },
   ];
 }
 
@@ -120,7 +125,11 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
 
   const handleEditSave = () => {
     if (!editWorld) return;
-    setWorlds(w => w.map(x => x.id === editWorld.id ? { ...editWorld, lastPlayed: new Date().toLocaleString() } : x));
+    const worldType = editWorld.worldType ?? worldTypeFromSeed(editWorld.seed);
+    const retaggedSeed = seedForWorldType(baseSeed(editWorld.seed), worldType);
+    setWorlds(w => w.map(x => x.id === editWorld.id
+      ? { ...editWorld, seed: retaggedSeed, worldType, lastPlayed: new Date().toLocaleString() }
+      : x));
     setView('list');
   };
 
@@ -149,7 +158,7 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
         </div>
         <div className="sp-header-actions">
           <button className="sp-create-btn" onClick={() => {
-            setCreateForm({ id: '', name: `New World ${worlds.length + 1}`, seed: 'seed_' + Math.random().toString(36).slice(2, 8), mode: 'survival', lastPlayed: 'Now', size: '0 MB', growth: '0 chunks', icon: '🌍', cheats: false, mods: false });
+            setCreateForm({ id: '', name: `New World ${worlds.length + 1}`, seed: 'seed_' + Math.random().toString(36).slice(2, 8), mode: 'survival', lastPlayed: 'Now', size: '0 MB', growth: '0 chunks', icon: '🌍', cheats: false, mods: false, worldType: 'default' });
             setView('create');
           }}>
             + Create New World
@@ -201,7 +210,15 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                     </span>
                   </div>
                   <div className="sp-world-actions">
-                    <button className="sp-action-btn edit" title="Edit" onClick={e => { e.stopPropagation(); setEditWorld({ ...w }); setView('edit'); }}>✎</button>
+                    <button className="sp-action-btn edit" title="Edit" onClick={e => {
+                      e.stopPropagation();
+                      setEditWorld({
+                        ...w,
+                        seed: baseSeed(w.seed),
+                        worldType: w.worldType ?? worldTypeFromSeed(w.seed),
+                      });
+                      setView('edit');
+                    }}>✎</button>
                     <button className="sp-action-btn delete" title="Delete" onClick={e => { e.stopPropagation(); handleDeleteWorld(w.id); }}>✕</button>
                   </div>
                 </div>
@@ -340,8 +357,8 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                   {WORLD_TYPES.map(type => (
                     <button
                       key={type.id}
-                      className={`sp-type-card ${createForm.worldType === type.id ? 'selected' : ''}`}
-                      onClick={() => setCreateForm({ ...createForm, worldType: type.id })}
+                      className={`sp-type-card ${editWorld.worldType === type.id ? 'selected' : ''}`}
+                      onClick={() => setEditWorld({ ...editWorld, worldType: type.id })}
                       title={type.detail}
                     >
                       <span className="sp-type-preview" style={{ background: type.preview }} />
@@ -353,9 +370,9 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                     </button>
                   ))}
                 </div>
-                {createForm.worldType && (
+                {editWorld.worldType && (
                   <p className="sp-type-detail">
-                    {WORLD_TYPES.find(t => t.id === createForm.worldType)?.detail}
+                    {WORLD_TYPES.find(t => t.id === editWorld.worldType)?.detail}
                   </p>
                 )}
               </div>

@@ -27,7 +27,14 @@ import { BreakOverlay } from '../rendering/BreakOverlay';
 import { FirstPersonViewModel } from '../rendering/FirstPersonViewModel';
 import { applyRenderScale, createRuntimeEngine, enableSnapshotRenderingWhenReady, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
 import { DimensionChunkSource } from './DimensionChunkSource';
-import { AdaptivePerformance, BUDGET_PRESETS, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
+import { AdaptivePerformance, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
+import {
+  adaptiveBudgetForSettings,
+  adaptiveBudgetKey,
+  effectTierForQualityPreset,
+  rayTracingSettingsKey,
+  shouldEnableAtmosphereParticles,
+} from './GameCanvasConfig';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
@@ -37,7 +44,7 @@ import AdvancedTerrainGenerator, { FLOATING_ISLANDS_CONFIG } from '../world/Adva
 import { FloatingIslandsGenerator } from '../world/FloatingIslands';
 import { AdvancedPhysicsRuntime } from '../physics/AdvancedPhysics';
 import { AtmosphereSystem, AtmosphereFrame } from '../sky/AtmosphereSystem';
-import { getWorldType, worldTypeFromSeed, WorldTypeConfig } from '../world/WorldTypes';
+import { getWorldType, isLegacySkyWorldSeed, worldTypeFromSeed, WorldTypeConfig } from '../world/WorldTypes';
 import { PortalSystem } from '../portals/PortalSystem';
 import { RealityRiftSystem } from '../world/RealityRifts';
 import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
@@ -280,7 +287,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const worldTypeId = worldTypeFromSeed(seed);
       const worldTypeConfig = getWorldType(worldTypeId).config;
       const isSkyWorld = Boolean(worldTypeConfig.floatingIslands)
-        || /floating[-_ ]?islands|skylands|amplified/i.test(seed);
+        || isLegacySkyWorldSeed(seed);
       const advancedTerrain: AdvancedTerrainGenerator | null = useAdvancedWorld
         ? new AdvancedTerrainGenerator({
             ...(isSkyWorld ? FLOATING_ISLANDS_CONFIG : {}),
@@ -302,7 +309,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const layout = getWorldLayout(seed, spawn);
       reportLoadingProgress(28, `Spawn point found at ${Math.round(spawn.x)}, ${Math.round(spawn.y)}, ${Math.round(spawn.z)}`);
       setActionMessage(savedEdits.length > 0
-        ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.settlement.z))}m • 1.0 advanced world`
+        ? `Loaded ${savedEdits.length} edits • Settlement ${Math.round(Math.hypot(layout.settlement.x, layout.settlement.z))}m • Rocket ${Math.round(Math.hypot(layout.rocket.x, layout.rocket.z))}m • 1.0 advanced world`
         : `EAOIN 1.0 • advanced world gen • bedrock foundation • Caves & Cliffs terrain • 150+ biomes • 25 dimensions`);
 
       // BUGFIX: ensure the camera never spawns inside a block (such as a tree,
@@ -380,22 +387,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // leaves most frames slower than they need to be. This measures real
       // frame times and steers resolution / effects / view distance to hold
       // the target framerate. See performance/AdaptivePerformance.ts.
-      const perfBudget = {
-        ...(BUDGET_PRESETS[settingsRef.current.qualityPreset] ?? BUDGET_PRESETS.balanced),
-        targetFps: settingsRef.current.targetFps || 60,
-      };
+      const perfBudget = adaptiveBudgetForSettings(settingsRef.current);
+      let lastAdaptiveBudgetSignature = adaptiveBudgetKey(settingsRef.current);
       const baseRenderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
       const perf = new AdaptivePerformance(perfBudget, {
         renderScale: settingsRef.current.renderScale,
         renderDistance: baseRenderRadius,
-        effectTier: settingsRef.current.qualityPreset === 'performance' ? 'low'
-          : settingsRef.current.qualityPreset === 'cinematic' ? 'ultra'
-          : settingsRef.current.qualityPreset === 'quality' ? 'high' : 'medium',
+        effectTier: effectTierForQualityPreset(settingsRef.current.qualityPreset),
       });
       // Mutable because the tuner shrinks/grows it while playing.
       let renderRadius = perf.getState().renderDistance;
       let effectTier: EffectTier = perf.getState().effectTier;
       let adaptiveReason = '';
+      let lastParticleEnabled = shouldEnableAtmosphereParticles(settingsRef.current, effectTier);
+      let lastParticleQuality = particleQualityFor(settingsRef.current.qualityPreset);
       const startupChunkTotal = chunksInRadius(renderRadius);
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
@@ -465,7 +470,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       } catch (error) {
         console.warn('[Render] Screen space RT failed to configure; disabling to keep world visible.', error);
       }
-      let lastRayTracingQuality = settingsRef.current.rayTracingQuality;
+      let lastRayTracingSignature = rayTracingSettingsKey(settingsRef.current);
 
       // 2.0 — ONE atmosphere system owns the sky dome, celestial bodies,
       // clouds, stars, aurora, fog and biome weather particles. Nothing else in
@@ -474,8 +479,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const atmosphere = new AtmosphereSystem(scene, {
         seed,
         dayLengthSeconds: DAY_LENGTH_SECONDS,
-        particlesEnabled: settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion,
-        particleQuality: particleQualityFor(settingsRef.current.qualityPreset),
+        particlesEnabled: lastParticleEnabled,
+        particleQuality: lastParticleQuality,
       });
       atmosphere.attach();
       atmosphere.timeOfDay = worldTimeRef.current.timeOfDay;
@@ -836,12 +841,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             pipeline.depthOfFieldEnabled = fx.depthOfFieldEnabled;
             pipeline.samples = fx.samples;
           }
+          creatureManager.setPopulationCap(Math.round(26 * fx.creatureScale));
+          atmosphere.setCloudDensityScale(fx.cloudScale);
           // Particles are pooled inside the atmosphere system.
-          atmosphere.setParticlesEnabled(
-            settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion && fx.particleScale > 0.25
-          );
+          const particlesEnabled = shouldEnableAtmosphereParticles(settingsRef.current, tier);
+          if (particlesEnabled !== lastParticleEnabled) {
+            lastParticleEnabled = particlesEnabled;
+            atmosphere.setParticlesEnabled(particlesEnabled);
+          }
         } catch { /* effect tuning must never break the frame */ }
       };
+      applyEffectTier(effectTier);
 
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
       /** True when the previous frame meshed chunks, so the tuner can skip it. */
@@ -855,7 +865,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let currentClimate = climateForBiome('plains');
       let worldDay = 1, lastTimeOfDay = worldTimeRef.current.timeOfDay;
       let timeState: WorldTimeState = worldTimeRef.current;
-      let lastCameraPosition = camera.position.clone();
+      const lastCameraPosition = camera.position.clone();
+      const tempForward = Vector3.Zero();
+      const tempAvatarFeet = Vector3.Zero();
+      const tempVerticalMove = Vector3.Zero();
+      const tempWind = Vector3.Zero();
       /**
        * 0 = open sky above the player, 1 = fully enclosed.
        *
@@ -910,6 +924,21 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // `chunkWorkThisFrame` is set below when chunks were meshed, so those
         // frames are excluded from the tuner's signal; otherwise flying into a
         // new region would permanently degrade quality.
+        const budgetSignature = adaptiveBudgetKey(settingsRef.current);
+        if (budgetSignature !== lastAdaptiveBudgetSignature) {
+          lastAdaptiveBudgetSignature = budgetSignature;
+          perf.setBudget(adaptiveBudgetForSettings(settingsRef.current));
+          const clamped = perf.getState();
+          applyRenderScale(engine, clamped.renderScale);
+          if (clamped.renderDistance !== renderRadius) {
+            renderRadius = clamped.renderDistance;
+            invalidateRenderSnapshot(engine);
+          }
+          if (clamped.effectTier !== effectTier) {
+            effectTier = clamped.effectTier;
+            applyEffectTier(effectTier);
+          }
+        }
         if (settingsRef.current.adaptivePerformance) {
           perf.sample(rawDeltaMs, chunkWorkLastFrame);
           const adjustment = perf.update(deltaSeconds);
@@ -930,6 +959,18 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               showActionMessage(`Auto quality: ${adjustment.reason}`);
             }
           }
+        } else {
+          const manualEffectTier = effectTierForQualityPreset(settingsRef.current.qualityPreset);
+          if (manualEffectTier !== effectTier) {
+            effectTier = manualEffectTier;
+            applyEffectTier(effectTier);
+          }
+          const manualRenderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+          if (manualRenderRadius !== renderRadius) {
+            renderRadius = manualRenderRadius;
+            invalidateRenderSnapshot(engine);
+          }
+          applyRenderScale(engine, settingsRef.current.renderScale);
         }
         chunkWorkLastFrame = false;
 
@@ -945,7 +986,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // Keep the atmosphere clock in sync with the world clock (so /time works).
         atmosphere.timeOfDay = timeState.timeOfDay;
         atmosphere.frozen = timeState.frozen;
-        atmosphere.setParticlesEnabled(settingsRef.current.particlesEnabled && !settingsRef.current.reducedMotion);
+        const currentParticleQuality = particleQualityFor(settingsRef.current.qualityPreset);
+        if (currentParticleQuality !== lastParticleQuality) {
+          lastParticleQuality = currentParticleQuality;
+          atmosphere.setParticleQuality(currentParticleQuality);
+        }
 
         // Cross-fade the sky whenever the player walks into a new biome.
         if (streamFrame % 20 === 0) {
@@ -1018,8 +1063,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // the pass when the player changes the quality setting.
         rayTracer.update(deltaSeconds);
         if (atmosphereFrame.sunDirection) rayTracer.setSunDirection(atmosphereFrame.sunDirection);
-        if (settingsRef.current.rayTracingQuality !== lastRayTracingQuality) {
-          lastRayTracingQuality = settingsRef.current.rayTracingQuality;
+        const currentRayTracingSignature = rayTracingSettingsKey(settingsRef.current);
+        if (currentRayTracingSignature !== lastRayTracingSignature) {
+          lastRayTracingSignature = currentRayTracingSignature;
           rayTracer.configure({
             quality: settingsRef.current.rayTracingQuality,
             reflections: settingsRef.current.rayTracedReflections,
@@ -1066,7 +1112,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
         // Wind from the atmosphere drives the advanced physics simulations.
         const windPhase = performance.now() * 0.0001;
-        physics.setWind(new Vector3(0.4 + 0.6 * Math.sin(windPhase), 0, 0.3 + 0.4 * Math.cos(windPhase * 1.3)));
+        tempWind.set(0.4 + 0.6 * Math.sin(windPhase), 0, 0.3 + 0.4 * Math.cos(windPhase * 1.3));
+        physics.setWind(tempWind);
         physics.update(deltaSeconds);
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
@@ -1098,27 +1145,20 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
         camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
         scene.fogEnabled = settingsRef.current.fogEnabled;
-        // Render scale is owned by the adaptive tuner while it is enabled;
-        // only honour the raw setting when the player has turned it off.
-        // (This call used to run unconditionally every frame, forcing a
-        // full render-target resize check 60 times a second.)
-        if (!settingsRef.current.adaptivePerformance) {
-          applyRenderScale(engine, settingsRef.current.renderScale);
-        }
         if (thirdPerson) {
           // Visual third-person model: keep the real camera/player collision at
           // the controlled position, and draw the avatar a few blocks in front
           // of the camera. The old toggle moved the camera backward and then
           // snapped the avatar to that same camera point, which made the model
           // disappear into/behind the near plane.
-          const forward = camera.getForwardRay().direction.clone();
-          forward.y = 0;
-          if (forward.lengthSquared() < 0.001) forward.set(0, 0, 1);
-          forward.normalize();
-          const avatarFeet = camera.position.add(forward.scale(THIRD_PERSON_DISTANCE));
-          avatar.position.x = avatarFeet.x;
+          camera.getDirectionToRef(Vector3.LeftHandedForwardReadOnly, tempForward);
+          tempForward.y = 0;
+          if (tempForward.lengthSquared() < 0.001) tempForward.set(0, 0, 1);
+          tempForward.normalize();
+          tempAvatarFeet.copyFrom(tempForward).scaleInPlace(THIRD_PERSON_DISTANCE).addInPlace(camera.position);
+          avatar.position.x = tempAvatarFeet.x;
           avatar.position.y = camera.position.y - 1.62;
-          avatar.position.z = avatarFeet.z;
+          avatar.position.z = tempAvatarFeet.z;
           // Face the same direction as the camera so the player sees the back
           // of their character, like a Minecraft-style third-person chase view.
           avatar.rotation.y = camera.rotation.y;
@@ -1147,7 +1187,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           if (pressedKeys.has('ShiftLeft') || pressedKeys.has('ShiftRight')) vertical -= 1;
           if (vertical !== 0) {
             const flyStep = vertical * Math.max(5.5, settingsRef.current.cameraSpeed * 5.8) * deltaSeconds;
-            (camera as any).moveWithCollisions?.(new Vector3(0, flyStep, 0));
+            tempVerticalMove.set(0, flyStep, 0);
+            (camera as any).moveWithCollisions?.(tempVerticalMove);
             if (!(camera as any).moveWithCollisions) camera.position.y += flyStep;
           }
         } else {
@@ -1165,7 +1206,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             velocityY += gravityStrength * deltaSeconds; if (velocityY < TERMINAL_VELOCITY) velocityY = TERMINAL_VELOCITY;
           }
           if (Math.abs(velocityY) > 0.001) {
-            (camera as any).moveWithCollisions?.(new Vector3(0, velocityY * deltaSeconds, 0));
+            tempVerticalMove.set(0, velocityY * deltaSeconds, 0);
+            (camera as any).moveWithCollisions?.(tempVerticalMove);
             if (!(camera as any).moveWithCollisions) { const nextY = camera.position.y + velocityY * deltaSeconds; const footId = terrain.getBlockAt(Math.floor(camera.position.x), Math.floor(nextY - 0.84), Math.floor(camera.position.z)); if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY; else velocityY = 0; }
           }
           if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
@@ -1304,7 +1346,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             });
           }
         }
-        lastCameraPosition = camera.position.clone();
+        lastCameraPosition.copyFrom(camera.position);
       });
 
       const lockPointerIfNeeded = (): boolean => { canvas.focus(); if (document.pointerLockElement === canvas) return true; void canvas.requestPointerLock?.(); showActionMessage('Mouse locked — WASD walk, SPACE jump, F fly, left click punch'); return false; };
@@ -1893,6 +1935,8 @@ function worldTypeOverrides(config: WorldTypeConfig): Record<string, unknown> {
   if (config.floatingIslands) { out.floatingIslands = true; out.skyIslands = true; }
   if (config.seaLevelOverride !== undefined) out.seaLevel = config.seaLevelOverride;
   if (config.heightScale !== undefined) out.mountainIntensity = config.heightScale;
+  if (config.biomeScale !== undefined) out.biomeScale = config.biomeScale;
+  if (config.forcedBiome !== undefined) out.forcedBiome = config.forcedBiome;
   // A superflat world has no relief, no caves and no erosion to run.
   if (config.flatGroundY !== undefined) {
     out.flatGroundY = config.flatGroundY;

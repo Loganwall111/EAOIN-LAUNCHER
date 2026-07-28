@@ -7,6 +7,7 @@ import { BlockID } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { editKey, WorldBlockEdit } from './WorldSave';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
+import { isLegacySkyWorldSeed } from './WorldTypes';
 
 export interface SpawnPoint { x: number; y: number; z: number; }
 export type BiomeID = 'Plains' | 'Forest' | 'Desert' | 'Highlands' | 'Lake' | 'Mountains' | 'Cliff';
@@ -22,7 +23,7 @@ export class TerrainGenerator {
   private readonly floatingIslandsPreset: boolean;
 
   constructor(private readonly seed: string, initialEdits: WorldBlockEdit[] = []) {
-    this.floatingIslandsPreset = /floating[-_ ]?islands|skylands|amplified/i.test(seed);
+    this.floatingIslandsPreset = isLegacySkyWorldSeed(seed);
     for (const edit of initialEdits) this.editOverrides.set(editKey(edit.x, edit.y, edit.z), { ...edit });
   }
 
@@ -35,7 +36,7 @@ export class TerrainGenerator {
     const key = this.chunkKey(cx, cz);
     const cached = this.chunks.get(key);
     if (cached) return cached;
-    const chunk = new Chunk(cx, cz, this.seed);
+    const chunk = new Chunk(cx, cz, this.seed, { generate: false });
     this.applyHeightmapPass(chunk); // Minecraft-like solid overworld columns by default
     if (!this.floatingIslandsPreset) this.applyCavePass(chunk); // Regular main worlds keep caves underground, never sky islands
     this.applyBiomeSurfacePass(chunk);

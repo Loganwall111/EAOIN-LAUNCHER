@@ -127,4 +127,20 @@ describe('OptionsScreen', () => {
     fireEvent.click(nav.getByRole('button', { name: /Accessibility/i }));
     expect(container.textContent).toContain('Reduced motion');
   });
+
+  it('offers only valid texture pack ids from GameSettings', () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <OptionsScreen settings={createDefaultSettings()} onChange={onChange} onBack={noop} />
+    );
+    const selects = Array.from(container.querySelectorAll('select')) as HTMLSelectElement[];
+    const texturePackSelect = selects.find((select) =>
+      Array.from(select.options).some((option) => option.value === 'soft')
+    ) as HTMLSelectElement | undefined;
+    expect(texturePackSelect).toBeTruthy();
+
+    fireEvent.change(texturePackSelect!, { target: { value: 'noir' } });
+    expect(onChange).toHaveBeenCalled();
+    expect(onChange.mock.calls.at(-1)?.[0].texturePack).toBe('noir');
+  });
 });

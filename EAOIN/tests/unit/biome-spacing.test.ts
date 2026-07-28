@@ -94,6 +94,29 @@ describe('biome spacing in the world', () => {
     }
   });
 
+  it('honours biomeScale so Large Biomes is materially wider than default', () => {
+    const median = (gen: AdvancedTerrainGenerator) => {
+      const runs = [0, 1500, -2200].flatMap((z) => biomeRuns(gen, z, 12000, 8)).sort((a, b) => a - b);
+      return runs[Math.floor(runs.length / 2)];
+    };
+
+    const normal = median(new AdvancedTerrainGenerator({ seed: 'large-biomes-check', biomeScale: 1 }));
+    const scaled = median(new AdvancedTerrainGenerator({ seed: 'large-biomes-check', biomeScale: 4 }));
+
+    expect(scaled).toBeGreaterThan(normal * 1.5);
+  });
+
+  it('honours forcedBiome so Single Biome is actually one biome everywhere', () => {
+    const gen = new AdvancedTerrainGenerator({ seed: 'single-biome-check', forcedBiome: 'forest' });
+    const seen = new Set<string>();
+    for (let x = -4000; x <= 4000; x += 400) {
+      for (let z = -4000; z <= 4000; z += 400) {
+        seen.add(gen.getBiomeAt(x, z).id);
+      }
+    }
+    expect(seen).toEqual(new Set(['forest']));
+  });
+
   it('still produces variety rather than one biome everywhere', () => {
     const gen = new AdvancedTerrainGenerator({ seed: 'eaoin_seed_2026' });
     const seen = new Set<string>();

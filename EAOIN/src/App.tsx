@@ -1,18 +1,16 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Suspense, lazy, useState, useCallback, useEffect, useMemo } from 'react';
 import { BlockID } from '@shared/blocks/BlockRegistry';
 import { craftRecipe, RECIPES, RecipeID } from './crafting/RecipeBook';
 import MainMenu from './ui/MainMenu';
 import TitleScreen from './ui/TitleScreen';
 import CharacterCreator from './ui/CharacterCreator';
-import HudFrame from './ui/HudFrame';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import ModsScreen from './ui/ModsScreen';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
 import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
-import GameCanvas, { HudTelemetry, WorldLoadProgress } from './engine/GameCanvas';
+import type { HudTelemetry, WorldLoadProgress } from './engine/GameCanvas';
 import { GameMode } from './modes/GameMode';
-import HUD from './ui/HUD';
 import { buildObjectives, createGameplayCounters, GameplayCounterKey, GameplayCounters } from './objectives/ObjectiveTracker';
 import { createDefaultRuntimeStatus, RuntimeStatus } from './runtime/RuntimeStatus';
 import { createStarterInventory, InventoryStacks } from './player/InventoryState';
@@ -32,6 +30,10 @@ import { CoinWallet } from './economy/CoinEconomy';
 import { createPaymentProvider } from './economy/PaymentProvider';
 import { StoreService } from './economy/StoreService';
 import { MarketplaceLibrary } from './marketplace/MarketplaceCatalog';
+
+const GameCanvas = lazy(() => import('./engine/GameCanvas'));
+const HudFrame = lazy(() => import('./ui/HudFrame'));
+const HUD = lazy(() => import('./ui/HUD'));
 
 export default function App() {
   const [gameStarted, setGameStarted] = useState(false);
@@ -405,52 +407,78 @@ export default function App() {
   // ===== IN-GAME =====
   return (
     <div className={shellClass}>
-      <GameCanvas
-        key={`${worldSeed}:${worldAttempt}`}
-        seed={worldSeed}
-        gameMode={gameMode}
-        onExit={exitToMenu}
-        selectedBlock={selectedBlock}
-        onSelectedBlockChange={setSelectedBlock}
-        selectedTool={selectedTool}
-        onSelectedToolChange={setSelectedTool}
-        toolInventory={toolInventory}
-        inventory={inventory}
-        onInventoryChange={setInventory}
-        survivalStats={survivalStats}
-        onSurvivalStatsChange={setSurvivalStats}
-        settings={settings}
-        onSettingsChange={setSettings}
-        onToggleInventory={toggleInventory}
-        onToggleSettings={toggleSettings}
-        onGameplayEvent={recordGameplayEvent}
-        onRuntimeStatusChange={setRuntimeStatus}
-        onTelemetry={setTelemetry}
-        onLoadingProgress={handleWorldLoadingProgress}
-        onGameModeChange={setGameMode}
-      />
-      <HudFrame
-        appearance={appearance}
-        survivalStats={survivalStats}
-        inventory={inventory}
-        selectedBlock={selectedBlock}
-        selectedTool={selectedTool}
-        onSelectBlock={setSelectedBlock}
-        position={telemetry.position}
-        yaw={telemetry.yaw}
-        timeOfDay={telemetry.timeOfDay}
-        day={telemetry.day}
-        biome={telemetry.biome}
-        runtimeStatus={runtimeStatus}
-        objectives={objectives}
-        flightEnabled={telemetry.flightEnabled}
-        onAbility={fireAbility}
-        onOpenInventory={toggleInventory}
-        onOpenGuide={toggleInventory}
-        onOpenFriends={toggleSettings}
-        onOpenSettings={toggleSettings}
-        onOpenQuests={() => setObjectivesVisible((v) => !v)}
-      />
+      <Suspense fallback={null}>
+        <GameCanvas
+          key={`${worldSeed}:${worldAttempt}`}
+          seed={worldSeed}
+          gameMode={gameMode}
+          onExit={exitToMenu}
+          selectedBlock={selectedBlock}
+          onSelectedBlockChange={setSelectedBlock}
+          selectedTool={selectedTool}
+          onSelectedToolChange={setSelectedTool}
+          toolInventory={toolInventory}
+          inventory={inventory}
+          onInventoryChange={setInventory}
+          survivalStats={survivalStats}
+          onSurvivalStatsChange={setSurvivalStats}
+          settings={settings}
+          onSettingsChange={setSettings}
+          onToggleInventory={toggleInventory}
+          onToggleSettings={toggleSettings}
+          onGameplayEvent={recordGameplayEvent}
+          onRuntimeStatusChange={setRuntimeStatus}
+          onTelemetry={setTelemetry}
+          onLoadingProgress={handleWorldLoadingProgress}
+          onGameModeChange={setGameMode}
+        />
+        <HudFrame
+          appearance={appearance}
+          survivalStats={survivalStats}
+          inventory={inventory}
+          selectedBlock={selectedBlock}
+          selectedTool={selectedTool}
+          onSelectBlock={setSelectedBlock}
+          position={telemetry.position}
+          yaw={telemetry.yaw}
+          timeOfDay={telemetry.timeOfDay}
+          day={telemetry.day}
+          biome={telemetry.biome}
+          runtimeStatus={runtimeStatus}
+          objectives={objectives}
+          flightEnabled={telemetry.flightEnabled}
+          onAbility={fireAbility}
+          onOpenInventory={toggleInventory}
+          onOpenGuide={toggleInventory}
+          onOpenFriends={toggleSettings}
+          onOpenSettings={toggleSettings}
+          onOpenQuests={() => setObjectivesVisible((v) => !v)}
+        />
+        <HUD
+          gameMode={gameMode}
+          selectedBlock={selectedBlock}
+          selectedTool={selectedTool}
+          toolInventory={toolInventory}
+          inventory={inventory}
+          survivalStats={survivalStats}
+          inventoryOpen={inventoryOpen}
+          settingsOpen={settingsOpen}
+          settings={settings}
+          runtimeStatus={runtimeStatus}
+          objectives={objectives}
+          objectivesVisible={objectivesVisible}
+          systemsVisible={systemsVisible}
+          onToggleObjectives={() => setObjectivesVisible((value) => !value)}
+          onToggleSystems={() => setSystemsVisible((value) => !value)}
+          craftingMessage={craftingMessage}
+          onCraftRecipe={craft}
+          onCloseInventory={closeInventory}
+          onCloseSettings={closeSettings}
+          onSettingsChange={setSettings}
+          onSelectBlock={setSelectedBlock}
+          onTravelToDimension={travelToDimension}
+        />
+      </Suspense>
       {worldLoading && (
         <WorldLoadingScreen
           key={`loading:${worldSeed}:${worldAttempt}`}
@@ -472,30 +500,6 @@ export default function App() {
           worldName={worldSeed}
         />
       )}
-      <HUD
-        gameMode={gameMode}
-        selectedBlock={selectedBlock}
-        selectedTool={selectedTool}
-        toolInventory={toolInventory}
-        inventory={inventory}
-        survivalStats={survivalStats}
-        inventoryOpen={inventoryOpen}
-        settingsOpen={settingsOpen}
-        settings={settings}
-        runtimeStatus={runtimeStatus}
-        objectives={objectives}
-        objectivesVisible={objectivesVisible}
-        systemsVisible={systemsVisible}
-        onToggleObjectives={() => setObjectivesVisible((value) => !value)}
-        onToggleSystems={() => setSystemsVisible((value) => !value)}
-        craftingMessage={craftingMessage}
-        onCraftRecipe={craft}
-        onCloseInventory={closeInventory}
-        onCloseSettings={closeSettings}
-        onSettingsChange={setSettings}
-        onSelectBlock={setSelectedBlock}
-        onTravelToDimension={travelToDimension}
-      />
     </div>
   );
 }

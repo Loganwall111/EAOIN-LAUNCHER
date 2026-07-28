@@ -65,6 +65,8 @@ export class VolumetricClouds {
   private coverage: number;
   private tint: Color3;
   private windSpeed: number;
+  /** Performance-tier multiplier from 0-1. */
+  private densityScale = 1;
   private disposed = false;
   /** Rebuilding the buffer every frame is wasteful; throttle it. */
   private sinceRefresh = 0;
@@ -130,7 +132,8 @@ export class VolumetricClouds {
     }
 
     // Higher coverage => lower gate => more clusters survive.
-    const gate = 1 - this.coverage;
+    const effectiveCoverage = Math.max(0, Math.min(1, this.coverage * this.densityScale));
+    const gate = 1 - effectiveCoverage;
 
     for (let x = -CLOUD_FIELD_EXTENT; x <= CLOUD_FIELD_EXTENT; x += CLUSTER_SPACING) {
       for (let z = -CLOUD_FIELD_EXTENT; z <= CLOUD_FIELD_EXTENT; z += CLUSTER_SPACING) {
@@ -214,7 +217,6 @@ export class VolumetricClouds {
     }
     this.template.setEnabled(true);
 
-    const rotation = Quaternion.Identity();
     for (let i = 0; i < this.blocks.length; i += 1) {
       const b = this.blocks[i];
       // Wrap each block around the field so the deck is effectively infinite.
@@ -223,7 +225,8 @@ export class VolumetricClouds {
       // Gentle vertical breathing keeps the deck alive.
       const y = CLOUD_DECK_ALTITUDE + b.base.y + Math.sin(this.elapsed * 0.16 + b.phase) * 3.2;
 
-      Matrix.ComposeToRef(b.scale, rotation, new Vector3(x, y, z), tempMatrix);
+      tempPosition.set(x, y, z);
+      Matrix.ComposeToRef(b.scale, tempRotation, tempPosition, tempMatrix);
       tempMatrix.copyToArray(this.matrices, i * 16);
     }
 
@@ -246,6 +249,14 @@ export class VolumetricClouds {
       this.material.emissiveColor = Color3.Lerp(this.material.emissiveColor, tint.scale(0.42), 0.12);
     }
     if (coverageChanged) this.buildField();
+  }
+
+  /** Thin out the deck on lower effect tiers. */
+  setDensityScale(scale: number): void {
+    const next = Math.max(0, Math.min(1, scale));
+    if (Math.abs(next - this.densityScale) <= 0.08) return;
+    this.densityScale = next;
+    this.buildField();
   }
 
   /**
@@ -305,6 +316,8 @@ export class VolumetricClouds {
 }
 
 const tempMatrix = Matrix.Identity();
+const tempRotation = Quaternion.Identity();
+const tempPosition = Vector3.Zero();
 
 function wrap(value: number, extent: number): number {
   const span = extent * 2;

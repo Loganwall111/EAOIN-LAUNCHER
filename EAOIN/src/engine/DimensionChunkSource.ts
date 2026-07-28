@@ -1,4 +1,4 @@
-import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
+import { Chunk } from '../world/Chunk';
 import { AetherTerrain, BackroomsTerrain } from '../dimensions/terrain/AetherBackroomsTerrain';
 
 /** The part of either terrain generator needed by the chunk streamer. */
@@ -42,14 +42,7 @@ export class DimensionChunkSource {
       return this.overworld.generateChunk(cx, cz);
     }
 
-    const chunk = new Chunk(cx, cz, `${this.seed}:${this.activeDimension}`);
-    // Chunk's constructor lays down placeholder terrain. Dimension generators
-    // require truly empty space before adding their own floating islands/rooms.
-    for (let x = 0; x < CHUNK_SIZE; x += 1) {
-      for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
-        for (let z = 0; z < CHUNK_SIZE; z += 1) chunk.setBlock(x, y, z, 0);
-      }
-    }
+    const chunk = new Chunk(cx, cz, `${this.seed}:${this.activeDimension}`, { generate: false });
 
     if (this.activeDimension === 'aether') this.aether.generate(chunk);
     else this.backrooms.generate(chunk);

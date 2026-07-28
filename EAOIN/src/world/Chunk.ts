@@ -7,6 +7,16 @@ import { BlockID } from '@shared/blocks/BlockRegistry';
 export const CHUNK_SIZE = 16;
 export const CHUNK_HEIGHT = 128;
 
+export interface ChunkOptions {
+  /**
+   * Generate the legacy placeholder terrain immediately.
+   *
+   * Real world generators fill the entire chunk themselves, so pre-generating
+   * a throwaway terrain first is pure waste on one of the hottest code paths.
+   */
+  generate?: boolean;
+}
+
 export class Chunk {
   public readonly x: number;
   public readonly z: number;
@@ -15,12 +25,12 @@ export class Chunk {
   public modified = false;
   public meshDirty = true;
 
-  constructor(x: number, z: number, seed: string) {
+  constructor(x: number, z: number, seed: string, options: ChunkOptions = {}) {
     this.x = x;
     this.z = z;
     this.seed = seed;
     this.blocks = new Uint8Array(CHUNK_SIZE * CHUNK_HEIGHT * CHUNK_SIZE);
-    this.generate();
+    if (options.generate !== false) this.generate();
   }
 
   private index(x: number, y: number, z: number): number {

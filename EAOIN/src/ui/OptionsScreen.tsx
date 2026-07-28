@@ -101,7 +101,7 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                   <Toggle checked={settings.adaptivePerformance} onChange={(v) => patch({ adaptivePerformance: v })} label="Adaptive performance" />
                 </Row>
                 <Row label="Target framerate" hint={`${settings.targetFps} FPS`}>
-                  <input type="range" min={30} max={144} step={10} value={settings.targetFps} onChange={(e) => patch({ targetFps: Number(e.target.value) })} aria-label="Target framerate" />
+                  <input type="range" min={30} max={240} step={10} value={settings.targetFps} onChange={(e) => patch({ targetFps: Number(e.target.value) })} aria-label="Target framerate" />
                 </Row>
                 <Row
                   label="Render scale"
@@ -123,8 +123,9 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                 <Row label="Texture pack">
                   <select className="ui-input" value={settings.texturePack} onChange={(e) => patch({ texturePack: e.target.value as GameSettings['texturePack'] })}>
                     <option value="classic">Classic</option>
-                    <option value="hd">HD</option>
-                    <option value="realistic">Realistic</option>
+                    <option value="soft">Soft</option>
+                    <option value="vibrant">Vibrant</option>
+                    <option value="noir">Noir</option>
                   </select>
                 </Row>
                 <Row label="Fog" hint="Distance haze, 100–1000 blocks">

@@ -83,6 +83,13 @@ export interface WorldGenConfig {
   /** Generate glaciers. */
   glaciers: boolean;
   /**
+   * Stretch climate regions over a larger area.
+   * 1 = normal, 4 = four-times-wider biome territories.
+   */
+  biomeScale: number;
+  /** Force the whole world to resolve to one biome id. */
+  forcedBiome: string | null;
+  /**
    * Distance from origin at which Far Lands corruption begins. 0 disables it.
    * Past this the terrain noise saturates into vertical walls and stretched
    * tunnels — the classic Minecraft overflow bug, here on purpose.
@@ -116,6 +123,8 @@ export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
   sinkholes: true,
   volcanoes: true,
   glaciers: true,
+  biomeScale: 1,
+  forcedBiome: null,
   farLandsThreshold: 0,
   subBedrockLayers: 0,
   inverted: false,
@@ -321,7 +330,7 @@ export class AdvancedTerrainGenerator {
     const key = this.chunkKey(cx, cz);
     const cached = this.chunks.get(key);
     if (cached) return cached;
-    const chunk = new Chunk(cx, cz, this.config.seed);
+    const chunk = new Chunk(cx, cz, this.config.seed, { generate: false });
     if (this.config.floatingIslands || this.config.skyIslands) {
       this.fillSkyIslands(chunk);
     } else {
@@ -1017,11 +1026,17 @@ export class AdvancedTerrainGenerator {
     // result only depends on the integer column, so it is memoised.
     const x = Math.floor(worldX);
     const z = Math.floor(worldZ);
-    const key = columnKey(x, z);
+    // Large-biome worlds stretch the *biome map* by sampling it in a scaled
+    // coordinate space. Using the scaled coordinates as the cache key makes the
+    // widening real instead of redoing the same lookup four times per block.
+    const biomeScale = Math.max(0.1, this.config.biomeScale || 1);
+    const sampleX = Math.floor(x / biomeScale);
+    const sampleZ = Math.floor(z / biomeScale);
+    const key = columnKey(sampleX, sampleZ);
     const cached = this.biomeCache.get(key);
     if (cached !== undefined) return cached;
 
-    const biome = this.computeBiomeAt(x, z);
+    const biome = this.computeBiomeAt(sampleX, sampleZ);
 
     if (this.biomeCache.size >= HEIGHT_CACHE_LIMIT) {
       let toDrop = Math.floor(HEIGHT_CACHE_LIMIT / 4);
@@ -1036,6 +1051,13 @@ export class AdvancedTerrainGenerator {
 
   /** The real biome computation. See `getBiomeAt` for the memoised entry. */
   private computeBiomeAt(worldX: number, worldZ: number): BiomeDefinition {
+    // Single-biome worlds bypass the whole climate/elevation classifier.
+    // This world type existed in the UI but was never wired into generation,
+    // so selecting it still produced an ordinary mixed-biome world.
+    if (this.config.forcedBiome) {
+      return getBiome(this.config.forcedBiome);
+    }
+
     // Biome decisions use a **smoothed** elevation, not the exact per-block
     // height. Raw height wobbles by several blocks between adjacent columns,
     // so testing it against a fixed threshold (`> 48` for alpine) made the

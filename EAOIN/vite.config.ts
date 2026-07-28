@@ -10,7 +10,18 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-      }
+      },
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/@babylonjs/')) return 'babylon';
+          if (
+            id.includes('node_modules/react/')
+            || id.includes('node_modules/react-dom/')
+            || id.includes('node_modules/scheduler/')
+          ) return 'react-vendor';
+          return undefined;
+        },
+      },
     }
   },
   server: {

@@ -187,6 +187,10 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
     return () => window.removeEventListener('keydown', handler);
   }, [onToggleObjectives, onToggleSystems]);
 
+  useEffect(() => {
+    if (!settings.multiplayerServersEnabled) setServerMenuOpen(false);
+  }, [settings.multiplayerServersEnabled]);
+
   /* Creative inventory items for the current tab.
      A non-empty search always spans every category. */
   const creativeItems = useMemo(() => {
@@ -226,7 +230,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
         </div>
       )}
 
-      {false && settings.showObjectives && objectivesVisible && (
+      {settings.showObjectives && objectivesVisible && (
         <div className="objectives-panel">
           <h3>Objectives [O]</h3>
           {objectives.slice(0, 6).map((o) => (
@@ -628,6 +632,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
             <span>Renderer</span>
             <select value={settings.rendererPreference} onChange={(e) => updateSettings({ rendererPreference: e.target.value as GameSettings['rendererPreference'] })}>
               <option value="auto">Auto: WebGPU first</option>
+              <option value="vulkan">Vulkan / WebGPU</option>
               <option value="webgpu">Prefer WebGPU</option>
               <option value="webgl">Force WebGL</option>
             </select>
@@ -657,11 +662,11 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
         <button onClick={() => setQuestsOpen((v) => !v)} className="hud-btn quests" title="Quests (F10)">📜 Quests</button>
         <button onClick={() => setCivsOpen((v) => !v)} className="hud-btn civs" title="Civilizations (F11)">🏛 Civs</button>
         <button onClick={() => setSpaceOpen((v) => !v)} className="hud-btn space" title="Space (F12)">🚀 Space</button>
-        <button onClick={() => setServerMenuOpen((v) => !v)} className="hud-btn servers" title="Servers">🖥 Servers</button>
+        <button onClick={() => { if (settings.multiplayerServersEnabled) setServerMenuOpen((v) => !v); }} className="hud-btn servers" title={settings.multiplayerServersEnabled ? 'Servers' : 'Servers disabled in settings'} disabled={!settings.multiplayerServersEnabled}>🖥 Servers</button>
         <button onClick={() => setFriendsOpen((v) => !v)} className="hud-btn friends" title="Friends">👥 Friends</button>
       </div>
 
-      {serverMenuOpen && (
+      {settings.multiplayerServersEnabled && serverMenuOpen && (
         <div className="menu-panel pro server-panel">
           <div className="inventory-header">
             <div><h2>🖥 Multiplayer Server Browser</h2><p>{ALL_SERVERS.length} official servers + create your own dedicated server</p></div>
