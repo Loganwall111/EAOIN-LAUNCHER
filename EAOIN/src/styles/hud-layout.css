@@ -289,10 +289,18 @@
    abilities row. It now sits above the equipped card as a compact column. */
 .game-hud .world-action-rail {
   position: absolute;
+  /* Fully reset the older top-centre rule from eaoin-ui.css. Merely adding
+     right/bottom left its `left: 50%`, `top: 12px` and transform active, so the
+     rail stretched across half the screen and RESET/EXIT became giant bars. */
+  top: auto;
+  left: auto;
   right: var(--hud-gutter);
   bottom: 148px;
+  width: max-content;
+  transform: none;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 6px;
   z-index: var(--hud-z-rail);
   pointer-events: auto;
