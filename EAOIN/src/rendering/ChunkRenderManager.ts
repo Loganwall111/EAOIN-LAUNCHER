@@ -232,19 +232,32 @@ export class ChunkRenderManager {
     return { loaded, unloaded, pending: Math.max(0, missing.length - loaded) };
   }
 
+  /**
+   * True when every chunk in a radius is already represented by a live mesh.
+   *
+   * This deliberately ignores surplus chunks. The runtime keeps a one-chunk
+   * prefetch ring beyond the player-facing render distance: after crossing a
+   * chunk boundary, that ring is still valid visible terrain while the next
+   * outer ring is generated. Treating those harmless preloaded chunks as a
+   * miss would make callers believe there was a hole and defeat the buffer.
+   */
+  hasChunksInRadius(centerChunkX: number, centerChunkZ: number, radius: number): boolean {
+    for (let cx = centerChunkX - radius; cx <= centerChunkX + radius; cx += 1) {
+      for (let cz = centerChunkZ - radius; cz <= centerChunkZ + radius; cz += 1) {
+        if (!this.chunks.has(this.key(cx, cz))) return false;
+      }
+    }
+    return true;
+  }
+
   /** True when the render radius around this center is not the exact live set. */
   hasPendingChunks(centerChunkX: number, centerChunkZ: number, radius: number): boolean {
     const expected = (radius * 2 + 1) ** 2;
     // Also catch surplus chunks after adaptive performance lowers the radius.
     // The old check only looked for missing chunks, so a downgrade changed the
     // HUD number but never disposed any of the expensive outer meshes.
-    if (this.chunks.size !== expected) return true;
-    for (let cx = centerChunkX - radius; cx <= centerChunkX + radius; cx += 1) {
-      for (let cz = centerChunkZ - radius; cz <= centerChunkZ + radius; cz += 1) {
-        if (!this.chunks.has(this.key(cx, cz))) return true;
-      }
-    }
-    return false;
+    return this.chunks.size !== expected
+      || !this.hasChunksInRadius(centerChunkX, centerChunkZ, radius);
   }
 
   rebuildForWorldBlock(worldX: number, worldZ: number): void {
@@ -337,12 +350,15 @@ export class ChunkRenderManager {
       mesh.metadata = { voxelChunk: true, blockId };
 
       // --- per-mesh render cost controls ---------------------------------
-      // Chunk geometry never moves, so Babylon can skip its world-matrix and
-      // bounding-box recomputation every frame.
-      mesh.freezeWorldMatrix();
-      // NOTE: bounding info must stay in sync or frustum culling silently
-      // keeps every chunk active. We refresh it once here, then freeze.
+      // Establish bounds *before* freezing the world matrix. Calling these in
+      // the opposite order leaves a few Babylon backends with a frozen,
+      // stale bounding volume, so angle-dependent frustum culling can reject
+      // a perfectly valid terrain mesh. That looks exactly like a chunk
+      // deleting itself when the player looks down or turns around.
       mesh.refreshBoundingInfo();
+      // Chunk geometry never moves, so Babylon can skip its world-matrix and
+      // bounding-box recomputation every frame after that initial bound pass.
+      mesh.freezeWorldMatrix();
       mesh.cullingStrategy = Mesh.CULLINGSTRATEGY_BOUNDINGSPHERE_ONLY;
       // Static geometry: let Babylon skip per-frame vertex-buffer rebinding.
       mesh.alwaysSelectAsActiveMesh = false;

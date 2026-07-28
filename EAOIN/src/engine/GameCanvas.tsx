@@ -134,10 +134,26 @@ const PLAYER_FOOTPRINT: ReadonlyArray<readonly [number, number]> = [
 ];
 /** Chunks meshed synchronously before the first frame is presented. */
 const INITIAL_CHUNK_RADIUS = 1;
-/** Chunks generated + meshed per frame while streaming the render radius in. */
+/** Chunks generated + meshed per ordinary streaming frame. */
 const CHUNKS_PER_FRAME = 1;
 /**
- * Wall-clock budget for chunk streaming per frame, in ms.
+ * Keep one fully meshed chunk ring beyond the advertised render distance.
+ *
+ * Terrain data is generated on demand for physics, so without this ring the
+ * player could collide with a real block before its mesh had reached the GPU.
+ * Crossing a chunk boundary would then expose an invisible, solid 16×16 area
+ * until the asynchronous streamer caught up. The guard ring makes the old
+ * outer row become the next visible row instead of a hole.
+ */
+const CHUNK_PREFETCH_RADIUS = 1;
+/**
+ * When the player outruns the prefetch ring (most commonly while flying), do
+ * a short catch-up burst. Correct, visible terrain wins over a few temporary
+ * frame-time spikes; the adaptive sampler excludes these known work frames.
+ */
+const COVERAGE_RECOVERY_CHUNKS_PER_FRAME = 2;
+/**
+ * Wall-clock budget for ordinary chunk streaming, in ms.
  *
  * Measured cost is ~7ms for an average chunk but several times that for
  * mountainous, cavern-heavy terrain, so a fixed count of 2 chunks/frame was
@@ -145,8 +161,14 @@ const CHUNKS_PER_FRAME = 1;
  * the rest of a 16.6ms frame for rendering and simulation.
  */
 const CHUNK_STREAM_BUDGET_MS = 6;
+/** Short, bounded catch-up budget used only while the visible radius has a gap. */
+const COVERAGE_RECOVERY_STREAM_BUDGET_MS = 14;
 const INITIAL_RENDERER_INFO: RendererBackendInfo = { backend: 'webgl', label: 'Initializing renderer', requested: 'auto', webgpuSupported: false, vulkanPath: 'native-vulkan-required', vulkanStatus: 'Detecting graphics backend…' };
-/** Hard cap for the blocking loading overlay; remaining distant chunks stream while playing. */
+/**
+ * After this long, the loading overlay may hand off to play only if the entire
+ * player-facing radius is meshed. The prefetch ring can continue streaming;
+ * collidable invisible terrain cannot.
+ */
 const WORLD_LOADING_MAX_MS = 18_000;
 
 
@@ -414,7 +436,14 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let adaptiveReason = '';
       let lastParticleEnabled = shouldEnableAtmosphereParticles(settingsRef.current, effectTier);
       let lastParticleQuality = particleQualityFor(settingsRef.current.qualityPreset);
-      const startupChunkTotal = chunksInRadius(renderRadius);
+      // `renderRadius` is what the player sees in Settings. Streaming one
+      // additional ring is intentionally invisible to that UI, but prevents a
+      // newly crossed chunk boundary from becoming a collidable blank square.
+      const streamingRadiusFor = (visibleRadius: number): number => visibleRadius + CHUNK_PREFETCH_RADIUS;
+      const startupChunkTotal = chunksInRadius(streamingRadiusFor(renderRadius));
+      // Raised by teleports/dimension travel; cleared once player-facing
+      // terrain coverage has been restored by the streaming loop.
+      let forceTerrainCoverage = false;
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
       const moddingRuntime = new ModdingRuntime(); moddingRuntime.registerMockPack();
@@ -787,8 +816,18 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             velocityY = 0;
             wasFalling = false;
             fallStartY = camera.position.y;
-            // Re-centre streaming so the destination meshes immediately.
+            // Re-centre streaming so the destination has physical terrain
+            // before the next simulation tick. The complete render/prefetch
+            // radius continues loading incrementally afterwards.
             streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+            renderer.updateVisibleChunks(
+              streamCenter.cx,
+              streamCenter.cz,
+              INITIAL_CHUNK_RADIUS,
+              chunkSource.generateChunk
+            );
+            forceTerrainCoverage = true;
+            invalidateRenderSnapshot(engine);
             return;
           }
           case 'give': {
@@ -891,7 +930,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let chunkWorkLastFrame = false;
       /** Tracks surface/submerged transitions so we only re-theme on change. */
       let wasSubmerged = false;
-      let startupLoadingComplete = !renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
+      let startupLoadingComplete = !renderer.hasPendingChunks(
+        streamCenter.cx,
+        streamCenter.cz,
+        streamingRadiusFor(renderRadius)
+      );
       // 2.0 — thirst. Deserts are now genuinely hostile: the bar drains fast in
       // the heat and you must find water (or an oasis) to top it back up.
       // NOTE: hydrationState is declared above, before the command executor.
@@ -1297,22 +1340,52 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (nextSurvival.health <= 0 && !isCreativeMode(gameModeRef.current)) {
           showActionMessage(respawnPlayer('You died'));
         }
-        // Incremental world streaming — a small budget every frame so the world
-        // keeps filling in without ever blocking the render loop.
+        // Incremental world streaming. The target includes a one-chunk guard
+        // ring beyond the selected render distance, so terrain that has real
+        // collision data is also already drawable when the player crosses a
+        // 16-block boundary.
         const movedChunk = toChunkCoordinate(camera.position.x, camera.position.z);
         const centerChanged = movedChunk.cx !== streamCenter.cx || movedChunk.cz !== streamCenter.cz;
         if (centerChanged) streamCenter = movedChunk;
-        const visibleSetDirty = renderer.hasPendingChunks(streamCenter.cx, streamCenter.cz, renderRadius);
+        const playerFacingRadius = renderRadius;
+        const streamingRadius = streamingRadiusFor(playerFacingRadius);
+        const visibleCoverageMissing = !renderer.hasChunksInRadius(
+          streamCenter.cx,
+          streamCenter.cz,
+          playerFacingRadius
+        );
+        const visibleSetDirty = renderer.hasPendingChunks(
+          streamCenter.cx,
+          streamCenter.cz,
+          streamingRadius
+        );
         // Fill startup every frame behind the loading cover. Once playable,
-        // spread generation across every third frame; the already-loaded
-        // radius gives several chunks of runway, while ordinary frames remain
-        // smooth instead of becoming one continuous generation hitch.
-        const shouldStreamThisFrame = centerChanged || !startupLoadingComplete || streamFrame % 3 === 0;
+        // ordinary prefetch work stays spread across every third frame. If a
+        // fast flight/teleport has outrun the guard ring, switch to a bounded
+        // every-frame catch-up burst until the player-facing world is solid
+        // and visible again — never leave collidable terrain invisible.
+        const recoveringCoverage = forceTerrainCoverage || visibleCoverageMissing;
+        const shouldStreamThisFrame = centerChanged
+          || !startupLoadingComplete
+          || recoveringCoverage
+          || streamFrame % 3 === 0;
         if (visibleSetDirty && shouldStreamThisFrame) {
           const result = renderer.updateVisibleChunks(
-            streamCenter.cx, streamCenter.cz, renderRadius,
+            streamCenter.cx,
+            streamCenter.cz,
+            streamingRadius,
             chunkSource.generateChunk,
-            { budget: CHUNKS_PER_FRAME, timeBudgetMs: CHUNK_STREAM_BUDGET_MS }
+            recoveringCoverage
+              ? { budget: COVERAGE_RECOVERY_CHUNKS_PER_FRAME, timeBudgetMs: COVERAGE_RECOVERY_STREAM_BUDGET_MS }
+              : { budget: CHUNKS_PER_FRAME, timeBudgetMs: CHUNK_STREAM_BUDGET_MS }
+          );
+          // A teleport needs a complete player-facing ring before going back
+          // to low-priority prefetch work. Do not wait for the outer guard ring
+          // itself: it is intentionally allowed to finish in the background.
+          forceTerrainCoverage = !renderer.hasChunksInRadius(
+            streamCenter.cx,
+            streamCenter.cz,
+            playerFacingRadius
           );
           if (result.loaded > 0 || result.unloaded > 0) {
             // Meshing is expensive and bursty; tell the tuner to ignore this
@@ -1326,21 +1399,31 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             // mesh in the scene here — that made streaming O(n²).
           }
           if (!startupLoadingComplete) {
-            const loadedVisibleChunks = Math.max(0, Math.min(startupChunkTotal, startupChunkTotal - result.pending));
-            const chunkRatio = startupChunkTotal > 0 ? loadedVisibleChunks / startupChunkTotal : 1;
+            const startupStreamingRadius = streamingRadiusFor(renderRadius);
+            const currentStartupTotal = chunksInRadius(startupStreamingRadius);
+            const loadedVisibleChunks = Math.max(0, Math.min(currentStartupTotal, currentStartupTotal - result.pending));
+            const chunkRatio = currentStartupTotal > 0 ? loadedVisibleChunks / currentStartupTotal : 1;
             const elapsed = performance.now() - loadingStartedAt;
+            const playerFacingCoverageReady = renderer.hasChunksInRadius(
+              streamCenter.cx,
+              streamCenter.cz,
+              playerFacingRadius
+            );
             if (result.pending === 0) {
               startupLoadingComplete = true;
-              reportLoadingProgress(100, `World ready — ${loadedVisibleChunks}/${startupChunkTotal} chunks loaded`, true, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
-            } else if (elapsed >= WORLD_LOADING_MAX_MS) {
+              reportLoadingProgress(100, `World ready — ${loadedVisibleChunks}/${currentStartupTotal} terrain chunks loaded`, true, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
+            } else if (elapsed >= WORLD_LOADING_MAX_MS && playerFacingCoverageReady) {
+              // The guard ring can safely continue in the background, but do
+              // not ever dismiss the loading cover while the player could be
+              // standing on terrain that is not drawn yet.
               startupLoadingComplete = true;
-              reportLoadingProgress(100, `Playable now — ${loadedVisibleChunks}/${startupChunkTotal} chunks loaded; the rest will stream in`, true, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
+              reportLoadingProgress(100, `Playable now — ${loadedVisibleChunks}/${currentStartupTotal} chunks loaded; the outer safety ring will finish streaming`, true, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
             } else {
-              reportLoadingProgress(76 + chunkRatio * 23, `Streaming chunks ${loadedVisibleChunks}/${startupChunkTotal}`, false, { loadedChunks: loadedVisibleChunks, totalChunks: startupChunkTotal });
+              reportLoadingProgress(76 + chunkRatio * 23, `Streaming terrain ${loadedVisibleChunks}/${currentStartupTotal}`, false, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
             }
           }
           if (result.pending > 0 && streamFrame % 30 === 0) {
-            showActionMessage(`Loading world — ${result.pending} chunks remaining`);
+            showActionMessage(`Loading terrain — ${result.pending} chunks remaining`);
           } else if (result.pending === 0 && result.loaded > 0) {
             showActionMessage(`World loaded • render distance ${renderRadius} chunks`);
           }
@@ -1657,6 +1740,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,
             chunkSource.generateChunk
           );
+          // The initial 3×3 is a floor under the destination. Continue at
+          // catch-up priority until the configured visible radius is meshed.
+          forceTerrainCoverage = true;
+          invalidateRenderSnapshot(engine);
         }
 
         const state = dimensionRuntime.getState();
@@ -1667,11 +1754,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       window.addEventListener('eaoin-travel-dimension', handleTravelEvent);
       window.addEventListener('mouseup', handleMouseUp); window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp); window.addEventListener('eaoin-toggle-flight', handleFlightButton); window.addEventListener('resize', handleResize);
       reportLoadingProgress(76, 'Controls ready — finishing visible terrain', false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
-      // Keep the loading cover up while the visible radius streams. Exposing
-      // gameplay after only the 3×3 spawn set made the still-missing outer
-      // chunks look like holes to the void. The frame-loop progress path above
-      // closes this as soon as the radius is complete, with an 18s hard cap so
-      // a slow device can never be trapped here.
+      // Keep the loading cover up while the visible radius plus its safety ring
+      // streams. Exposing gameplay after only the 3×3 spawn set made
+      // still-missing terrain look like holes to the void. The frame-loop
+      // allows the outer safety ring to finish in the background after 18s,
+      // but never releases the player before the entire visible radius exists.
       // Kept as a compatibility call; the backend now deliberately leaves
       // snapshot bundles disabled because a streaming voxel draw list is never
       // stable enough to record safely.
