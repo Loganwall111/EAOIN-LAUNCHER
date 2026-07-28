@@ -333,6 +333,14 @@ export class AtmosphereSystem {
     this.vfx.setEnabled(enabled);
   }
 
+  setParticleQuality(quality: number): void {
+    this.vfx.setQuality(quality);
+  }
+
+  setCloudDensityScale(scale: number): void {
+    this.clouds.setDensityScale(scale);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;

@@ -2338,7 +2338,6 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
   white-space: nowrap;
   flex-shrink: 0;
-}
   image-rendering: pixelated;
 }
 .hud-btn:hover { filter: brightness(1.2); }

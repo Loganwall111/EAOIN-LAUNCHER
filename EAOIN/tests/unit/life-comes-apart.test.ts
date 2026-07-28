@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { getSkyProfileForBiome, getSkyProfileForDimension, lerpSkyProfile, FOG_LOW, FOG_HEAVY } from '../../src/sky/SkyProfiles';
 import { climateForBiome, createStarterHydration, drink, updateHydration, MAX_HYDRATION } from '../../src/player/Hydration';
 import { speciesForBiome, pickSpecies, ALL_SPECIES, speciesStats } from '../../src/creatures/WildlifeRegistry';
-import { WORLD_TYPES, seedForWorldType, worldTypeFromSeed, baseSeed } from '../../src/world/WorldTypes';
+import { WORLD_TYPES, seedForWorldType, worldTypeFromSeed, baseSeed, isLegacySkyWorldSeed } from '../../src/world/WorldTypes';
 import { oceanStateForDepth, waveHeightAt, whirlpoolForce, zoneForDepth } from '../../src/world/OceanSystem';
 import { Vector3 } from '@babylonjs/core';
 import { createChipState, acquireChip, implantChip, usePower, resolveSnap, REALITY_POWERS } from '../../src/space/RealityChip';
@@ -154,6 +154,13 @@ describe('world types', () => {
     const seed = seedForWorldType('plain', 'default');
     expect(seed).toBe('plain');
     expect(worldTypeFromSeed(seed)).toBe('default');
+  });
+
+  it('does not mistake amplified worlds for skylands', () => {
+    expect(worldTypeFromSeed('amplified__mySeed')).toBe('amplified');
+    expect(isLegacySkyWorldSeed('amplified__mySeed')).toBe(false);
+    expect(isLegacySkyWorldSeed('skylands__mySeed')).toBe(true);
+    expect(isLegacySkyWorldSeed('floating_islands_old_seed')).toBe(true);
   });
 });
 

@@ -22,7 +22,7 @@ export class FinalIntegrationReview {
     for (let i = 1; i <= 18; i++) {
       this.batches.push({
         batchNumber: i,
-        filesAdded: i === 1 ? 20 : i === 2 ? 18 : i === 3 ? 14 : i === 4 ? 10 : i === 5 ? 8 : i === 6 ? 8 : i === 7 ? 8 : i === 8 ? 8 : i === 9 ? 8 : i === 10 ? 10 : i === 11 ? 10 : i === 12 ? 10 : i === 13 ? 10 : i === 14 ? 10 : i === 15 ? 8 : i === 16 ? 8 : i === 17 ? 8 : i === 18 ? 8,
+        filesAdded: i === 1 ? 20 : i === 2 ? 18 : i === 3 ? 14 : i === 4 ? 10 : i === 5 ? 8 : i === 6 ? 8 : i === 7 ? 8 : i === 8 ? 8 : i === 9 ? 8 : i === 10 ? 10 : i === 11 ? 10 : i === 12 ? 10 : i === 13 ? 10 : i === 14 ? 10 : i === 15 ? 8 : i === 16 ? 8 : i === 17 ? 8 : i === 18 ? 8 : 0,
         systemsImplemented: [`Batch ${i} systems`],
         architectureConsistent: true,
         compiling: true,

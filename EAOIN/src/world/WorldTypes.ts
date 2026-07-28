@@ -215,10 +215,22 @@ export function worldTypeFromSeed(seed: string): WorldTypeID {
   const match = /^([a-z_]+)__/.exec(seed);
   if (match && WORLD_TYPES_BY_ID[match[1]]) return match[1] as WorldTypeID;
   // Legacy seeds used bare keywords.
-  if (/floating[-_ ]?islands|skylands/i.test(seed)) return 'skylands';
+  if (isLegacySkyWorldSeed(seed)) return 'skylands';
   if (/amplified/i.test(seed)) return 'amplified';
   if (/^flat_|flat/i.test(seed)) return 'flat';
   return 'default';
+}
+
+/**
+ * Compatibility sniff for the old "put skylands in the raw seed" workflow.
+ *
+ * Important: Amplified is *not* a sky-world. A previous regex included the
+ * word `amplified`, which silently routed amplified worlds onto the floating-
+ * island generator and produced the exact "everything is hollow and broken"
+ * look from the bug report.
+ */
+export function isLegacySkyWorldSeed(seed: string): boolean {
+  return /floating[-_ ]?islands|skylands/i.test(seed);
 }
 
 /** Strip the type tag back off, for display and for the noise seed. */

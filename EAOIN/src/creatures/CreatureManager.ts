@@ -99,13 +99,15 @@ interface CreatureEntity {
 const SPAWN_CELL_SIZE = 18;
 const SPAWN_RADIUS = 54;
 const DESPAWN_RADIUS = 74;
-const CREATURE_CAP = 26;
+const DEFAULT_CREATURE_CAP = 26;
 /** Seconds between attacks from one hostile creature. */
 const ATTACK_COOLDOWN_MS = 1200;
 /** How close a hostile has to be to land a hit. */
 const ATTACK_REACH = 2.4;
 /** Hostiles inside this range will approach the player instead of wandering. */
 const AGGRO_RANGE = 16;
+const tempCreatureVecA = Vector3.Zero();
+const tempCreatureVecB = Vector3.Zero();
 
 /**
  * Base dimensions per body plan, in world units, before the species' own
@@ -238,6 +240,7 @@ export class CreatureManager {
   private spawnAccumulator = 0;
   private spawned = 0;
   private despawned = 0;
+  private creatureCap = DEFAULT_CREATURE_CAP;
   /** Set by the engine; receives contact damage from hostile creatures. */
   onPlayerDamage?: (attack: CreatureAttack) => void;
   /** World clock hour, so nocturnal species only appear at night. */
@@ -343,11 +346,23 @@ export class CreatureManager {
     for (const creature of this.creatures.values()) species.add(creature.species.id);
     return {
       count: this.creatures.size,
-      cap: CREATURE_CAP,
+      cap: this.creatureCap,
       spawned: this.spawned,
       despawned: this.despawned,
       species: species.size,
     };
+  }
+
+  /** Let the performance tuner shrink or grow wildlife density live. */
+  setPopulationCap(cap: number): void {
+    this.creatureCap = Math.max(0, Math.round(cap));
+    while (this.creatures.size > this.creatureCap) {
+      const oldest = this.creatures.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.creatures.get(oldest)?.root.dispose(false, true);
+      this.creatures.delete(oldest);
+      this.despawned += 1;
+    }
   }
 
   dispose(): void {
@@ -373,7 +388,7 @@ export class CreatureManager {
       }
     }
 
-    if (this.creatures.size >= CREATURE_CAP) return;
+    if (this.creatures.size >= this.creatureCap) return;
 
     const centerCellX = Math.floor(playerPosition.x / SPAWN_CELL_SIZE);
     const centerCellZ = Math.floor(playerPosition.z / SPAWN_CELL_SIZE);
@@ -381,7 +396,7 @@ export class CreatureManager {
 
     for (let cellX = centerCellX - radiusInCells; cellX <= centerCellX + radiusInCells; cellX += 1) {
       for (let cellZ = centerCellZ - radiusInCells; cellZ <= centerCellZ + radiusInCells; cellZ += 1) {
-        if (this.creatures.size >= CREATURE_CAP) return;
+        if (this.creatures.size >= this.creatureCap) return;
         this.trySpawnCell(cellX, cellZ, playerPosition);
       }
     }
@@ -706,7 +721,7 @@ export class CreatureManager {
     // --- hostiles hunt, skittish animals flee ----------------------------
     // Before this, every animal wandered aimlessly and nothing could hurt you.
     if (hostile && distanceToPlayer < AGGRO_RANGE) {
-      creature.target = playerPosition.clone();
+      creature.target.copyFrom(playerPosition);
       creature.nextDecisionAt = now + 400;
 
       if (distanceToPlayer <= ATTACK_REACH && now - creature.lastAttackAt >= ATTACK_COOLDOWN_MS) {
@@ -723,17 +738,17 @@ export class CreatureManager {
       }
     } else if (skittish && distanceToPlayer < 9) {
       // Run directly away from the player.
-      const away = creature.root.position.subtract(playerPosition);
-      away.y = 0;
-      if (away.lengthSquared() > 0.001) {
-        away.normalize().scaleInPlace(12);
-        creature.target = creature.root.position.add(away);
+      tempCreatureVecA.copyFrom(creature.root.position).subtractInPlace(playerPosition);
+      tempCreatureVecA.y = 0;
+      if (tempCreatureVecA.lengthSquared() > 0.001) {
+        tempCreatureVecA.normalize().scaleInPlace(12);
+        creature.target.copyFrom(creature.root.position).addInPlace(tempCreatureVecA);
         creature.nextDecisionAt = now + 900;
       }
     }
 
-    const toTarget = creature.target.subtract(creature.root.position);
-    const horizontalDistance = Math.hypot(toTarget.x, toTarget.z);
+    tempCreatureVecA.copyFrom(creature.target).subtractInPlace(creature.root.position);
+    const horizontalDistance = Math.hypot(tempCreatureVecA.x, tempCreatureVecA.z);
     if (horizontalDistance < 0.35 || now >= creature.nextDecisionAt) {
       creature.moving = false;
       this.animateCreature(creature, now, deltaSeconds, 0);
@@ -741,11 +756,11 @@ export class CreatureManager {
       return;
     }
 
-    const direction = new Vector3(toTarget.x, 0, toTarget.z).normalize();
+    tempCreatureVecB.set(tempCreatureVecA.x, 0, tempCreatureVecA.z).normalize();
     const step = Math.min(horizontalDistance, creature.speed * deltaSeconds);
     const safe = this.safeGroundPosition(
-      creature.root.position.x + direction.x * step,
-      creature.root.position.z + direction.z * step
+      creature.root.position.x + tempCreatureVecB.x * step,
+      creature.root.position.z + tempCreatureVecB.z * step
     );
     if (!safe) {
       creature.moving = false;
@@ -754,10 +769,10 @@ export class CreatureManager {
       return;
     }
 
-    creature.root.position = safe;
+    creature.root.position.copyFrom(safe);
     creature.root.rotation.y = approachAngle(
       creature.root.rotation.y,
-      Math.atan2(direction.x, direction.z),
+      Math.atan2(tempCreatureVecB.x, tempCreatureVecB.z),
       deltaSeconds * 6
     );
     creature.moving = true;
@@ -840,7 +855,7 @@ export class CreatureManager {
         return;
       }
     }
-    creature.target = creature.root.position.clone();
+    creature.target.copyFrom(creature.root.position);
     creature.nextDecisionAt = now + 1500;
   }
 
