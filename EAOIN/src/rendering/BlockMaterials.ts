@@ -32,8 +32,21 @@ export type BlockMaterialMap = Map<SurfaceKey, StandardMaterial>;
 export type TexturePackId = 'classic' | 'soft' | 'vibrant' | 'noir';
 
 /**
+ * The alpha byte every opaque terrain texel is forced to. Hard-coded: this is
+ * the second line of defence against the X-ray defect; even if a generated
+ * RGBA texture or a future resource pack ships a stray low alpha channel, the
+ * uploaded GPU buffer reads fully opaque for these blocks regardless.
+ */
+export const OPAQUE_ALPHA_BYTE = 255;
+
+/** Babylon transparencyMode for the opaque queue — hard requirement, never blended/tested. */
+export const OPAQUE_TRANSPARENCY_MODE = 0; // Material.MATERIAL_OPAQUE
+
+/**
  * Ground ids that are always opaque, even if a resource pack or registry edit
  * accidentally marks one transparent. Id 12 is the engine's bedrock material.
+ * Grass, Dirt and Stone (1, 2, 3) are locked here permanently — they are the
+ * foundation of every chunk and must never inherit alpha from anything.
  */
 export const OPAQUE_GROUND_BLOCKS: ReadonlySet<BlockID> = new Set<BlockID>([
   1, // grass block
@@ -41,6 +54,38 @@ export const OPAQUE_GROUND_BLOCKS: ReadonlySet<BlockID> = new Set<BlockID>([
   3, // stone
   12, // bedrock / obsidian foundation
 ]);
+
+/**
+ * Audit every registered material against the opaque-safety contract.
+ *
+ * Returns a list of human-readable violations; an empty result means the
+ * world's ground cannot render as an X-ray surface. Run at startup in dev
+ * builds and in the regression suite — cheap (one pass over the map) and it
+ * pins the exact invariants the X-ray defect violated:
+ *
+ *  - Grass/Dirt/Stone/Bedrock are in the opaque render queue
+ *    (`transparencyMode === 0`) with `alpha === 1`.
+ *  - Their textures never advertise an alpha channel.
+ *  - Babylon can never route them into a blend or alpha-test pass.
+ */
+export function auditOpaqueTerrainSafety(materials: BlockMaterialMap): string[] {
+  const violations: string[] = [];
+  for (const [key, material] of materials) {
+    const id = (key & 0xffff) as BlockID;
+    if (!OPAQUE_GROUND_BLOCKS.has(id)) continue;
+    const label = `${getBlock(id).name} (variant ${key >> 16})`;
+    if (material.transparencyMode !== OPAQUE_TRANSPARENCY_MODE) {
+      violations.push(`${label}: transparencyMode ${material.transparencyMode} (must be 0)`);
+    }
+    if (material.alpha !== 1) violations.push(`${label}: alpha ${material.alpha} (must be 1)`);
+    if (material.useAlphaFromDiffuseTexture) violations.push(`${label}: useAlphaFromDiffuseTexture true`);
+    if (material.needAlphaBlending()) violations.push(`${label}: needAlphaBlending() true`);
+    if (material.needAlphaTesting()) violations.push(`${label}: needAlphaTesting() true`);
+    if (material.diffuseTexture?.hasAlpha) violations.push(`${label}: diffuseTexture.hasAlpha true`);
+    if (material.disableDepthWrite) violations.push(`${label}: depth write disabled`);
+  }
+  return violations;
+}
 
 function emissiveFor(id: BlockID): Color3 {
   const block = getBlock(id);
@@ -121,7 +166,7 @@ function createMaterial(
  */
 function configureOpaqueMaterial(material: StandardMaterial, texture: Texture): void {
   material.alpha = 1;
-  material.transparencyMode = 0; // Material.MATERIAL_OPAQUE
+  material.transparencyMode = OPAQUE_TRANSPARENCY_MODE;
   material.useAlphaFromDiffuseTexture = false;
   material.separateCullingPass = false;
   material.disableDepthWrite = false;
@@ -171,7 +216,7 @@ function createBlockTexture(
   // `hasAlpha = false` prevents sampling alpha, while this prevents a future
   // material flag change from exposing stale transparent texels in a PNG/pack.
   if (opaque) {
-    for (let alpha = 3; alpha < texels.length; alpha += 4) texels[alpha] = 255;
+    for (let alpha = 3; alpha < texels.length; alpha += 4) texels[alpha] = OPAQUE_ALPHA_BYTE;
   }
 
   const texture = RawTexture.CreateRGBATexture(

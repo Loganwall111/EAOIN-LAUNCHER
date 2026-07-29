@@ -32,10 +32,12 @@ import {
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
+import { auditShaderMaterial } from '../rendering/ShaderBufferSafety';
 
 const SHADER_NAME = 'eaoinAuroraRibbon';
 
-Effect.ShadersStore[`${SHADER_NAME}VertexShader`] = `
+/** Exported so the shader-buffer audit can inspect the exact source it guards. */
+export const AURORA_VERTEX_SHADER = `
 precision highp float;
 attribute vec3 position;
 attribute vec2 uv;
@@ -68,7 +70,8 @@ void main(void) {
 }
 `;
 
-Effect.ShadersStore[`${SHADER_NAME}FragmentShader`] = `
+/** Exported so the shader-buffer audit can inspect the exact source it guards. */
+export const AURORA_FRAGMENT_SHADER = `
 precision highp float;
 varying vec2 vUV;
 varying vec3 vWorldPosition;
@@ -109,6 +112,12 @@ void main(void) {
 }
 `;
 
+Effect.ShadersStore[`${SHADER_NAME}VertexShader`] = AURORA_VERTEX_SHADER;
+Effect.ShadersStore[`${SHADER_NAME}FragmentShader`] = AURORA_FRAGMENT_SHADER;
+
+/** Uniform list bound by every aurora ShaderMaterial — audited at attach. */
+const AURORA_BOUND_UNIFORMS = ['world', 'worldViewProjection', 'time', 'ribbonPhase', 'intensity'];
+
 /** How many vertical control points make up each ribbon's flowing strip. */
 const RIBBON_SEGMENTS = 28;
 const RIBBON_COUNT = 5;
@@ -136,6 +145,16 @@ export class AuroraRibbon {
   }
 
   attach(): void {
+    // Compile-time-style audit of the custom shader's uniform bindings. If a
+    // future edit adds a GLSL uniform without binding it (the WebGPU
+    // "missing buffer" crash class), this surfaces it immediately at attach
+    // instead of as a GPU fault mid-game.
+    auditShaderMaterial(
+      SHADER_NAME,
+      AURORA_VERTEX_SHADER,
+      AURORA_FRAGMENT_SHADER,
+      AURORA_BOUND_UNIFORMS
+    );
     for (let i = 0; i < RIBBON_COUNT; i += 1) {
       const angle = (i / RIBBON_COUNT) * Math.PI * 1.4 - Math.PI * 0.2;
       const centerX = Math.cos(angle) * RIBBON_RADIUS;
@@ -186,7 +205,7 @@ export class AuroraRibbon {
         SHADER_NAME,
         {
           attributes: ['position', 'uv'],
-          uniforms: ['world', 'worldViewProjection', 'time', 'ribbonPhase', 'intensity'],
+          uniforms: [...AURORA_BOUND_UNIFORMS],
           needAlphaBlending: true,
         }
       );

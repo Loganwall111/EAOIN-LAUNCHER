@@ -26,6 +26,7 @@ import {
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
+import { ensureSceneLightsBuffer } from '../rendering/ShaderBufferSafety';
 import { AuroraRibbon } from './AuroraRibbon';
 
 /** Radius of the celestial star shell. */
@@ -69,6 +70,9 @@ export class StarField {
   }
 
   attach(): void {
+    // Stars/shooting stars use StandardMaterials; guarantee the scene's
+    // 'Lights' uniform buffer exists even if the gameplay rig is not up yet.
+    ensureSceneLightsBuffer(this.scene);
     this.createStars();
     this.aurora.attach();
     this.aurora.root.parent = this.root;

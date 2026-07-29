@@ -1,0 +1,341 @@
+/* ---------------------------------------------------------------------------
+ * Developer App Panel — embedded dev-control overlay.
+ *
+ * Visual language matches the Minecraft-style chrome in global.css (beveled
+ * pixel borders, --eaoin-pixel-font), rendered as a right-docked drawer so it
+ * can stay open next to the world while sliders live-preview. The lock gate
+ * is a small centered card — the only thing a non-developer can ever see.
+ * ------------------------------------------------------------------------- */
+
+.dev-app-gate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  z-index: 90;
+  font-family: var(--eaoin-pixel-font);
+}
+
+.dev-app-gate-card {
+  width: min(340px, 90vw);
+  padding: 22px 24px;
+  text-align: center;
+  color: var(--eaoin-text);
+  background: linear-gradient(180deg, rgba(8, 8, 12, 0.94), rgba(0, 0, 0, 0.98));
+  border-top: 5px solid #ffd166;
+  border-left: 5px solid #ffd166;
+  border-right: 5px solid #3a2a08;
+  border-bottom: 5px solid #3a2a08;
+  box-shadow: inset 0 0 0 3px #0a0a0a, 0 22px 70px rgba(0, 0, 0, 0.75);
+  image-rendering: pixelated;
+}
+
+.dev-gate-lock { font-size: 38px; margin-bottom: 4px; }
+
+.dev-app-gate-card h3 {
+  margin: 0 0 2px;
+  font-size: 18px;
+  color: #ffd166;
+  letter-spacing: 1.5px;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.dev-gate-sub { font-size: 10px; color: #b8a76a; margin: 0 0 12px; }
+
+.dev-gate-error {
+  font-size: 10px;
+  color: #ff8a8a;
+  background: rgba(120, 20, 20, 0.35);
+  border: 1px solid #7a2c2c;
+  padding: 6px 8px;
+  margin: 0 0 10px;
+}
+
+.dev-app-gate-card input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 2px solid #ffd166;
+  color: #ffe9ad;
+  font-family: var(--eaoin-pixel-font);
+  font-size: 13px;
+  text-align: center;
+  letter-spacing: 1px;
+  outline: none;
+}
+
+.dev-app-gate-card input:focus { border-color: #fff0c8; }
+
+.dev-gate-actions { display: flex; gap: 8px; justify-content: center; }
+.dev-gate-actions .btn-primary,
+.dev-gate-actions .btn-secondary {
+  font-size: 12px;
+  padding: 10px 18px;
+  border-width: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/* The control drawer itself                                           */
+/* ------------------------------------------------------------------ */
+
+.dev-app-panel {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100% - 96px);
+  overflow-y: auto;
+  padding: 14px 16px 12px;
+  background: linear-gradient(180deg, rgba(6, 8, 14, 0.92), rgba(0, 0, 0, 0.97));
+  border-top: 5px solid #5dd6ff;
+  border-left: 5px solid #5dd6ff;
+  border-right: 5px solid #14384a;
+  border-bottom: 5px solid #14384a;
+  box-shadow: inset 0 0 0 3px #0a0a0a, 0 22px 70px rgba(0, 0, 0, 0.65);
+  pointer-events: auto;
+  z-index: 90;
+  font-family: var(--eaoin-pixel-font);
+  color: var(--eaoin-text);
+  text-shadow: 1px 1px 0 #000;
+  image-rendering: pixelated;
+}
+
+.dev-app-panel::-webkit-scrollbar { width: 10px; }
+.dev-app-panel::-webkit-scrollbar-thumb { background: #2a6f8f; border: 2px solid #0a0a0a; }
+.dev-app-panel::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.4); }
+
+.dev-app-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dev-app-header h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  color: #5dd6ff;
+  letter-spacing: 1px;
+}
+
+.dev-alpha-badge {
+  display: inline-block;
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  color: #ffd166;
+  background: rgba(120, 84, 10, 0.35);
+  border: 1px solid #7a5a14;
+  padding: 3px 6px;
+}
+
+.dev-close-btn {
+  flex: none;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid #5dd6ff;
+  color: #5dd6ff;
+  font-size: 13px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dev-close-btn:hover { background: rgba(93, 214, 255, 0.2); }
+
+.dev-app-section {
+  margin-top: 12px;
+  padding: 10px 10px 8px;
+  background: rgba(93, 214, 255, 0.05);
+  border: 2px solid rgba(93, 214, 255, 0.28);
+}
+
+.dev-app-section h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #7ef7a0;
+  letter-spacing: 1px;
+}
+
+.dev-hint {
+  font-size: 9px;
+  color: #9fb6c2;
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+/* ---- sliders ---- */
+
+.dev-slider-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 58px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dev-slider-label { font-size: 10px; color: #d6ecf5; }
+
+.dev-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  background: linear-gradient(180deg, #123240, #0a1c26);
+  border: 2px solid #2a6f8f;
+  outline: none;
+  cursor: pointer;
+}
+.dev-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 20px;
+  background: linear-gradient(180deg, #8fe3ff, #3aa0cc);
+  border: 2px solid #0a0a0a;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+.dev-slider::-moz-range-thumb {
+  width: 14px;
+  height: 18px;
+  background: linear-gradient(180deg, #8fe3ff, #3aa0cc);
+  border: 2px solid #0a0a0a;
+  border-radius: 0;
+}
+
+.dev-slider-value {
+  font-size: 10px;
+  color: #ffd166;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- toggles ---- */
+
+.dev-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 3px 0;
+  user-select: none;
+}
+.dev-toggle-row input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dev-toggle-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 16px;
+  background: #1a2c36;
+  border: 2px solid #2a6f8f;
+  transition: background 120ms ease;
+}
+.dev-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 10px;
+  background: #8a9aa4;
+  border: 1px solid #0a0a0a;
+  transition: left 120ms ease, background 120ms ease;
+}
+.dev-toggle-row input:checked + .dev-toggle-track {
+  background: #175d33;
+  border-color: #7ef7a0;
+}
+.dev-toggle-row input:checked + .dev-toggle-track::after {
+  left: 17px;
+  background: #7ef7a0;
+}
+.dev-toggle-row input:focus-visible + .dev-toggle-track {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.dev-toggle-label {
+  font-size: 10px;
+  color: #d6ecf5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dev-toggle-label small {
+  font-size: 8px;
+  color: #8fa8b5;
+  text-shadow: none;
+}
+
+/* ---- lighting preset grid ---- */
+
+.dev-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dev-preset-btn {
+  padding: 7px 4px;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: #cfe8f2;
+  background: linear-gradient(180deg, #17303e, #0c1c26);
+  border: 2px solid #2a6f8f;
+  cursor: pointer;
+  text-shadow: 1px 1px 0 #000;
+}
+.dev-preset-btn:hover { filter: brightness(1.18); }
+.dev-preset-btn.active {
+  color: #0a1c10;
+  background: linear-gradient(180deg, #9dffb9, #55c86e);
+  border-color: #c8ffd4;
+  text-shadow: none;
+}
+
+/* ---- biome toggle list ---- */
+
+.dev-biome-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---- footer ---- */
+
+.dev-app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dev-app-footer .btn-secondary {
+  font-size: 10px;
+  padding: 8px 12px;
+  border-width: 3px;
+}
+.dev-app-footer .dev-hint { margin: 0; text-align: right; }
+
+@media (max-width: 720px) {
+  .dev-app-panel {
+    top: auto;
+    bottom: 12px;
+    right: 8px;
+    max-height: 70%;
+  }
+  .dev-slider-row { grid-template-columns: 1fr 100px 52px; }
+}
