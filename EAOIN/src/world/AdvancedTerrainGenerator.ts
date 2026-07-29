@@ -23,7 +23,7 @@
  *    All samples are pure functions of (x, y, z, seed) so the result is
  *    byte-identical on every client and the server.
  */
-import { BlockID } from '@shared/blocks/BlockRegistry';
+import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { AdvancedNoise } from './AdvancedNoise';
 import { DeepCaveGenerator } from './DeepCaves';
@@ -212,7 +212,99 @@ const BLOCK = {
   GRAVEL: 1,
 } as const;
 
-const BEDROCK_MIX: BlockID[] = [12, 12, 12, 12, 3]; // Mostly obsidian-ish "bedrock" stand-in
+const BEDROCK_MIX: BlockID[] = [12, 12, 12, 12, 3];
+const FACE_OFFSETS_3D: ReadonlyArray<readonly [number, number, number]> = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
+
+interface TerrainShapeSample {
+  continentalness: number;
+  erosion: number;
+  peaksAndValleys: number;
+  detail: number;
+}
+
+function finiteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function smoothstep(min: number, max: number, value: number): number {
+  const t = clamp((value - min) / Math.max(Number.EPSILON, max - min), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/** Reject invalid preset values before they can reach a noise or allocation loop. */
+function normaliseWorldGenConfig(
+  overrides: Partial<WorldGenConfig> & { seed: string }
+): WorldGenConfig {
+  const config = { ...DEFAULT_OVERWORLD_CONFIG, ...overrides };
+  const defaults = DEFAULT_OVERWORLD_CONFIG;
+
+  config.bedrockThickness = clamp(
+    Math.round(finiteOr(config.bedrockThickness, defaults.bedrockThickness)),
+    1,
+    16
+  );
+  config.worldDepth = clamp(
+    Math.round(finiteOr(config.worldDepth, defaults.worldDepth)),
+    config.bedrockThickness + 12,
+    CHUNK_HEIGHT
+  );
+  config.seaLevel = clamp(
+    Math.round(finiteOr(config.seaLevel, defaults.seaLevel)),
+    config.bedrockThickness + 4,
+    config.worldDepth - 8
+  );
+  config.continentScale = config.continentScale > 0 && Number.isFinite(config.continentScale)
+    ? config.continentScale
+    : defaults.continentScale;
+  config.detailScale = config.detailScale > 0 && Number.isFinite(config.detailScale)
+    ? config.detailScale
+    : defaults.detailScale;
+  config.mountainIntensity = clamp(
+    finiteOr(config.mountainIntensity, defaults.mountainIntensity),
+    0,
+    4
+  );
+  config.erosionIterations = clamp(
+    Math.round(finiteOr(config.erosionIterations, defaults.erosionIterations)),
+    0,
+    4
+  );
+  config.caveScale = clamp(
+    Math.round(finiteOr(config.caveScale, defaults.caveScale)),
+    0,
+    3
+  );
+  config.biomeScale = clamp(finiteOr(config.biomeScale, defaults.biomeScale), 0.1, 16);
+  config.farLandsThreshold = Math.max(
+    0,
+    finiteOr(config.farLandsThreshold, defaults.farLandsThreshold)
+  );
+  config.subBedrockLayers = clamp(
+    Math.round(finiteOr(config.subBedrockLayers, defaults.subBedrockLayers)),
+    0,
+    8
+  );
+  config.flatGroundY = config.flatGroundY === null
+    ? null
+    : clamp(
+      Math.round(finiteOr(config.flatGroundY, config.seaLevel - 6)),
+      config.bedrockThickness,
+      config.worldDepth - 8
+    );
+
+  return config;
+}
 
 /**
  * Blocks a top-down surface sweep looks straight through.
@@ -242,6 +334,23 @@ const NATURAL_GROUND: ReadonlySet<BlockID> = new Set<BlockID>([
   BLOCK.MUD, BLOCK.BASALT, BLOCK.GRAVEL, BLOCK.PODZOL,
   BLOCK.GRANITE, BLOCK.DIORITE, BLOCK.ANDESITE, BLOCK.DEEPSLATE,
   BLOCK.COBBLESTONE, BLOCK.PACKED_ICE, BLOCK.BLUE_ICE,
+]);
+
+const DENSE_TREE_BIOMES: ReadonlySet<string> = new Set([
+  'forest',
+  'taiga',
+  'rainforest',
+  'bamboo_jungle',
+  'redwood_biome',
+  'cherry_biome',
+  'mystic_woods',
+  'mushroom_island',
+]);
+
+const SPARSE_TREE_BIOMES: ReadonlySet<string> = new Set([
+  'plain',
+  'meadow',
+  'sunflower_plains',
 ]);
 
 /** True when a top-down sweep should see through this block. */
@@ -408,12 +517,7 @@ export class AdvancedTerrainGenerator {
   public readonly config: WorldGenConfig;
 
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
-    const merged = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
-    // This generator writes one 128-block-tall Chunk. A larger logical depth
-    // used to return heights above the actual storage ceiling, leaving a solid
-    // cut-off chunk while gameplay objects were positioned in empty air.
-    merged.worldDepth = Math.max(merged.bedrockThickness + 12, Math.min(CHUNK_HEIGHT, merged.worldDepth));
-    this.config = merged;
+    this.config = normaliseWorldGenConfig(config);
     this.cachedLayout = getWorldLayout(this.config.seed, { x: 0.5, y: this.config.seaLevel + 2.62, z: 0.5 });
     this.noise = new AdvancedNoise(this.config.seed + ':continent');
     this.caveNoise = new AdvancedNoise(this.config.seed + ':cave');
@@ -515,6 +619,10 @@ export class AdvancedTerrainGenerator {
     // chunk grows its own, so a canopy that crosses the border is already
     // present and local decoration can see it.
     this.applyPendingSpill(chunk);
+    // Reconstruct overhangs from deterministic anchors just outside this
+    // chunk. This makes the result independent of which neighbour streamed
+    // first instead of relying solely on an order-sensitive spill queue.
+    this.applyBorderVegetation(chunk);
     this.applyVegetation(chunk);
     this.applyStructures(chunk);
     // Skylands must really have a void below their islands. The old
@@ -532,6 +640,9 @@ export class AdvancedTerrainGenerator {
     this.applyFluidSettling(chunk);
     this.applyPlayableSpawnPatch(chunk);
     this.applyObjectiveClearings(chunk);
+    // Validate the generated result before player-authored edits are restored.
+    // Saved creative edits may intentionally remove bedrock and must win.
+    this.ensureChunkIntegrity(chunk);
     this.applySavedEdits(chunk);
     if (this.chunks.size >= CHUNK_CACHE_LIMIT) {
       const oldest = this.chunks.keys().next().value as string | undefined;
@@ -541,149 +652,166 @@ export class AdvancedTerrainGenerator {
     return chunk;
   }
 
-  /* ============= HEIGHTMAP ============= */
+  /* ============= CAVES & CLIFFS TERRAIN SHAPE ============= */
+
+  /** Continentalness in [0, 1], sampled from independently warped X/Z. */
+  getBaseHeight(worldX: number, worldZ: number): number {
+    const x = finiteOr(worldX, 0) * this.config.continentScale;
+    const z = finiteOr(worldZ, 0) * this.config.continentScale;
+    const warped = this.noise.warpPoint2D(x, z, 1.6, 1);
+    const warpedX = finiteOr(warped.x, x);
+    const warpedZ = finiteOr(warped.y, z);
+    return clamp(finiteOr(this.noise.fbm2D(warpedX, warpedZ, 5, 2, 0.5, 2), 0.5), 0, 1);
+  }
+
+  /** Peaks-and-valleys ridge field in [0, 1]. */
+  getMountainHeight(worldX: number, worldZ: number): number {
+    const x = finiteOr(worldX, 0) * this.config.continentScale * 2;
+    const z = finiteOr(worldZ, 0) * this.config.continentScale * 2;
+    const ridges = finiteOr(this.noise.ridge2D(x, z, 5, 5), 0);
+    const modulation = finiteOr(this.noise.fbm2D(x, z, 4, 2, 0.5, 6), 0.5);
+    return clamp(ridges * 0.72 + modulation * 0.28, 0, 1);
+  }
 
   /**
-   * Continental height in [0, 1], warped for natural coastlines.
-   *
-   * ## Bug fixed here: the field was collapsed onto its diagonal
-   *
-   * The old body was:
-   *
-   * ```ts
-   * const warp = this.noise.warped2D(cx, cz, 1.6, 1);   // a SCALAR
-   * const continent = this.noise.fbm2D(warp * 1.2, warp * 1.2, ...);
-   * ```
-   *
-   * Both arguments to `fbm2D` were the *same* number, so the continent field
-   * was only ever sampled along the line x === z. Two consequences, both
-   * visible in-game:
-   *
-   *  1. The 2D field degenerated to a 1D one, so continents became long
-   *     straight bands running at 45°, and the effective feature size no
-   *     longer matched `continentScale`.
-   *  2. `warped2D` returns a value in [0, 1], so after the `* 1.2` the entire
-   *     world only ever sampled the fbm over a 1.2-unit-wide window. Almost
-   *     all of the continental variation was therefore compressed into a tiny
-   *     patch of noise, which is why the measured height distribution was so
-   *     narrow (p05..p95 spanned only 46..74) and why nearly the whole map sat
-   *     above the biome system's `elevation > 48` alpine gate.
-   *
-   * The fix warps the *coordinates* (a real 2D vector displacement) and then
-   * samples the continent field at those warped coordinates.
+   * Stable approximation of Minecraft 1.18's four terrain controls.
+   * Every channel has an explicit finite fallback; an invalid noise sample
+   * therefore means ordinary mid-continent stone, never a missing column.
    */
-  getBaseHeight(worldX: number, worldZ: number): number {
-    const cx = worldX * this.config.continentScale;
-    const cz = worldZ * this.config.continentScale;
-    // Displace the sample point, keeping X and Z independent.
-    const warped = this.noise.warpPoint2D(cx, cz, 1.6, 1);
-    return this.noise.fbm2D(warped.x, warped.y, 5, 2.0, 0.5, 2);
+  private sampleTerrainShape(worldX: number, worldZ: number): TerrainShapeSample {
+    const x = finiteOr(worldX, 0);
+    const z = finiteOr(worldZ, 0);
+    const continentalness = this.getBaseHeight(x, z);
+    const erosion = clamp(finiteOr(this.detailNoise.fbm2D(
+      (x + 173) * this.config.continentScale * 1.7,
+      (z - 281) * this.config.continentScale * 1.7,
+      4,
+      2,
+      0.5,
+      31
+    ), 0.5), 0, 1);
+    const peaksAndValleys = this.getMountainHeight(x, z);
+    const detail = clamp(finiteOr(this.detailNoise.fbm2D(
+      x * this.config.detailScale,
+      z * this.config.detailScale,
+      4,
+      2,
+      0.5,
+      11
+    ), 0.5), 0, 1);
+
+    return { continentalness, erosion, peaksAndValleys, detail };
   }
 
-  /** Mountain ridge height in [0, 1] for a given point. */
-  getMountainHeight(worldX: number, worldZ: number): number {
-    const cx = worldX * this.config.continentScale * 2.0;
-    const cz = worldZ * this.config.continentScale * 2.0;
-    const r = this.noise.ridge2D(cx, cz, 5, 5);
-    const m = this.noise.fbm2D(cx, cz, 4, 2.0, 0.5, 6);
-    return Math.max(0, r * 0.7 + m * 0.3);
-  }
-
-  /** Final terrain height in voxels, used everywhere. */
+  /** Final legal integer terrain height. */
   getTerrainHeight(worldX: number, worldZ: number): number {
-    const x = Math.floor(worldX), z = Math.floor(worldZ);
+    const x = Math.floor(finiteOr(worldX, 0));
+    const z = Math.floor(finiteOr(worldZ, 0));
     const key = columnKey(x, z);
     const cached = this.heightCache.get(key);
     if (cached !== undefined) return cached;
 
-    const h = Math.max(
-      this.config.bedrockThickness,
-      Math.min(this.config.worldDepth - 8, Math.round(this.computeTerrainHeight(x, z)))
-    );
-    this.rememberHeight(this.heightCache, key, h);
-    return h;
+    const computed = this.computeTerrainHeight(x, z);
+    const height = Number.isFinite(computed)
+      ? clamp(Math.round(computed), this.config.bedrockThickness, this.config.worldDepth - 8)
+      : this.fallbackSurfaceHeight();
+    this.rememberHeight(this.heightCache, key, height);
+    return height;
   }
 
-  /** Height before erosion smoothing. Never calls getTerrainHeight (no recursion). */
+  /** Height before the bounded erosion filter. Never calls getTerrainHeight. */
   private getRawTerrainHeight(worldX: number, worldZ: number): number {
-    const x = Math.floor(worldX), z = Math.floor(worldZ);
+    const x = Math.floor(finiteOr(worldX, 0));
+    const z = Math.floor(finiteOr(worldZ, 0));
     const key = columnKey(x, z);
     const cached = this.rawHeightCache.get(key);
     if (cached !== undefined) return cached;
 
-    const continent = this.getBaseHeight(x, z);
-    
-    // Improved mountain noise for Caves & Cliffs style
-    const mountainBase = this.noise.fbm2D(x * 0.0008, z * 0.0008, 6, 2.1, 0.48, 8);
-    const mountainRidge = this.noise.ridge2D(x * 0.002, z * 0.002, 5, 12);
-    
-    // Mountain mask decides where peaks are
-    const mountainMask = Math.pow(Math.max(0, mountainBase - 0.42) * 1.8, 2);
-    
-    // Continental baseline
-    const baseHeight = this.config.seaLevel - 4 + continent * 32;
-    
-    // Mountain peaks: sharp ridges that rise high
-    const mountainContribution = mountainRidge * mountainMask * 120 * this.config.mountainIntensity;
+    const shape = this.sampleTerrainShape(x, z);
+    const continentalHeight = this.config.seaLevel - 4 + shape.continentalness * 32;
 
-    const detail = this.detailNoise.fbm2D(x * this.config.detailScale, z * this.config.detailScale, 5, 2.0, 0.5, 11) * 3.5;
-    const beach = this.getBeachHeight(x, z);
+    // Mountains need inland continentalness and low erosion. Squaring the ridge
+    // gives sharp peaks without the unbounded 120x multiplier from the old pass.
+    const inland = smoothstep(0.4, 0.72, shape.continentalness);
+    const preservedTerrain = 1 - smoothstep(0.38, 0.78, shape.erosion);
+    const mountainMask = inland * preservedTerrain;
+    const peak = shape.peaksAndValleys * shape.peaksAndValleys;
+    const mountains = peak * mountainMask * 60 * this.config.mountainIntensity;
+    const detail = (shape.detail - 0.5) * 7;
+    const raw = continentalHeight + mountains + detail + this.getBeachHeight(x, z);
+    const safe = finiteOr(raw, this.fallbackSurfaceHeight());
 
-    const raw = baseHeight + mountainContribution + detail + beach;
-    this.rememberHeight(this.rawHeightCache, key, raw);
-    return raw;
+    this.rememberHeight(this.rawHeightCache, key, safe);
+    return safe;
   }
 
-  /** Composes the raw heightmap, erosion and valley smoothing for one column. */
+  /** Compose terrain shape, erosion, valleys and optional exotic transforms. */
   private computeTerrainHeight(worldX: number, worldZ: number): number {
     if (this.config.flatGroundY !== null) return this.config.flatGroundY;
-    if (this.config.floatingIslands || this.config.skyIslands) return this.getFloatingIslandHeight(worldX, worldZ);
+    if (this.config.floatingIslands || this.config.skyIslands) {
+      return this.getFloatingIslandHeight(worldX, worldZ);
+    }
 
-    let h = this.getRawTerrainHeight(worldX, worldZ);
-    h = this.applyHydraulicErosion(h, worldX, worldZ);
-    h -= this.getValleyHeight(worldX, worldZ);
+    let height = this.applyHydraulicErosion(
+      this.getRawTerrainHeight(worldX, worldZ),
+      worldX,
+      worldZ
+    ) - this.getValleyHeight(worldX, worldZ);
 
-    // --- Far Lands -------------------------------------------------------
-    // Past the threshold the terrain stops being terrain and becomes
-    // architecture: sheer walls hundreds of blocks tall with stretched
-    // tunnels between them.
-    const corruption = farLandsCorruption(worldX, worldZ, this.config.farLandsThreshold);
+    const corruption = finiteOr(
+      farLandsCorruption(worldX, worldZ, this.config.farLandsThreshold),
+      0
+    );
     if (corruption > 0) {
-      const far = sampleFarLands(this.exoticNoise, worldX, worldZ, corruption, this.config.worldDepth);
-      // Blend from normal terrain into the wall structure as corruption ramps.
-      h = h * (1 - corruption) + (h + far.heightBoost) * corruption;
-      if (far.tunnel) h = Math.min(h, this.config.seaLevel - 10);
+      const far = sampleFarLands(
+        this.exoticNoise,
+        worldX,
+        worldZ,
+        clamp(corruption, 0, 1),
+        this.config.worldDepth
+      );
+      const boost = finiteOr(far.heightBoost, 0);
+      height += boost * clamp(corruption, 0, 1);
+      if (far.tunnel) height = Math.min(height, this.config.seaLevel - 10);
     }
 
-    // --- Inverted --------------------------------------------------------
     if (this.config.inverted) {
-      h = invertHeight(h, this.config.seaLevel, this.config.worldDepth);
+      height = finiteOr(
+        invertHeight(height, this.config.seaLevel, this.config.worldDepth),
+        this.fallbackSurfaceHeight()
+      );
     }
 
-    // Ease the safe spawn plateau into the real heightmap instead of cutting a
-    // hard cylindrical hole through it.  Smoothstep gives a zero slope at both
-    // ends, so neither the platform edge nor the procedural edge forms a wall.
+    // Smoothly join the protected spawn plateau to procedural terrain.
     const spawnDistance = Math.hypot(worldX, worldZ);
     if (spawnDistance < SPAWN_TERRAIN_BLEND_RADIUS) {
       const spawnHeight = this.config.seaLevel - 6;
       if (spawnDistance <= SPAWN_PROTECTED_RADIUS) return spawnHeight;
-      const linear = (spawnDistance - SPAWN_PROTECTED_RADIUS)
-        / (SPAWN_TERRAIN_BLEND_RADIUS - SPAWN_PROTECTED_RADIUS);
-      const blend = linear * linear * (3 - 2 * linear);
-      h = spawnHeight + (h - spawnHeight) * blend;
+      const blend = smoothstep(
+        SPAWN_PROTECTED_RADIUS,
+        SPAWN_TERRAIN_BLEND_RADIUS,
+        spawnDistance
+      );
+      height = spawnHeight + (height - spawnHeight) * blend;
     }
 
-    return h;
+    return finiteOr(height, this.fallbackSurfaceHeight());
   }
 
-  /** Small bounded LRU-ish cache so streaming does not recompute noise endlessly. */
+  private fallbackSurfaceHeight(): number {
+    return clamp(
+      this.config.seaLevel - 6,
+      this.config.bedrockThickness + 4,
+      this.config.worldDepth - 8
+    );
+  }
+
+  /** Small bounded insertion-order cache used by hot world-generation paths. */
   private rememberHeight(cache: Map<number, number>, key: number, value: number): void {
     if (cache.size >= HEIGHT_CACHE_LIMIT) {
-      // Drop the oldest quarter of the cache instead of clearing everything,
-      // so the chunk currently being meshed keeps its hot entries.
       let toDrop = Math.floor(HEIGHT_CACHE_LIMIT / 4);
-      for (const k of cache.keys()) {
-        cache.delete(k);
+      for (const oldKey of cache.keys()) {
+        cache.delete(oldKey);
         if (--toDrop <= 0) break;
       }
     }
@@ -691,51 +819,55 @@ export class AdvancedTerrainGenerator {
   }
 
   getFloatingIslandHeight(worldX: number, worldZ: number): number {
-    const continent = this.noise.fbm2D(worldX * 0.0028, worldZ * 0.0028, 5, 2.0, 0.5, 1);
-    const island = this.noise.fbm2D((worldX + 413) * 0.012, (worldZ - 199) * 0.012, 3, 2.0, 0.5, 3);
-    const ridge = this.noise.ridge2D(worldX * 0.005, worldZ * 0.005, 4, 5);
+    const x = finiteOr(worldX, 0);
+    const z = finiteOr(worldZ, 0);
+    const continent = finiteOr(this.noise.fbm2D(x * 0.0028, z * 0.0028, 5, 2, 0.5, 1), 0.5);
+    const island = finiteOr(this.noise.fbm2D((x + 413) * 0.012, (z - 199) * 0.012, 3, 2, 0.5, 3), 0.5);
+    const ridge = finiteOr(this.noise.ridge2D(x * 0.005, z * 0.005, 4, 5), 0);
     const mask = Math.max(0, island - 0.45) * 4;
-    const base = this.config.seaLevel + 18 + continent * 22 + ridge * 18 * mask;
-    return Math.max(this.config.worldDepth - 60, Math.min(this.config.worldDepth - 8, Math.round(base)));
+    const raw = this.config.seaLevel + 18 + continent * 22 + ridge * 18 * mask;
+    return clamp(
+      Math.round(finiteOr(raw, this.config.worldDepth - 24)),
+      this.config.worldDepth - 60,
+      this.config.worldDepth - 8
+    );
   }
 
-  /** Soft valley smoothing — long shallow valleys between mountains. */
+  /** Long shallow valleys along a high ridge-noise contour. */
   getValleyHeight(worldX: number, worldZ: number): number {
-    const v = this.noise.ridge2D((worldX - 423) * 0.0048, (worldZ + 827) * 0.0048, 4, 9);
-    if (v < 0.74) return 0;
-    return (v - 0.74) / 0.26 * 8;
+    const x = finiteOr(worldX, 0);
+    const z = finiteOr(worldZ, 0);
+    const ridge = clamp(finiteOr(
+      this.noise.ridge2D((x - 423) * 0.0048, (z + 827) * 0.0048, 4, 9),
+      0
+    ), 0, 1);
+    return ridge < 0.74 ? 0 : ((ridge - 0.74) / 0.26) * 8;
   }
 
-  /** Coastal beach height boost — lifts ground a bit near the sea. */
+  /** Small coastal lift around low-continentalness shorelines. */
   getBeachHeight(worldX: number, worldZ: number): number {
-    const h = this.getBaseHeight(worldX, worldZ);
-    if (h > 0.55) return 0;
-    return (0.55 - h) * 4;
+    const continentalness = this.getBaseHeight(worldX, worldZ);
+    return continentalness > 0.55 ? 0 : (0.55 - continentalness) * 4;
   }
 
   /**
-   * Hydraulic + thermal erosion approximation in 1D.
-   *
-   * Neighbour samples deliberately use the *raw* heightmap. Sampling the eroded
-   * height here would make getTerrainHeight call itself for four neighbours,
-   * which recursed forever and blew the stack (black screen on world load).
+   * One bounded thermal-erosion filter. It samples only the raw field, so it
+   * cannot recurse and its cost cannot grow into a chaotic iterative loop.
    */
-  private applyHydraulicErosion(h: number, worldX: number, worldZ: number): number {
-    if (this.config.erosionIterations <= 0) return h;
-    // Slightly lower peaks and lift valleys using a smoothed sample.
-    const step = 1.4;
-    let eroded = h;
-    for (let iter = 0; iter < this.config.erosionIterations; iter++) {
-      const spread = step * (iter + 1);
-      const a = this.getRawTerrainHeight(worldX + spread, worldZ);
-      const b = this.getRawTerrainHeight(worldX - spread, worldZ);
-      const c = this.getRawTerrainHeight(worldX, worldZ + spread);
-      const d = this.getRawTerrainHeight(worldX, worldZ - spread);
-      const mean = (a + b + c + d) / 4;
-      const diff = eroded - mean;
-      eroded = Math.max(this.config.bedrockThickness, eroded - Math.min(2, Math.max(0, diff) * 0.4));
+  private applyHydraulicErosion(height: number, worldX: number, worldZ: number): number {
+    if (this.config.erosionIterations <= 0) {
+      return finiteOr(height, this.fallbackSurfaceHeight());
     }
-    return eroded;
+
+    const radius = 1 + this.config.erosionIterations;
+    const mean = (
+      this.getRawTerrainHeight(worldX + radius, worldZ)
+      + this.getRawTerrainHeight(worldX - radius, worldZ)
+      + this.getRawTerrainHeight(worldX, worldZ + radius)
+      + this.getRawTerrainHeight(worldX, worldZ - radius)
+    ) / 4;
+    const strength = Math.min(0.42, this.config.erosionIterations * 0.14);
+    return finiteOr(height + (mean - height) * strength, this.fallbackSurfaceHeight());
   }
 
   /* ============= FILL PASSES ============= */
@@ -755,7 +887,14 @@ export class AdvancedTerrainGenerator {
   private fillSkyIslands(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       const top = Math.min(CHUNK_HEIGHT - 1, this.getFloatingIslandHeight(wx, wz));
-      const bottom = Math.max(this.config.bedrockThickness, top - (8 + Math.floor(this.noise.fbm2D(wx * 0.018, wz * 0.018, 3, 2.0, 0.5, 31) * 12)));
+      const thicknessNoise = finiteOr(
+        this.noise.fbm2D(wx * 0.018, wz * 0.018, 3, 2, 0.5, 31),
+        0.5
+      );
+      const bottom = Math.max(
+        this.config.bedrockThickness,
+        top - (8 + Math.floor(clamp(thicknessNoise, 0, 1) * 12))
+      );
       // Only the finite island body is solid. The previous `else` wrote grass
       // from `top` all the way to y=127, turning every sky island into an
       // upside-down solid column and making the intended void nonsensical.
@@ -777,103 +916,95 @@ export class AdvancedTerrainGenerator {
     return BLOCK.STONE;
   }
 
-  /* ============= CAVE PASS ============= */
+  /* ============= CAVE DENSITY PASS ============= */
 
   /**
-   * Carve the cave network.
-   *
-   * ## What was wrong before
-   *
-   * The old pass produced a *hollow* underground: a survey of the shipped
-   * generator found **52% of every rock column below the surface was air**.
-   * That is why the underground read as "a complete empty area… like nothing
-   * there, hollow". Two causes:
-   *
-   *   1. The tunnel test `|n1-0.5| + |n2-0.5| < threshold` compares a *sum of
-   *      two independent fbm fields*, which is near 0.5 far more often than a
-   *      proper distance test, so it carved enormous connected voids.
-   *   2. It ran for the whole column with no falloff, and the deep-cave pass
-   *      then widened the same space again.
-   *
-   * ## What it does now
-   *
-   * Two complementary, well-understood cave types, exactly like Minecraft:
-   *
-   *   - **Worm / spaghetti tunnels**: two ridged-noise fields, each turned
-   *     into a *tube* by taking distance from a zero crossing. A point is
-   *     hollow only where **both** tubes are narrow, which yields long,
-   *     winding, genuinely connected passages rather than blobs.
-   *   - **Cheese chambers**: sparse low-frequency 3D noise above a high
-   *     threshold, giving the occasional real room to walk into.
-   *
-   * Both fade out near the surface and near bedrock, so the ground stays solid
-   * and the world keeps a floor.
+   * Carve a bounded 1.18-style mix of spaghetti tunnels and cheese rooms.
+   * Negative density means air; zero/positive density remains solid. Invalid
+   * samples intentionally resolve positive so corrupted noise can never carve
+   * an unbounded transparent shaft through a chunk.
    */
   private applyCavePass(chunk: Chunk): void {
     if (this.config.caveScale === 0) return;
-    const cs = this.config.caveScale;
 
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
-      // This whole column is replaced by the safe spawn patch later.
       if (Math.hypot(wx, wz) <= SPAWN_PROTECTED_RADIUS + 2) return;
+
       const surface = this.getTerrainHeight(wx, wz);
-      // Regional mask: some areas are simply more caved than others, which is
-      // what makes spelunking feel like finding something.
-      const region = this.caveNoise.fbm2D(wx * 0.0022, wz * 0.0022, 3, 2.0, 0.5, 151);
-      const regionDensity = Math.max(0, (region - 0.32) / 0.68);
-      if (regionDensity <= 0) return;
+      const region = finiteOr(
+        this.caveNoise.fbm2D(wx * 0.0022, wz * 0.0022, 3, 2, 0.5, 151),
+        0
+      );
+      const regionStrength = clamp((region - 0.32) / 0.68, 0, 1);
+      if (regionStrength <= 0) return;
 
-      // Leave a solid cap under the surface so caves never break daylight.
-      const yStart = this.config.bedrockThickness + 2;
-      const yEnd = Math.min(surface - 6, CHUNK_HEIGHT - 1);
-      if (yEnd <= yStart) return;
+      const bottom = this.config.bedrockThickness + 2;
+      const top = Math.min(surface - 6, CHUNK_HEIGHT - 1);
+      if (top <= bottom) return;
+      const span = Math.max(1, top - bottom);
 
-      const span = Math.max(1, yEnd - yStart);
-      // Radius is constant per column apart from the vertical falloff, so hoist
-      // everything that does not depend on y out of the loop.
-      const radiusBase = 0.075 * (cs >= 2 ? 1.15 : 0.85) * (0.55 + regionDensity * 0.45);
-      const roomBase = 0.82 - regionDensity * 0.05;
+      for (let y = bottom; y < top; y += 1) {
+        const block = chunk.getBlock(lx, y, lz);
+        if (block === BLOCK.AIR || block === BLOCK.WATER || block === BLOCK.LAVA) continue;
 
-      for (let y = yStart; y < yEnd; y++) {
-        const current = chunk.getBlock(lx, y, lz);
-        // Never carve bedrock, and never carve into existing fluid.
-        if (current === BLOCK.AIR || current === BLOCK.WATER || current === BLOCK.LAVA) continue;
-
-        // Vertical falloff: 0 at the roof and at bedrock, 1 in the middle of
-        // the rock column. Keeps the ground and the floor of the world solid.
-        const t = (y - yStart) / span;
-        const falloff = Math.sin(Math.PI * t);
-        if (falloff <= 0.05) continue;
-
-        let hollow = false;
-
-        // --- worm tunnels ------------------------------------------------
-        // Distance from the zero-crossing of each field defines a tube; the
-        // intersection of two tubes is a winding passage.
-        //
-        // PERF: the two fbm3D calls are the single most expensive thing in
-        // world generation. The first is evaluated, and the second is only
-        // evaluated when the first is already inside the tube radius —
-        // `w1*w1` alone can rule the point out, and it does for the vast
-        // majority of blocks. That halves the noise work on this path.
-        const radius = radiusBase * falloff;
-        const radiusSq = radius * radius;
-        const w1 = this.caveNoise.fbm3D(wx * 0.014, y * 0.026, wz * 0.014, 2, 2.0, 0.5, 1) - 0.5;
-        if (w1 * w1 < radiusSq) {
-          const w2 = this.caveNoise.fbm3D((wx + 211) * 0.014, y * 0.026, (wz - 503) * 0.014, 2, 2.0, 0.5, 2) - 0.5;
-          if (w1 * w1 + w2 * w2 < radiusSq) hollow = true;
-        }
-
-        // --- cheese chambers ---------------------------------------------
-        if (!hollow) {
-          const room = this.caveNoise.fbm3D(wx * 0.0075, y * 0.011, wz * 0.0075, 2, 2.0, 0.5, 3);
-          // High threshold => rare. Slightly easier to satisfy deeper down.
-          if (room > roomBase - falloff * 0.07) hollow = true;
-        }
-
-        if (hollow) chunk.setBlock(lx, y, lz, BLOCK.AIR);
+        const vertical = Math.sin(Math.PI * ((y - bottom) / span));
+        if (vertical <= 0.05) continue;
+        const density = this.sampleCaveDensity(wx, y, wz, vertical, regionStrength);
+        if (density < 0) chunk.setBlock(lx, y, lz, BLOCK.AIR);
       }
     });
+  }
+
+  private sampleCaveDensity(
+    worldX: number,
+    y: number,
+    worldZ: number,
+    vertical: number,
+    regionStrength: number
+  ): number {
+    const scaleMultiplier = this.config.caveScale >= 2 ? 1.15 : 0.85;
+    const radius = 0.075
+      * scaleMultiplier
+      * (0.55 + regionStrength * 0.45)
+      * vertical;
+
+    const first = finiteOr(this.caveNoise.fbm3D(
+      worldX * 0.014,
+      y * 0.026,
+      worldZ * 0.014,
+      2,
+      2,
+      0.5,
+      1
+    ), 1) - 0.5;
+
+    // Most points can be rejected after one field, avoiding a second 3D sample.
+    let spaghettiDensity = Math.abs(first) - radius;
+    if (Math.abs(first) < radius) {
+      const second = finiteOr(this.caveNoise.fbm3D(
+        (worldX + 211) * 0.014,
+        y * 0.026,
+        (worldZ - 503) * 0.014,
+        2,
+        2,
+        0.5,
+        2
+      ), 1) - 0.5;
+      spaghettiDensity = Math.hypot(first, second) - radius;
+    }
+
+    const cheese = finiteOr(this.caveNoise.fbm3D(
+      worldX * 0.0075,
+      y * 0.011,
+      worldZ * 0.0075,
+      2,
+      2,
+      0.5,
+      3
+    ), 0);
+    const cheeseThreshold = 0.82 - regionStrength * 0.05 - vertical * 0.07;
+    const cheeseDensity = cheeseThreshold - cheese;
+    return finiteOr(Math.min(spaghettiDensity, cheeseDensity), 1);
   }
 
   /* ============= RAVINES ============= */
@@ -974,106 +1105,75 @@ export class AdvancedTerrainGenerator {
   /* ============= SINKHOLES ============= */
 
   /**
-   * Sinkholes — small round craters punched down into the surface.
-   *
-   * ## The two bugs this replaces: half-craters and flat crater walls
-   *
-   * The old pass walked the columns *inside* the chunk and, whenever a column
-   * happened to be a sinkhole anchor, carved that anchor's disc. Both halves
-   * of that design were wrong at a chunk boundary.
-   *
-   *   1. **Outward clipping.** A disc whose anchor sat near an edge ran off
-   *      the chunk, and the overhanging voxels were dropped by a bare
-   *      `continue`:
-   *
-   *      ```ts
-   *      if (lx2 < 0 || lx2 >= CHUNK_SIZE || ...) continue;   // silently lost
-   *      ```
-   *
-   *   2. **Inward blindness.** An anchor in the *neighbouring* chunk whose
-   *      radius reached into this one was never considered at all, because the
-   *      loop only ever visited local columns.
-   *
-   *      These are two different halves of the same crater, and neither was
-   *      carved. Measured over a 17x17-chunk region: **55.6% of all anchors
-   *      were clipped** (1235 voxels discarded), and a further 292 in-reach
-   *      anchors were never evaluated (1241 voxel-columns left uncarved). The
-   *      result is a crater that stops dead against a perfectly straight
-   *      16-block line — a flat vertical wall of exposed, unlit interior, which
-   *      is exactly the "broken crater" artefact.
-   *
-   * ## The fix
-   *
-   * Iterate **anchors, not columns**. The chunk scans every anchor cell whose
-   * disc could possibly overlap its footprint — its own cells plus a margin of
-   * `SINKHOLE_MAX_RADIUS` on each side — and carves only the part of each disc
-   * that lands inside this chunk. Every anchor is therefore evaluated by both
-   * chunks it straddles, and each writes its own half. The two halves join
-   * seamlessly because both are derived from the same anchor hash.
-   *
-   * This needs no cross-chunk writes and no neighbour generation, so it stays
-   * deterministic and order-independent: a chunk carves an identical crater
-   * whether or not its neighbour has been built yet.
-   *
-   * ## Per-column depth
-   *
-   * The depth profile is anchored to each carved column's *own* terrain
-   * height rather than the anchor column's. Using a single height for the
-   * whole disc cut a flat-bottomed cylinder into sloped ground and could
-   * carve air well above the local surface.
+   * Build a world-space crater depth map, then carve it once. Neighbouring
+   * chunks evaluate the same anchor cells, so a crater cannot stop at a chunk
+   * edge. A one-block stone floor seals the crater from a cavern immediately
+   * below it, preventing an accidental open X-ray shaft into the cave network.
    */
   private applySinkholes(chunk: Chunk): void {
     if (!this.config.sinkholes) return;
 
-    const cell = SINKHOLE_CELL_SIZE;
-    const margin = SINKHOLE_MAX_RADIUS;
     const originX = chunk.x * CHUNK_SIZE;
     const originZ = chunk.z * CHUNK_SIZE;
+    const firstCellX = Math.floor((originX - SINKHOLE_MAX_RADIUS) / SINKHOLE_CELL_SIZE);
+    const lastCellX = Math.floor((originX + CHUNK_SIZE - 1 + SINKHOLE_MAX_RADIUS) / SINKHOLE_CELL_SIZE);
+    const firstCellZ = Math.floor((originZ - SINKHOLE_MAX_RADIUS) / SINKHOLE_CELL_SIZE);
+    const lastCellZ = Math.floor((originZ + CHUNK_SIZE - 1 + SINKHOLE_MAX_RADIUS) / SINKHOLE_CELL_SIZE);
+    const carveFrom = new Int16Array(CHUNK_SIZE * CHUNK_SIZE);
+    carveFrom.fill(CHUNK_HEIGHT);
 
-    // Every anchor cell that could reach into this chunk, including the ring
-    // of neighbouring cells just outside it.
-    const firstCellX = Math.floor((originX - margin) / cell);
-    const lastCellX = Math.floor((originX + CHUNK_SIZE - 1 + margin) / cell);
-    const firstCellZ = Math.floor((originZ - margin) / cell);
-    const lastCellZ = Math.floor((originZ + CHUNK_SIZE - 1 + margin) / cell);
-
-    for (let cellX = firstCellX; cellX <= lastCellX; cellX++) {
-      for (let cellZ = firstCellZ; cellZ <= lastCellZ; cellZ++) {
-        // Anchor position — hashed from the cell, so every chunk that sees
-        // this cell derives exactly the same crater.
-        const ox = Math.floor(this.noise.hash(cellX, cellZ, 0, 41) * cell);
-        const oz = Math.floor(this.noise.hash(cellX, cellZ, 1, 42) * cell);
-        const anchorX = cellX * cell + ox;
-        const anchorZ = cellZ * cell + oz;
-
-        // Spawn guard is tested on the ANCHOR, not on each carved column, so a
-        // crater is either fully present or fully absent. Testing per column
-        // would let the blend radius slice a crater in half.
+    for (let cellX = firstCellX; cellX <= lastCellX; cellX += 1) {
+      for (let cellZ = firstCellZ; cellZ <= lastCellZ; cellZ += 1) {
+        const anchorX = cellX * SINKHOLE_CELL_SIZE + Math.floor(
+          finiteOr(this.noise.hash(cellX, cellZ, 0, 41), 0.5) * SINKHOLE_CELL_SIZE
+        );
+        const anchorZ = cellZ * SINKHOLE_CELL_SIZE + Math.floor(
+          finiteOr(this.noise.hash(cellX, cellZ, 1, 42), 0.5) * SINKHOLE_CELL_SIZE
+        );
         if (Math.hypot(anchorX, anchorZ) < SPAWN_TERRAIN_BLEND_RADIUS) continue;
 
-        const r = SINKHOLE_MIN_RADIUS
-          + Math.floor(this.noise.hash(cellX, cellZ, 2, 43) * (SINKHOLE_MAX_RADIUS - SINKHOLE_MIN_RADIUS + 1));
-        const depth = 8 + Math.floor(this.noise.hash(cellX, cellZ, 3, 44) * 6);
+        const radius = SINKHOLE_MIN_RADIUS + Math.floor(
+          clamp(finiteOr(this.noise.hash(cellX, cellZ, 2, 43), 0), 0, 0.999999)
+          * (SINKHOLE_MAX_RADIUS - SINKHOLE_MIN_RADIUS + 1)
+        );
+        const depth = 8 + Math.floor(
+          clamp(finiteOr(this.noise.hash(cellX, cellZ, 3, 44), 0), 0, 0.999999) * 6
+        );
+        const minX = Math.max(originX, anchorX - radius);
+        const maxX = Math.min(originX + CHUNK_SIZE - 1, anchorX + radius);
+        const minZ = Math.max(originZ, anchorZ - radius);
+        const maxZ = Math.min(originZ + CHUNK_SIZE - 1, anchorZ + radius);
 
-        // Clip the disc to this chunk's footprint in world space, then carve.
-        const minX = Math.max(anchorX - r, originX);
-        const maxX = Math.min(anchorX + r, originX + CHUNK_SIZE - 1);
-        const minZ = Math.max(anchorZ - r, originZ);
-        const maxZ = Math.min(anchorZ + r, originZ + CHUNK_SIZE - 1);
-        if (minX > maxX || minZ > maxZ) continue;
-
-        for (let wx = minX; wx <= maxX; wx++) {
-          for (let wz = minZ; wz <= maxZ; wz++) {
-            const d = Math.hypot(wx - anchorX, wz - anchorZ);
-            if (d > r) continue;
-            // Depth follows THIS column's ground, so the crater hugs a slope.
+        for (let wx = minX; wx <= maxX; wx += 1) {
+          for (let wz = minZ; wz <= maxZ; wz += 1) {
+            const distance = Math.hypot(wx - anchorX, wz - anchorZ);
+            if (distance > radius) continue;
+            const carveDepth = Math.round(depth * (1 - distance / radius));
+            if (carveDepth <= 0) continue;
             const surface = this.getTerrainHeight(wx, wz);
-            const from = surface - Math.round(depth * (1 - d / r));
-            for (let y = from; y < surface; y++) {
-              if (y < this.config.bedrockThickness) continue;
-              chunk.setBlock(wx - originX, y, wz - originZ, BLOCK.AIR);
-            }
+            const from = Math.max(this.config.bedrockThickness, surface - carveDepth);
+            const lx = wx - originX;
+            const lz = wz - originZ;
+            const index = lx + CHUNK_SIZE * lz;
+            carveFrom[index] = Math.min(carveFrom[index], from);
           }
+        }
+      }
+    }
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
+        const from = carveFrom[lx + CHUNK_SIZE * lz];
+        if (from >= CHUNK_HEIGHT) continue;
+        const wx = originX + lx;
+        const wz = originZ + lz;
+        const surface = this.getTerrainHeight(wx, wz);
+        for (let y = from; y < surface; y += 1) chunk.setBlock(lx, y, lz, BLOCK.AIR);
+
+        const floorY = from - 1;
+        if (floorY >= this.config.bedrockThickness
+          && chunk.getBlock(lx, floorY, lz) === BLOCK.AIR) {
+          chunk.setBlock(lx, floorY, lz, BLOCK.STONE);
         }
       }
     }
@@ -1670,20 +1770,76 @@ export class AdvancedTerrainGenerator {
   /* ============= VEGETATION ============= */
 
   /**
-   * PASS 4 — Decoration.
-   *
-   * ## The rule every decorator must follow
-   *
-   * Decoration runs **after** the terrain is fully shaped and carved. It must
-   * therefore ask the *voxel data* where the ground is, never the analytic
-   * heightmap. `getSurfaceHeight` below is the single sanctioned query.
-   *
-   * The old code used `getTerrainHeight(wx, wz)` — the analytic value — and
-   * then wrote a trunk upward from it. Wherever a cave, ravine or sinkhole had
-   * lowered the real ground, the tree was planted at the pre-carve altitude
-   * and grew out of thin air. Wherever the ground had been *raised*, the trunk
-   * started buried. Same root cause as the floating grass sheets.
+   * Draw only the part of neighbouring tree canopies owned by this chunk.
+   * Anchor choice, height and surface estimate are world-coordinate functions,
+   * so this pass produces the same border voxels with or without a spill queue.
    */
+  private applyBorderVegetation(chunk: Chunk): void {
+    const margin = 2;
+    const minX = chunk.x * CHUNK_SIZE;
+    const minZ = chunk.z * CHUNK_SIZE;
+    const maxX = minX + CHUNK_SIZE - 1;
+    const maxZ = minZ + CHUNK_SIZE - 1;
+
+    const placeBorderAnchors = (
+      spacing: number,
+      salt: string,
+      allowedBiomes: ReadonlySet<string>,
+      heightAt: (wx: number, wz: number) => number
+    ): void => {
+      const firstCellX = Math.floor((minX - margin) / spacing);
+      const lastCellX = Math.floor((maxX + margin) / spacing);
+      const firstCellZ = Math.floor((minZ - margin) / spacing);
+      const lastCellZ = Math.floor((maxZ + margin) / spacing);
+      const saltX = salt.charCodeAt(0) * 31 + 17;
+      const saltZ = salt.charCodeAt(1) * 31 + 19;
+
+      for (let cellX = firstCellX; cellX <= lastCellX; cellX += 1) {
+        for (let cellZ = firstCellZ; cellZ <= lastCellZ; cellZ += 1) {
+          const wx = cellX * spacing + Math.floor(
+            this.noise.hash(cellX, cellZ, 0, saltX) * spacing
+          );
+          const wz = cellZ * spacing + Math.floor(
+            this.noise.hash(cellX, cellZ, 1, saltZ) * spacing
+          );
+          if (wx >= minX && wx <= maxX && wz >= minZ && wz <= maxZ) continue;
+          if (wx + margin < minX || wx - margin > maxX
+            || wz + margin < minZ || wz - margin > maxZ) continue;
+          if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) continue;
+          if (!allowedBiomes.has(this.getBiomeAt(wx, wz).id)) continue;
+
+          const height = heightAt(wx, wz);
+          const surface = this.getTerrainHeight(wx, wz);
+          for (let dy = 0; dy <= 2; dy += 1) {
+            const radius = dy === 2 ? 1 : 2;
+            for (let dx = -radius; dx <= radius; dx += 1) {
+              for (let dz = -radius; dz <= radius; dz += 1) {
+                if (Math.abs(dx) + Math.abs(dz) > radius + 1) continue;
+                const lx = wx + dx - minX;
+                const lz = wz + dz - minZ;
+                if (lx < 0 || lx >= CHUNK_SIZE || lz < 0 || lz >= CHUNK_SIZE) continue;
+                const y = surface + height - 1 + dy;
+                if (y < 0 || y >= CHUNK_HEIGHT) continue;
+                if (chunk.getBlock(lx, y, lz) === BLOCK.AIR) {
+                  chunk.setBlock(lx, y, lz, BLOCK.LEAVES);
+                }
+              }
+            }
+          }
+        }
+      }
+    };
+
+    placeBorderAnchors(
+      4,
+      'tree',
+      DENSE_TREE_BIOMES,
+      (wx, wz) => 4 + Math.floor(this.noise.hash(wx, wz, 0, 121) * 3)
+    );
+    placeBorderAnchors(14, 'plains-tree', SPARSE_TREE_BIOMES, () => 3);
+  }
+
+  /** Place decoration on the actual post-carve voxel surface. */
   private applyVegetation(chunk: Chunk): void {
     this.forEachLocalBlock(chunk, (lx, lz, wx, wz) => {
       if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) return;
@@ -1701,10 +1857,10 @@ export class AdvancedTerrainGenerator {
       // Forests should feel like forests: a tree roughly every 4 blocks reads
       // as dense woodland once canopies overlap, while open biomes keep the
       // occasional lone tree.
-      if (biome.id === 'forest' || biome.id === 'taiga' || biome.id === 'rainforest' || biome.id === 'bamboo_jungle' || biome.id === 'redwood_biome' || biome.id === 'cherry_biome' || biome.id === 'mystic_woods' || biome.id === 'mushroom_island') {
+      if (DENSE_TREE_BIOMES.has(biome.id)) {
         if (this.featureAnchor(wx, wz, 4, 'tree')) this.placeTree(chunk, wx, surface, wz, 4 + Math.floor(this.noise.hash(wx, wz, 0, 121) * 3));
       }
-      if (biome.id === 'plain' || biome.id === 'meadow' || biome.id === 'sunflower_plains') {
+      if (SPARSE_TREE_BIOMES.has(biome.id)) {
         if (this.featureAnchor(wx, wz, 14, 'plains-tree')) this.placeTree(chunk, wx, surface, wz, 3);
       }
       if (biome.id === 'desert' && this.featureAnchor(wx, wz, 12, 'cactus')) this.placeCactus(chunk, wx, surface, wz);
@@ -1983,6 +2139,77 @@ export class AdvancedTerrainGenerator {
         }
       }
     });
+  }
+
+  /** Remove isolated natural voxels left behind by a carve/dressing pass. */
+  private removeUnanchoredTerrain(chunk: Chunk): void {
+    const remove: Array<readonly [number, number, number]> = [];
+    const highest = chunk.getHighestOccupiedY();
+
+    for (let y = this.config.bedrockThickness + 1; y <= highest; y += 1) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
+          if (!isNaturalGround(chunk.getBlock(lx, y, lz))) continue;
+
+          let connected = false;
+          for (const [dx, dy, dz] of FACE_OFFSETS_3D) {
+            const neighbor = getBlock(chunk.getBlock(lx + dx, y + dy, lz + dz));
+            if (neighbor.solid && !neighbor.transparent) {
+              connected = true;
+              break;
+            }
+          }
+          if (!connected) remove.push([lx, y, lz]);
+        }
+      }
+    }
+
+    for (const [lx, y, lz] of remove) chunk.setBlock(lx, y, lz, BLOCK.AIR);
+  }
+
+  /**
+   * Last-resort allocation and foundation check for ordinary terrain worlds.
+   * This does not fill legitimate caves. It only repairs a column when no
+   * opaque, solid structural voxel survived above the foundation at all.
+   */
+  private ensureChunkIntegrity(chunk: Chunk): void {
+    if (this.config.floatingIslands || this.config.skyIslands) return;
+    this.removeUnanchoredTerrain(chunk);
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx += 1) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz += 1) {
+        if (this.subBedrock.length === 0) {
+          for (let y = 0; y < this.config.bedrockThickness; y += 1) {
+            const id = chunk.getBlock(lx, y, lz);
+            const definition = getBlock(id);
+            if (id === BLOCK.AIR || !definition.solid || definition.transparent) {
+              chunk.setBlock(lx, y, lz, BEDROCK_MIX[Math.min(y, BEDROCK_MIX.length - 1)]);
+            }
+          }
+        }
+
+        let hasStructure = false;
+        for (let y = this.config.bedrockThickness; y < CHUNK_HEIGHT; y += 1) {
+          const id = chunk.getBlock(lx, y, lz);
+          if (id === BLOCK.AIR) continue;
+          const definition = getBlock(id);
+          if (definition.id === 0) {
+            // Unknown ids render as air in the registry; replace them rather
+            // than preserving an invisible voxel in a load-bearing column.
+            chunk.setBlock(lx, y, lz, BLOCK.STONE);
+            hasStructure = true;
+            continue;
+          }
+          if (definition.solid && !definition.transparent) hasStructure = true;
+        }
+
+        if (hasStructure) continue;
+        const fallbackTop = this.fallbackSurfaceHeight();
+        for (let y = this.config.bedrockThickness; y <= fallbackTop; y += 1) {
+          chunk.setBlock(lx, y, lz, BLOCK.STONE);
+        }
+      }
+    }
   }
 
   private applySavedEdits(chunk: Chunk): void {
