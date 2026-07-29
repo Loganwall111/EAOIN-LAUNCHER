@@ -1,15 +1,31 @@
 /**
  * CinematicBoot — AAA-style boot sequence shown on launch.
  *
- * Phase order:
- *   1. WARNING   — health/safety + epilepsy card, like a retail console title
- *   2. ENGINE    — "POWERED BY EAOIN ENGINE" tech logo with a scanning sweep
- *   3. STUDIO    — ONBLOCKAWAY STUDIOS with an orbiting particle ring
- *   4. PRESENTS  — letter-spaced "PRESENTS"
- *   5. LOGO      — the Mojang-style wordmark: each letter drops in on its own
- *                  note of a four-note chime, then the whole mark settles
- *   6. TITLE     — the full wordmark with light sweep and rising tagline
- *   7. READY     — "PRESS ANY KEY" pulse before handing off to the menu
+ * Phase order — a strict, non-overlapping timeline. Each beat names exactly
+ * one thing, holds the screen alone, then fades out before the next begins:
+ *
+ *   1. WARNING     — health/safety + epilepsy card, like a retail console title
+ *   2. ENGINE      — "POWERED BY EAOIN ENGINE" tech logo with a scanning sweep
+ *   3. STUDIO      — the studio name, ONBLOCKAWAY STUDIOS
+ *   4. CREDITS     — the film-style billing block
+ *   5. INTRODUCING — the letter-spaced connective card
+ *   6. LOGO        — the game name: each letter drops in on its own note of a
+ *                    four-note chime, then the whole mark settles
+ *   7. READY       — "PRESS ANY KEY" pulse before handing off to the menu
+ *
+ * ## The "title renders three times" bug
+ *
+ * The wordmark used to be drawn by three different phases: LOGO (as animated
+ * per-letter spans), a separate TITLE phase (as an `<h1>` with a light sweep
+ * and tagline), and READY (as the same `<h1>` again). LOGO and TITLE ran
+ * back-to-back with independent CSS fade animations, so the game name faded
+ * in, restyled, and faded in again — reading as the title stacking over
+ * itself. The studio name had the same problem: the STUDIO phase showed
+ * "ONBLOCKAWAY", then the LOGO phase re-printed "ONBLOCKAWAY STUDIOS"
+ * underneath the wordmark.
+ *
+ * The redundant TITLE phase is gone and the LOGO phase no longer re-prints
+ * the studio name, so each name is introduced exactly once, in order.
  *
  * ## 2.0 changes
  *
@@ -37,9 +53,8 @@ type BootPhase =
   | 'ENGINE'
   | 'STUDIO'
   | 'CREDITS'
-  | 'PRESENTS'
+  | 'INTRODUCING'
   | 'LOGO'
-  | 'TITLE'
   | 'READY'
   | 'DONE';
 
@@ -58,10 +73,9 @@ const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
   // retail title card sequence names its production roles before the logo,
   // which is what separates "a loading screen" from "an intro".
   { phase: 'CREDITS', durationMs: 8600 },
-  { phase: 'PRESENTS', durationMs: 1800 },
+  { phase: 'INTRODUCING', durationMs: 2200 },
   // Long enough for every letter to land plus the chime tail.
-  { phase: 'LOGO', durationMs: 4200 },
-  { phase: 'TITLE', durationMs: 3600 },
+  { phase: 'LOGO', durationMs: 4600 },
   { phase: 'READY', durationMs: 0 }, // waits for input
 ];
 
@@ -154,8 +168,12 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     const entry = PHASE_SEQUENCE.find((step) => step.phase === phase);
     if (!entry || entry.durationMs === 0) return;
     const next = PHASE_SEQUENCE[PHASE_SEQUENCE.findIndex((step) => step.phase === phase) + 1];
+    // `next` is only undefined past the end of the table, and the last entry
+    // (READY) has duration 0 so we never get here. Falling back to READY keeps
+    // this total without inventing a phase that does not exist — the previous
+    // 'LOADING' fallback was not a BootPhase at all.
     const timer = window.setTimeout(
-      () => setPhase(next?.phase ?? 'LOADING'),
+      () => setPhase(next?.phase ?? 'READY'),
       reducedMotion ? Math.min(entry.durationMs, 600) : entry.durationMs
     );
     return () => window.clearTimeout(timer);
@@ -346,45 +364,14 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     );
   }
 
-  /* =============================== PRESENTS =============================== */
-  if (phase === 'PRESENTS') {
+  /* ============================= INTRODUCING ============================== */
+  // Connective tissue between the studio card and the game name. It names
+  // nothing itself, so it can never collide with the wordmark.
+  if (phase === 'INTRODUCING') {
     return (
       <div className="cinematic-boot cinematic-presents">
         <div className="cb-vignette" />
-        <div className="cb-presents-text">PRESENTS</div>
-        {skipHint}
-      </div>
-    );
-  }
-
-  /* ================================= TITLE ================================ */
-  if (phase === 'TITLE') {
-    return (
-      <div className="cinematic-boot cinematic-title">
-        <div className="cb-vignette" />
-        <div className="cb-ember-field" aria-hidden="true">
-          {embers.map((ember) => (
-            <span
-              key={ember.id}
-              className="cb-ember"
-              style={{
-                left: `${ember.left}%`,
-                width: ember.size,
-                height: ember.size,
-                animationDelay: `${ember.delay}s`,
-                animationDuration: `${ember.duration}s`,
-              }}
-            />
-          ))}
-        </div>
-        <div className="cb-title-stack">
-          <h1 className="cb-game-title" data-text="EAOIN">
-            EAOIN
-            <span className="cb-title-sweep" />
-          </h1>
-          <div className="cb-title-rule" />
-          <div className="cb-game-tagline">Everything And On Infinite</div>
-        </div>
+        <div className="cb-presents-text">INTRODUCING</div>
         {skipHint}
       </div>
     );
@@ -426,8 +413,12 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
           ))}
         </div>
 
+        {/* The studio was already named in its own phase; re-printing it here
+            is what made the intro look like it was stacking cards. This slot
+            now carries the game's tagline, and only after the wordmark has
+            fully settled. */}
         <div className={`cb-logo-sub ${litLetters >= LOGO_LETTERS.length ? 'shown' : ''}`}>
-          ONBLOCKAWAY STUDIOS
+          Everything And On Infinite
         </div>
 
         {audioBlocked && (

@@ -120,7 +120,7 @@
   letter-spacing: 0.08em;
 }
 
-/* --- Phase 3: PRESENTS --- */
+/* --- Phase: INTRODUCING --- */
 .cinematic-presents {
   background: radial-gradient(circle at 50% 50%, #0d1420 0%, #030508 100%);
   color: rgba(255, 255, 255, 0.85);
@@ -132,7 +132,11 @@
   margin-left: 0.6em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
-  animation: cbPresentsFade 1.2s ease both;
+  /* Fades fully in AND back out inside its own 2.2s phase, so the card has
+     cleared the screen before the wordmark begins. The old one-way fade left
+     it at full opacity right up to the phase swap, which is what made the
+     cards look like they were cutting into each other. */
+  animation: cbCardInOut 2.2s ease both;
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
@@ -195,6 +199,15 @@
 @keyframes cbPresentsFade {
   from { opacity: 0; letter-spacing: 1em; }
   to { opacity: 1; letter-spacing: 0.6em; }
+}
+
+/* A self-contained beat: in, hold, out. Used by the connective INTRODUCING
+   card so consecutive phases never appear on screen at the same time. */
+@keyframes cbCardInOut {
+  0%   { opacity: 0; letter-spacing: 1em; }
+  22%  { opacity: 1; letter-spacing: 0.6em; }
+  78%  { opacity: 1; letter-spacing: 0.6em; }
+  100% { opacity: 0; letter-spacing: 0.72em; }
 }
 
 @keyframes cbTitleFadeIn {

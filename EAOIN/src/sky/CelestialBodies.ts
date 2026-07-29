@@ -8,14 +8,34 @@
  * Contents:
  *   - Voxel-cube sun with a layered corona + god-ray fan
  *   - Voxel-cube moon with phases
- *   - Ringed gas giant ("the Saturn planet") with orbiting moonlets
+ *   - Ringed gas giant ("the Saturn planet")
  *   - A black hole with an accretion disc and gravitational lens halo
  *   - Two drifting animated planets, each with its own spinning cloud band
- *     and a small trail of stars that follows it
- *   - Comets on long elliptical arcs with tails
  *
  * Scale note: the rig radius is `ORBIT_RADIUS`, comfortably inside the
  * camera's `maxZ` of 1500 but far outside anything the player can reach.
+ *
+ * ## Removed: the floating white cubes
+ *
+ * This module used to also emit three families of small, bright, *emissive
+ * white boxes*: per-planet `moonlets`, per-planet `trailStars`, and a set of
+ * `comets` with 12-segment cube tails. They were the "stray white blocks
+ * floating in the sky" artifact.
+ *
+ * Two things made them read as debris rather than as space decor:
+ *
+ *  1. They are hard-edged unlit white cubes only ~5-22 units across at a
+ *     900-unit orbit, so they never resolved into a recognisable object —
+ *     they just looked like untextured geometry someone forgot to delete.
+ *  2. Their only visibility gate was `deepSpaceStrength * nightFactor`, and
+ *     `applyAlpha` fades *materials* while the meshes stay enabled. Alpha on
+ *     an unlit emissive material does not reliably drive it to invisible, so
+ *     at midday they remained on screen as white specks against a blue sky.
+ *
+ * The sun, moon, ringed planet, black hole and the two textured drifting
+ * planets are all kept — those are legible, intentional objects. The cube
+ * confetti is gone, and the atmospheric layer of the sky is owned by
+ * `VolumetricClouds`, which is the correct home for soft sky volume.
  */
 import {
   Color3,
@@ -55,8 +75,6 @@ interface DriftingPlanet {
   body: Mesh;
   clouds: Mesh;
   ring: Mesh | null;
-  moonlets: Mesh[];
-  trailStars: Mesh[];
   /** Radians per second around the sky. */
   orbitSpeed: number;
   orbitPhase: number;
@@ -65,18 +83,6 @@ interface DriftingPlanet {
   /** Radians per second of body self-rotation. */
   spinSpeed: number;
   cloudSpinSpeed: number;
-}
-
-interface Comet {
-  root: TransformNode;
-  head: Mesh;
-  tail: Mesh[];
-  /** Progress along its arc, 0-1. */
-  t: number;
-  speed: number;
-  start: Vector3;
-  end: Vector3;
-  active: boolean;
 }
 
 export class CelestialBodies {
@@ -96,7 +102,6 @@ export class CelestialBodies {
   blackHoleDisc: Mesh | null = null;
 
   private planets: DriftingPlanet[] = [];
-  private comets: Comet[] = [];
   private elapsed = 0;
   private disposed = false;
 
@@ -113,7 +118,6 @@ export class CelestialBodies {
     this.createRingedPlanet();
     this.createBlackHole();
     this.createDriftingPlanets();
-    this.createComets();
   }
 
   /* ------------------------------------------------------------------ */
@@ -354,8 +358,6 @@ export class CelestialBodies {
       spinSpeed: number;
       cloudSpinSpeed: number;
       ring: boolean;
-      moonlets: number;
-      trailStars: number;
     }> = [
       {
         name: 'verdant',
@@ -372,8 +374,6 @@ export class CelestialBodies {
         spinSpeed: 0.22,
         cloudSpinSpeed: 0.34,
         ring: false,
-        moonlets: 2,
-        trailStars: 7,
       },
       {
         name: 'ember',
@@ -389,8 +389,6 @@ export class CelestialBodies {
         spinSpeed: -0.28,
         cloudSpinSpeed: -0.40,
         ring: true,
-        moonlets: 3,
-        trailStars: 9,
       },
     ];
 
@@ -450,41 +448,11 @@ export class CelestialBodies {
         this.configure(ring, root);
       }
 
-      // "like little stars following the planets"
-      const moonlets: Mesh[] = [];
-      for (let i = 0; i < spec.moonlets; i += 1) {
-        const m = MeshBuilder.CreateBox(`celestial_planet_${spec.name}_moon_${i}`, { size: spec.size * 0.17 }, this.scene);
-        m.material = this.emissiveMaterial(
-          `celestial_planet_${spec.name}_moon_mat_${i}`,
-          new Color3(0.86, 0.88, 0.94)
-        );
-        this.configure(m, root);
-        moonlets.push(m);
-      }
-
-      const trailStars: Mesh[] = [];
-      for (let i = 0; i < spec.trailStars; i += 1) {
-        const s = MeshBuilder.CreateBox(
-          `celestial_planet_${spec.name}_trailstar_${i}`,
-          { size: spec.size * (0.05 + (i % 3) * 0.018) },
-          this.scene
-        );
-        s.material = this.emissiveMaterial(
-          `celestial_planet_${spec.name}_trailstar_mat_${i}`,
-          new Color3(1.0, 0.97, 0.86),
-          0.85 - i * 0.07
-        );
-        this.configure(s, root);
-        trailStars.push(s);
-      }
-
       this.planets.push({
         root,
         body,
         clouds,
         ring,
-        moonlets,
-        trailStars,
         orbitSpeed: spec.orbitSpeed,
         orbitPhase: spec.orbitPhase,
         orbitTilt: spec.orbitTilt,
@@ -493,57 +461,6 @@ export class CelestialBodies {
         cloudSpinSpeed: spec.cloudSpinSpeed,
       });
     }
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Comets                                                              */
-  /* ------------------------------------------------------------------ */
-
-  private createComets(): void {
-    for (let i = 0; i < 3; i += 1) {
-      const root = new TransformNode(`celestial_comet_${i}`, this.scene);
-      root.parent = this.root;
-
-      const head = MeshBuilder.CreateBox(`celestial_comet_head_${i}`, { size: 16 }, this.scene);
-      head.material = this.emissiveMaterial(`celestial_comet_head_mat_${i}`, new Color3(1.0, 0.96, 0.86));
-      this.configure(head, root);
-
-      // Tapering tail of progressively smaller, fainter cubes.
-      const tail: Mesh[] = [];
-      for (let s = 0; s < 12; s += 1) {
-        const seg = MeshBuilder.CreateBox(`celestial_comet_tail_${i}_${s}`, { size: 14 - s }, this.scene);
-        seg.material = this.emissiveMaterial(
-          `celestial_comet_tail_mat_${i}_${s}`,
-          new Color3(0.72, 0.86, 1.0),
-          0.62 * (1 - s / 12)
-        );
-        this.configure(seg, root);
-        tail.push(seg);
-      }
-
-      this.comets.push({
-        root,
-        head,
-        tail,
-        t: 1,
-        speed: 0.10 + i * 0.035,
-        start: Vector3.Zero(),
-        end: Vector3.Zero(),
-        active: false,
-      });
-    }
-  }
-
-  private launchComet(comet: Comet): void {
-    const r = ORBIT_RADIUS * 0.82;
-    const a1 = Math.random() * Math.PI * 2;
-    const a2 = a1 + Math.PI * (0.45 + Math.random() * 0.5);
-    const h1 = 0.25 + Math.random() * 0.55;
-    const h2 = 0.20 + Math.random() * 0.55;
-    comet.start = new Vector3(Math.cos(a1) * r, r * h1, Math.sin(a1) * r);
-    comet.end = new Vector3(Math.cos(a2) * r, r * h2, Math.sin(a2) * r);
-    comet.t = 0;
-    comet.active = true;
   }
 
   /* ------------------------------------------------------------------ */
@@ -578,7 +495,6 @@ export class CelestialBodies {
     this.updateMoon(sunPos, nightFactor);
     this.updateDeepSpace(u, nightFactor);
     this.updatePlanets(u, nightFactor);
-    this.updateComets(u, nightFactor);
 
     const sunDirection = sunPos.clone().normalize().scale(-1);
     return { sunDirection, dayFactor, nightFactor };
@@ -740,65 +656,7 @@ export class CelestialBodies {
       p.clouds.rotation.x = Math.sin(this.elapsed * 0.11) * 0.06;
       if (p.ring) p.ring.rotation.y = this.elapsed * 0.10;
 
-      // Moonlets orbit the planet in the planet's local space.
-      p.moonlets.forEach((m, i) => {
-        const ma = this.elapsed * (0.45 + i * 0.16) + i * 2.2;
-        const mr = 130 + i * 42;
-        m.position.set(Math.cos(ma) * mr, Math.sin(ma * 0.7) * mr * 0.28, Math.sin(ma) * mr);
-        m.rotation.y = ma;
-      });
-
-      // A comet-like tail of little stars strung out behind the planet along
-      // its direction of travel.
-      const travel = new Vector3(-Math.sin(a), 0, Math.cos(a)).scale(Math.sign(p.orbitSpeed) || 1);
-      p.trailStars.forEach((s, i) => {
-        const back = (i + 1) * 46;
-        s.position.copyFrom(travel.scale(-back));
-        s.position.y += Math.sin(this.elapsed * 0.8 + i) * 12;
-        s.rotation.y = this.elapsed * 0.6 + i;
-      });
-
       this.applyAlpha(p.root, strength);
-    }
-  }
-
-  private updateComets(u: CelestialUpdate, nightFactor: number): void {
-    const strength = u.deepSpaceStrength * nightFactor;
-    for (const comet of this.comets) {
-      if (!comet.active) {
-        // Only launch at night, and only rarely.
-        if (strength > 0.25 && Math.random() < u.deltaSeconds * 0.05) this.launchComet(comet);
-        comet.root.setEnabled(false);
-        continue;
-      }
-
-      comet.t += u.deltaSeconds * comet.speed;
-      if (comet.t >= 1) {
-        comet.active = false;
-        comet.root.setEnabled(false);
-        continue;
-      }
-
-      comet.root.setEnabled(true);
-      // Quadratic Bezier arc with a lifted control point, so comets curve.
-      const lerpArc = (t: number): Vector3 => {
-        const mid = Vector3.Center(comet.start, comet.end).add(new Vector3(0, ORBIT_RADIUS * 0.30, 0));
-        const inv = 1 - t;
-        return comet.start
-          .scale(inv * inv)
-          .add(mid.scale(2 * inv * t))
-          .add(comet.end.scale(t * t));
-      };
-
-      comet.head.position.copyFrom(lerpArc(comet.t));
-      comet.tail.forEach((seg, i) => {
-        const t = Math.max(0, comet.t - (i + 1) * 0.012);
-        seg.position.copyFrom(lerpArc(t));
-      });
-
-      // Fade in and out at the ends of the arc so comets don't pop.
-      const fade = Math.sin(comet.t * Math.PI);
-      this.applyAlpha(comet.root, strength * fade);
     }
   }
 

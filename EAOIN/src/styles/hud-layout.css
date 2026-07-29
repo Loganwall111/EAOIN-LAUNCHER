@@ -89,6 +89,47 @@
   z-index: var(--hud-z-panel);
 }
 
+/* --------------------------------------------------------------------------
+   Row-level legibility inside the tracker panels.
+
+   Panel *placement* was fixed above, but the rows inside them were still
+   colliding: `.objective` is a two-column flex row (label | progress) with
+   `white-space: nowrap` on the progress value. With a long label such as
+   "Craft a wooden pickaxe" and a narrow 250px panel, the label pushed the
+   value out of the box and the two ran into each other — the reported
+   "quest tracker text smashing together".
+
+   Fixes: let the label wrap and shrink, stop the value from being squeezed,
+   and give every row real vertical breathing room.
+   -------------------------------------------------------------------------- */
+
+.objectives-panel .objective,
+.eaoin-hud .hud-quests .quest-row {
+  align-items: flex-start;
+  gap: 12px;
+  /* Was 5px 0, which let consecutive rows' text nearly touch. */
+  padding: 7px 0;
+  line-height: 1.4;
+}
+
+/* The label column: allowed to wrap onto a second line instead of overflowing
+   into the progress column. `min-width: 0` is required — a flex item defaults
+   to `min-width: auto` and refuses to shrink below its content width. */
+.objectives-panel .objective > span,
+.eaoin-hud .hud-quests .quest-row .q-name,
+.eaoin-hud .hud-quests .quest-row .q-desc {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+/* The progress column: never compressed, never wrapped mid-value. */
+.objectives-panel .objective > strong {
+  flex: 0 0 auto;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Status effects move below the objectives tracker rather than overlapping. */
 .eaoin-hud .hud-effects {
   top: auto !important;

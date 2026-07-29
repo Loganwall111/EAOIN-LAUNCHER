@@ -16,6 +16,12 @@
   <link rel="stylesheet" href="/src/styles/concept-overhaul.css" />
   <link rel="stylesheet" href="/src/styles/spawn-awakening.css" />
   <link rel="stylesheet" href="/src/styles/world-loading.css" />
+  <!-- Loaded LAST, mirroring the import order in main.tsx. hud-layout.css is
+       the authoritative HUD layout: it resolves the corner collisions between
+       the older stylesheets above. Omitting it here meant the browser applied
+       these <link> sheets first and hud-layout.css only arrived later via the
+       module graph, so the HUD rendered with the pre-fix overlapping layout. -->
+  <link rel="stylesheet" href="/src/styles/hud-layout.css" />
 </head>
 <body>
   <div id="root"></div>
