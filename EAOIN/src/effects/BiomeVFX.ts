@@ -267,23 +267,54 @@ export class BiomeVFX {
     });
   }
 
+  /**
+   * Storm rain.
+   *
+   * ## The "solid white square blocks falling from the sky" bug
+   *
+   * The old system used the default billboard mode, which always draws a
+   * particle as a flat square facing the camera. A falling raindrop is
+   * physically a fast-moving streak of water, not a little sprite that stays
+   * square to your eye no matter which way it travels — at any reasonable
+   * size that reads as exactly what was reported: opaque-looking white
+   * squares raining down rather than rain.
+   *
+   * `BILLBOARDMODE_STRETCHED` orients each particle's quad along its own
+   * travel direction instead of always facing the camera, and a tall,
+   * narrow scale (`minScaleY`/`maxScaleY` >> `minScaleX`/`maxScaleX`) turns
+   * that oriented quad into a thin diagonal streak. Low, translucent alpha
+   * (`0.16-0.30`) plus additive-free STANDARD blending keeps every streak
+   * looking like fluid water rather than a hard-edged card.
+   */
   private createRain(): void {
-    this.make('rain', 1200, 420, new Vector3(30, 18, 30), (p) => {
-      p.minEmitBox = new Vector3(-30, 10, -30);
-      p.maxEmitBox = new Vector3(30, 22, 30);
-      p.color1 = new Color4(0.62, 0.72, 0.90, 0.46);
-      p.color2 = new Color4(0.50, 0.62, 0.82, 0.34);
-      p.colorDead = new Color4(0.5, 0.6, 0.8, 0);
+    this.make('rain', 1400, 460, new Vector3(30, 18, 30), (p) => {
+      p.minEmitBox = new Vector3(-30, 12, -30);
+      p.maxEmitBox = new Vector3(30, 24, 30);
+      p.color1 = new Color4(0.72, 0.82, 0.95, 0.30);
+      p.color2 = new Color4(0.58, 0.70, 0.88, 0.18);
+      p.colorDead = new Color4(0.55, 0.65, 0.85, 0);
+      // Base quad is small; the real streak length comes from the Y scale
+      // range below, not from a big sprite.
       p.minSize = 0.05;
-      p.maxSize = 0.10;
-      p.minLifeTime = 0.7;
-      p.maxLifeTime = 1.4;
-      p.gravity = new Vector3(0, -22, 0);
-      p.direction1 = new Vector3(-1.0, -8, -0.6);
-      p.direction2 = new Vector3(1.2, -14, 0.9);
-      p.minEmitPower = 4;
-      p.maxEmitPower = 9;
-      p.updateSpeed = 0.022;
+      p.maxSize = 0.09;
+      p.minLifeTime = 0.5;
+      p.maxLifeTime = 0.9;
+      p.gravity = new Vector3(0, -26, 0);
+      // A consistent diagonal fall driven by wind, not a wide random cone —
+      // real rain streaks all lean the same way at once.
+      p.direction1 = new Vector3(-2.2, -18, -1.2);
+      p.direction2 = new Vector3(-1.6, -24, -0.8);
+      p.minEmitPower = 9;
+      p.maxEmitPower = 15;
+      p.updateSpeed = 0.028;
+      // Orient each quad along its own velocity so it reads as a streak
+      // falling at an angle, never a camera-facing square.
+      p.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED;
+      p.minScaleX = 0.6;
+      p.maxScaleX = 0.9;
+      p.minScaleY = 7.5;
+      p.maxScaleY = 11.5;
+      p.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     });
   }
 

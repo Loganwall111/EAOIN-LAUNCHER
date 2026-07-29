@@ -416,10 +416,25 @@
 
 /* --------------------------------------------------------------------------
    Modal panels sit above everything and dim the world behind them.
+
+   ## Bug fixed here: the modal promotion rule never matched anything
+
+   This selector targeted `.inventory-modal` / `.settings-modal`, classes no
+   component in the codebase has ever rendered — the real elements are
+   `.inventory-panel` (see `HUD.tsx`) and `.settings-panel`. Because neither
+   selector ever matched, the Inventory and Settings panels never actually
+   received the modal z-index (50) this file documents as authoritative.
+   They fell back to the default stacking order (effectively 0), which put
+   them *below* the chat panel (z-index 40) and the ability/nav rails
+   (z-index 30) — exactly the "item slots, quest trackers and icons ...
+   smash or overlap into each other" report: opening the inventory while
+   chat or a HUD rail was on screen let those elements render on top of the
+   modal instead of being dimmed behind it.
    -------------------------------------------------------------------------- */
 
-.inventory-modal,
-.settings-modal,
+.inventory-panel,
+.settings-panel,
+.how-to-play-panel,
 .pause-panel {
   z-index: var(--hud-z-modal) !important;
 }

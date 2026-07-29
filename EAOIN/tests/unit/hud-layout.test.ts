@@ -165,4 +165,31 @@ describe('HUD layout stylesheet', () => {
     const bossTop = pxValue(boss!, 'top')!;
     expect(bossTop - buttonsTop).toBeGreaterThanOrEqual(36);
   });
+
+  it('promotes the modal selectors that components actually render, not a made-up class name', () => {
+    // Regression: this rule used to target `.inventory-modal` /
+    // `.settings-modal`, which no component ever renders — the real
+    // elements are `.inventory-panel` (HUD.tsx) and `.settings-panel`. That
+    // meant the Inventory/Settings panels never actually got the modal
+    // z-index this file documents as authoritative, and rendered *under*
+    // the chat panel and HUD rails instead of dimming them behind a true
+    // modal — the "quest trackers and icons smash or overlap" report.
+    const hudSource = readFileSync(resolve(__dirname, '../../src/ui/HUD.tsx'), 'utf8');
+    expect(hudSource).toContain('className="inventory-panel');
+    expect(hudSource).toContain('className="settings-panel"');
+
+    // The selectors are grouped on a comma-separated rule, so pull the whole
+    // group's body rather than requiring an exact standalone match.
+    const groupMatch = LAYOUT.match(/\.inventory-panel,\s*\.settings-panel,[\s\S]*?\.pause-panel\s*\{([^}]*)\}/m);
+    expect(groupMatch, 'grouped modal promotion rule').toBeTruthy();
+    expect(groupMatch![1]).toMatch(/--hud-z-modal/);
+
+    // Strip comments before asserting the dead selectors are gone — the
+    // fix's own explanation above necessarily *names* the old, broken
+    // selector, so a raw substring check would fail against the prose that
+    // documents the bug rather than any surviving implementation.
+    const cssOnly = LAYOUT.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(cssOnly).not.toContain('.inventory-modal');
+    expect(cssOnly).not.toContain('.settings-modal');
+  });
 });
