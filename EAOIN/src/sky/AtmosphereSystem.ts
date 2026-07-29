@@ -30,6 +30,7 @@
  */
 import { Color3, Scene, Vector3 } from '@babylonjs/core';
 import { BiomeVFX, AmbientEffect } from '../effects/BiomeVFX';
+import { ensureSceneLightsBuffer } from '../rendering/ShaderBufferSafety';
 import { CelestialBodies } from './CelestialBodies';
 import { SkyDome } from './SkyDome';
 import {
@@ -131,6 +132,10 @@ export class AtmosphereSystem {
   }
 
   attach(): void {
+    // The sky rig renders before gameplay lighting is guaranteed to exist.
+    // A scene with zero lights makes Babylon's StandardMaterials bind against
+    // a missing 'Lights' uniform buffer — install the dim guard light first.
+    ensureSceneLightsBuffer(this.scene);
     this.dome.attach();
     this.celestial.attach();
     this.stars.attach();
@@ -347,6 +352,21 @@ export class AtmosphereSystem {
 
   setCloudDensityScale(scale: number): void {
     this.clouds.setDensityScale(scale);
+  }
+
+  /**
+   * Live day/night speed control for the developer app panel. Scales the
+   * real-time length of a full day cycle; the world clock advances
+   * `(deltaSeconds / dayLengthSeconds) * 24` hours per frame, so this takes
+   * effect on the very next update without touching the accumulated clock.
+   */
+  setDayLengthSeconds(seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    this.options.dayLengthSeconds = seconds;
+  }
+
+  getDayLengthSeconds(): number {
+    return this.options.dayLengthSeconds;
   }
 
   dispose(): void {

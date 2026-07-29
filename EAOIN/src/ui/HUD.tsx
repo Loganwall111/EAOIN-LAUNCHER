@@ -15,6 +15,7 @@ import { ModPackRegistry, ModDefinition, ALL_MODS, MOD_CATEGORY_LABELS, MOD_CATE
 import { ALL_SERVERS, ServerEntry, DEMO_FRIENDS, DEMO_GUILDS, DEMO_NATIONS } from '../networking/ServerBrowser';
 import { ALL_DIMENSIONS } from '../dimensions/DimensionRuntime';
 import DimensionSigil from './DimensionSigil';
+import DeveloperAppPanel from './DeveloperAppPanel';
 import HowToPlayGuide from './HowToPlayGuide';
 import { ALL_BOSSES, BOSS_TIER_LABELS } from '../creatures/BossRegistry';
 import { ALL_QUESTS, QUEST_TYPES, QUEST_TYPE_LABELS } from '../objectives/QuestRegistry';
@@ -586,6 +587,12 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
 
       {/* ===================== HOW TO PLAY GUIDE ===================== */}
       {guideOpen && <HowToPlayGuide onClose={() => setGuideOpen(false)} />}
+
+      {/* ===================== DEVELOPER APP PANEL ===================== */}
+      {/* Self-gated: renders nothing for players during Alpha Access and only
+          opens from the developer trigger (backquote / Ctrl+Shift+D). Controls
+          write straight into the live developer tuning store. */}
+      <DeveloperAppPanel />
 
       {/* ===================== BIOMES MENU ===================== */}
       {biomesOpen && (

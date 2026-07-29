@@ -8,6 +8,7 @@ import { Mesh, Scene, Vector3, VertexData } from '@babylonjs/core';
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
 import { BlockMaterialMap, createMissingBlockMaterial } from './BlockMaterials';
+import { ensureSceneLightsBuffer } from './ShaderBufferSafety';
 
 interface MutableMeshData {
   positions: number[];
@@ -67,6 +68,9 @@ export class VoxelWorldRenderer {
   private readonly chunkMap = new Map<string, Chunk>();
 
   render(scene: Scene, chunks: Chunk[], materials: BlockMaterialMap): Mesh[] {
+    // Chunk meshes are StandardMaterial-driven: never let the world render
+    // against an empty light list (missing 'Lights' uniform buffer crash).
+    ensureSceneLightsBuffer(scene);
     this.chunkMap.clear();
     for (const chunk of chunks) {
       this.chunkMap.set(this.key(chunk.x, chunk.z), chunk);

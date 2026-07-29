@@ -4,6 +4,7 @@
  * Keeps spawn 26m clear and objective clearings.
  */
 import { BlockID } from '@shared/blocks/BlockRegistry';
+import { BiomeModificationFlags, BIOME_MOD_KEYS, DEFAULT_BIOME_MODS } from '../dev/DeveloperTuning';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { editKey, WorldBlockEdit } from './WorldSave';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
@@ -22,6 +23,14 @@ export class TerrainGenerator {
   private readonly editOverrides = new Map<string, WorldBlockEdit>();
   private cachedLayout: ReturnType<typeof getWorldLayout> | null = null;
   private readonly floatingIslandsPreset: boolean;
+  /**
+   * Live developer tuning (the embedded dev app panel drives both fields).
+   * `devHeightMultiplier === 1` reproduces the shipped terrain exactly — the
+   * multiplier is applied as `BASE_GROUND + (h - BASE_GROUND) * m`, an exact
+   * no-op at 1 so default worlds are byte-identical to before.
+   */
+  private devHeightMultiplier = 1;
+  private devBiomeMods: BiomeModificationFlags = { ...DEFAULT_BIOME_MODS };
 
   constructor(private readonly seed: string, initialEdits: WorldBlockEdit[] = []) {
     this.floatingIslandsPreset = isLegacySkyWorldSeed(seed);
@@ -81,6 +90,29 @@ export class TerrainGenerator {
 
   getEdits(): WorldBlockEdit[] { return Array.from(this.editOverrides.values()).map(e => ({ ...e })); }
   getEditCount(): number { return this.editOverrides.size; }
+
+  /**
+   * DevTunableTerrain — developer panel world-tuning. Applying tuning drops
+   * every cached chunk so freshly streamed chunks honour it immediately;
+   * saved player edits survive because they live in `editOverrides` and are
+   * re-applied by `applySavedEdits` on the next generation.
+   */
+  setDeveloperTuning(tuning: { heightMultiplier: number; biomeMods: BiomeModificationFlags }): void {
+    const multiplier = Number.isFinite(tuning.heightMultiplier)
+      ? Math.min(3, Math.max(0.25, tuning.heightMultiplier))
+      : 1;
+    const nextMods: BiomeModificationFlags = { ...DEFAULT_BIOME_MODS, ...tuning.biomeMods };
+    const changed = multiplier !== this.devHeightMultiplier
+      || BIOME_MOD_KEYS.some((k) => this.devBiomeMods[k] !== nextMods[k]);
+    this.devHeightMultiplier = multiplier;
+    this.devBiomeMods = nextMods;
+    if (changed) this.invalidateGeneratedChunks();
+  }
+
+  /** Drop all cached chunks (player edits are preserved separately). */
+  invalidateGeneratedChunks(): void {
+    this.chunks.clear();
+  }
 
   /**
    * Cheap analytic ground estimate. Does not generate a chunk, and does not
@@ -286,6 +318,11 @@ export class TerrainGenerator {
     }
 
     height += (this.hash(worldX, worldZ) - 0.5) * 0.45;
+    // Developer amplification: stretch relief away from the base-ground
+    // reference. At the 1× default this is an exact identity, so untouched
+    // worlds generate byte-identical columns; spawn/clearing columns return
+    // earlier and are never amplified.
+    height = BASE_GROUND + (height - BASE_GROUND) * this.devHeightMultiplier;
     return Math.max(7, Math.min(54, Math.round(height)));
   }
 
@@ -324,6 +361,7 @@ export class TerrainGenerator {
   }
 
   private applyCavePass(chunk: Chunk): void {
+    if (!this.devBiomeMods.caves) return; // developer toggle: keep the underground solid
     // Restrained underground caves. Keep a solid roof, a solid lower foundation,
     // and do not carve under lakes so water never floats in midair.
     this.forEachLocalBlock(chunk, (localX, localZ, worldX, worldZ) => {
@@ -353,11 +391,12 @@ export class TerrainGenerator {
       if (this.shouldApplyLake(worldX, worldZ, lakeDepth)) { this.carveLakeColumn(chunk, localX, localZ, lakeDepth); return; }
       const surfaceY = this.findSurfaceY(chunk, localX, localZ);
       if (surfaceY <= 0) return;
+      if (!this.devBiomeMods.surfacePaint) return; // developer toggle: leave raw heightmap blocks
       const biome = this.getBiomeAt(worldX, worldZ);
       if (biome === 'Desert') this.paintSurfaceLayer(chunk, localX, localZ, surfaceY, 4, 4, 2);
       else if (biome === 'Highlands' || biome === 'Mountains') {
         this.paintSurfaceLayer(chunk, localX, localZ, surfaceY, 3, 3, 1);
-        if (this.hashToUnit(`surface-ore:${worldX}:${worldZ}`) > 0.965) chunk.setBlock(localX, surfaceY, localZ, this.pickOreBlock(worldX, worldZ));
+        if (this.devBiomeMods.ores && this.hashToUnit(`surface-ore:${worldX}:${worldZ}`) > 0.965) chunk.setBlock(localX, surfaceY, localZ, this.pickOreBlock(worldX, worldZ));
       } else if (biome === 'Cliff') {
         this.paintSurfaceLayer(chunk, localX, localZ, surfaceY, 3, 3, 0);
       } else this.paintSurfaceLayer(chunk, localX, localZ, surfaceY, 1, 2, 2);
@@ -372,11 +411,11 @@ export class TerrainGenerator {
       if (biome === 'Lake') return;
       const surfaceY = this.findSurfaceY(chunk, localX, localZ);
       if (surfaceY <= 0 || chunk.getBlock(localX, surfaceY, localZ) === 5) return;
-      if (biome === 'Forest' && this.isFeatureAnchor(worldX, worldZ, 9, 'forest-tree')) this.placeTreeAt(chunk, worldX, surfaceY, worldZ, 4 + Math.floor(this.hashToUnit(`tree-height:${worldX}:${worldZ}`) * 3));
-      if (biome === 'Plains' && this.isFeatureAnchor(worldX, worldZ, 24, 'plains-tree')) this.placeTreeAt(chunk, worldX, surfaceY, worldZ, 3);
-      if ((biome === 'Highlands' || biome === 'Plains' || biome === 'Mountains') && this.isFeatureAnchor(worldX, worldZ, 17, 'boulder')) this.placeBoulderAt(chunk, worldX, surfaceY, worldZ, biome === 'Highlands' || biome === 'Mountains' ? 2 : 1);
-      if ((biome === 'Highlands' || biome === 'Mountains') && this.isFeatureAnchor(worldX, worldZ, 13, 'ore-outcrop')) this.placeOreOutcropAt(chunk, worldX, surfaceY, worldZ);
-      if (this.isFeatureAnchor(worldX, worldZ, 41, 'ruin') && this.hashToUnit(`ruin-gate:${worldX}:${worldZ}`) > 0.62) this.placeStarterRuinAt(chunk, worldX, surfaceY, worldZ, biome);
+      if (this.devBiomeMods.vegetation && biome === 'Forest' && this.isFeatureAnchor(worldX, worldZ, 9, 'forest-tree')) this.placeTreeAt(chunk, worldX, surfaceY, worldZ, 4 + Math.floor(this.hashToUnit(`tree-height:${worldX}:${worldZ}`) * 3));
+      if (this.devBiomeMods.vegetation && biome === 'Plains' && this.isFeatureAnchor(worldX, worldZ, 24, 'plains-tree')) this.placeTreeAt(chunk, worldX, surfaceY, worldZ, 3);
+      if (this.devBiomeMods.structures && (biome === 'Highlands' || biome === 'Plains' || biome === 'Mountains') && this.isFeatureAnchor(worldX, worldZ, 17, 'boulder')) this.placeBoulderAt(chunk, worldX, surfaceY, worldZ, biome === 'Highlands' || biome === 'Mountains' ? 2 : 1);
+      if (this.devBiomeMods.ores && (biome === 'Highlands' || biome === 'Mountains') && this.isFeatureAnchor(worldX, worldZ, 13, 'ore-outcrop')) this.placeOreOutcropAt(chunk, worldX, surfaceY, worldZ);
+      if (this.devBiomeMods.structures && this.isFeatureAnchor(worldX, worldZ, 41, 'ruin') && this.hashToUnit(`ruin-gate:${worldX}:${worldZ}`) > 0.62) this.placeStarterRuinAt(chunk, worldX, surfaceY, worldZ, biome);
     });
   }
 
@@ -518,6 +557,7 @@ export class TerrainGenerator {
   }
 
   private getLakeDepth(worldX: number, worldZ: number): number {
+    if (!this.devBiomeMods.lakes) return 0; // developer toggle: no surface water bodies
     if (this.floatingIslandsPreset) return 0;
     if (this.isProtectedSpawnColumn(worldX, worldZ, SPAWN_PROTECTED_RADIUS + 8)) return 0;
     const spacing = 64, cellX = Math.floor(worldX / spacing), cellZ = Math.floor(worldZ / spacing);

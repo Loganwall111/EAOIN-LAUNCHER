@@ -26,6 +26,16 @@ import { ChunkRenderManager, ChunkRenderStats } from '../rendering/ChunkRenderMa
 import { BreakOverlay } from '../rendering/BreakOverlay';
 import { FirstPersonViewModel } from '../rendering/FirstPersonViewModel';
 import { applyRenderScale, createRuntimeEngine, enableSnapshotRenderingWhenReady, invalidateRenderSnapshot, RendererBackendInfo } from '../rendering/RendererBackend';
+import {
+  applyDeveloperTuningToTerrain,
+  applyLightingPresetToScene,
+  developerTuningStore,
+  DeveloperWorldTuning,
+  effectiveDayLengthSeconds,
+  getLightingPreset,
+  isDevTunableTerrain,
+  worldClockRatePerSecond,
+} from '../dev/DeveloperTuning';
 import { BLACK_FRAME_LUMA_THRESHOLD, frameProbeIsVisible, probeRenderedFrameBrightness } from '../rendering/FrameVisibilityProbe';
 import { DimensionChunkSource } from './DimensionChunkSource';
 import { AdaptivePerformance, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
@@ -200,6 +210,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const gameModeRef = useRef<GameMode>(gameMode);
   const gameModeChangeRef = useRef(onGameModeChange);
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
+  /** Live developer-panel tuning, mirrored on change by the store subscription. */
+  const devTuningRef = useRef<DeveloperWorldTuning>(developerTuningStore.get());
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
   const loadingProgressRef = useRef(onLoadingProgress);
@@ -332,6 +344,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const terrain: TerrainGenerator = useAdvancedWorld
         ? (advancedTerrain as unknown as TerrainGenerator)
         : new TerrainGenerator(seed, savedEdits);
+      // Developer panel: seed the generator with the panel's current world
+      // tuning before the first chunk is generated.
+      applyDeveloperTuningToTerrain(terrain, devTuningRef.current);
       // Construct every generator before the first synchronous chunk request.
       // The old callback closed over Aether/Backrooms `const`s declared much
       // later and crashed here with "Cannot access before initialization".
@@ -643,6 +658,40 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const r = { health: Number(next.health.toFixed(1)), food: Number(next.food.toFixed(1)), stamina: Number(next.stamina.toFixed(1)) };
         survivalStatsRef.current = r; onSurvivalStatsChange(r);
       };
+
+      /* ---------------------------------------------------------------- *
+       * Developer app panel — live tuning subscription.
+       *
+       * The panel writes into `developerTuningStore`; this bridges each
+       * change into the running scene, frame-atomically:
+       *   - day/night speed  → atmosphere clock length (frame-loop rate reads
+       *                        the same store via devTuningRef)
+       *   - lighting preset  → exposure/contrast on the scene
+       *   - terrain sliders  → generator tuning + full nearby-terrain rebuild
+       *                        (same recipe as dimension travel)
+       * ---------------------------------------------------------------- */
+      const unsubscribeDevTuning = developerTuningStore.subscribe((tuning) => {
+        const worldgenChanged =
+          tuning.terrainAmplification !== devTuningRef.current.terrainAmplification
+          || JSON.stringify(tuning.biomeMods) !== JSON.stringify(devTuningRef.current.biomeMods);
+        devTuningRef.current = tuning;
+        atmosphere.setDayLengthSeconds(effectiveDayLengthSeconds(tuning, DAY_LENGTH_SECONDS));
+        applyLightingPresetToScene(scene, tuning.lightingPreset);
+        if (!worldgenChanged || !isDevTunableTerrain(terrain)) return;
+        applyDeveloperTuningToTerrain(terrain, tuning);
+        // The generators self-invalidate on tuning change; drop every meshed
+        // chunk and re-stream around the camera exactly like dimension travel.
+        terrain.invalidateGeneratedChunks();
+        renderer.clearAll();
+        invalidateRenderSnapshot(engine);
+        streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+        renderer.updateVisibleChunks(
+          streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,
+          chunkSource.generateChunk
+        );
+        forceTerrainCoverage = true;
+        showActionMessage('Developer tuning applied — regenerating terrain');
+      });
 
       // 5.0 — the end-game chain, finally driven from the frame loop:
       // black hole → the void → Void Leviathan → Reality Chip. Also owns the
@@ -1176,7 +1225,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
         chunkWorkLastFrame = false;
 
-        if (!timeState.frozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * 0.02) % 24 }; worldTimeRef.current = timeState; }
+        // World clock. At the 1× default this advances deltaSeconds * 0.02 world
+        // hours — the exact shipping rate; the developer panel's day/night
+        // speed slider simply scales it (0.25×–8×) or freezes it entirely.
+        const clockFrozen = timeState.frozen || devTuningRef.current.timeFrozen;
+        if (!clockFrozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * worldClockRatePerSecond(devTuningRef.current, DAY_LENGTH_SECONDS)) % 24 }; worldTimeRef.current = timeState; }
         else if (worldTimeRef.current !== timeState) timeState = worldTimeRef.current;
         // Wrapping past midnight advances the day counter shown in the HUD.
         if (timeState.timeOfDay < lastTimeOfDay) worldDay += 1;
@@ -1187,7 +1240,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
         // Keep the atmosphere clock in sync with the world clock (so /time works).
         atmosphere.timeOfDay = timeState.timeOfDay;
-        atmosphere.frozen = timeState.frozen;
+        atmosphere.frozen = timeState.frozen || devTuningRef.current.timeFrozen;
         const currentParticleQuality = particleQualityFor(settingsRef.current.qualityPreset);
         if (currentParticleQuality !== lastParticleQuality) {
           lastParticleQuality = currentParticleQuality;
@@ -1248,6 +1301,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         ambience.setVolume(settingsRef.current.volume, settingsRef.current.muted);
         ambience.update(deltaSeconds);
         const atmosphereFrame = atmosphere.update(deltaSeconds, camera.position);
+        // Developer lighting presets scale fog density after the atmosphere
+        // rewrites it each frame (identity multiplication at the vanilla
+        // preset, so the stock look is untouched).
+        const devFogScale = getLightingPreset(devTuningRef.current.lightingPreset).fogDensityScale;
+        if (devFogScale !== 1) scene.fogDensity *= devFogScale;
         updateWorldLighting(
           lighting,
           atmosphereFrame,
@@ -2057,6 +2115,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const initialStats = renderer.getStats(); console.log(`[Render] 3.2 ready: ${initialStats.loadedChunks} chunks, clouds moving, mountains & caves volumetric, 16 render, 20min day`);
       cleanupScene = () => {
         watchdogDone = true;
+        unsubscribeDevTuning();
         window.clearTimeout(blackFrameWatchdog);
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);

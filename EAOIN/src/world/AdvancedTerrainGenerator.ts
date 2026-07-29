@@ -24,6 +24,7 @@
  *    byte-identical on every client and the server.
  */
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
+import { BiomeModificationFlags, BIOME_MOD_KEYS, DEFAULT_BIOME_MODS } from '../dev/DeveloperTuning';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { AdvancedNoise } from './AdvancedNoise';
 import { DeepCaveGenerator } from './DeepCaves';
@@ -515,6 +516,14 @@ export class AdvancedTerrainGenerator {
   /** Stacked worlds below bedrock. Empty unless the preset asks for them. */
   private readonly subBedrock: SubBedrockLayer[];
   public readonly config: WorldGenConfig;
+  /**
+   * Live developer tuning (the embedded dev app panel drives both fields).
+   * `devHeightMultiplier === 1` reproduces the shipped terrain exactly — the
+   * multiplier is applied as `plateau + (h - plateau) * m`, an exact no-op at
+   * 1 so default worlds stay byte-identical to before.
+   */
+  private devHeightMultiplier = 1;
+  private devBiomeMods: BiomeModificationFlags = { ...DEFAULT_BIOME_MODS };
 
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
     this.config = normaliseWorldGenConfig(config);
@@ -587,10 +596,13 @@ export class AdvancedTerrainGenerator {
       this.fillContinents(chunk);
     }
     /* ---- STAGE 2: carving. Removes and retypes voxels only. ---- */
-    this.applyCavePass(chunk);
+    // Developer toggle (panel: "Caves") — switching carving off leaves the
+    // underground as one solid mass; surface terrain is untouched either way.
+    const carveUnderground = this.devBiomeMods.caves;
+    if (carveUnderground) this.applyCavePass(chunk);
     // 2.0 — widen the underground into real caverns with their own biomes.
     // Strictly below the surface; the overworld terrain is untouched.
-    if (!this.config.floatingIslands && !this.config.skyIslands) {
+    if (carveUnderground && !this.config.floatingIslands && !this.config.skyIslands) {
       this.deepCaves.apply(
         chunk,
         (x, z) => this.getTerrainHeight(x, z),
@@ -599,12 +611,13 @@ export class AdvancedTerrainGenerator {
         (x, z) => Math.hypot(x, z) <= SPAWN_PROTECTED_RADIUS + 2
       );
     }
-    this.applyRavines(chunk);
-    this.applySinkholes(chunk);
-    this.applyUndergroundOceansAndRivers(chunk);
+    if (carveUnderground) this.applyRavines(chunk);
+    if (carveUnderground) this.applySinkholes(chunk);
+    if (carveUnderground) this.applyUndergroundOceansAndRivers(chunk);
     this.applyErosionPass(chunk);
     this.applyAntiFloatingPatch(chunk);
-    this.applyOrePass(chunk);
+    // Developer toggle (panel: "Ores").
+    if (this.devBiomeMods.ores) this.applyOrePass(chunk);
     this.applyGeologyPass(chunk);
 
     /* ================================================================
@@ -622,9 +635,10 @@ export class AdvancedTerrainGenerator {
     // Reconstruct overhangs from deterministic anchors just outside this
     // chunk. This makes the result independent of which neighbour streamed
     // first instead of relying solely on an order-sensitive spill queue.
-    this.applyBorderVegetation(chunk);
-    this.applyVegetation(chunk);
-    this.applyStructures(chunk);
+    // Developer toggles (panel: "Vegetation" / "Structures").
+    if (this.devBiomeMods.vegetation) this.applyBorderVegetation(chunk);
+    if (this.devBiomeMods.vegetation) this.applyVegetation(chunk);
+    if (this.devBiomeMods.structures) this.applyStructures(chunk);
     // Skylands must really have a void below their islands. The old
     // unconditional foundation painted a walkable floor across y=0.
     if (!this.config.floatingIslands && !this.config.skyIslands) {
@@ -712,8 +726,15 @@ export class AdvancedTerrainGenerator {
     if (cached !== undefined) return cached;
 
     const computed = this.computeTerrainHeight(x, z);
-    const height = Number.isFinite(computed)
-      ? clamp(Math.round(computed), this.config.bedrockThickness, this.config.worldDepth - 8)
+    // Developer amplification: stretch relief away from the spawn-plateau
+    // reference (seaLevel - 6). At the 1× default it is an exact identity,
+    // and the protected spawn blend is unaffected because it sits ON the
+    // reference height. Sky-island and flat presets pivot on their own
+    // reference so they stay stable too.
+    const reference = this.config.seaLevel - 6;
+    const amplified = reference + (computed - reference) * this.devHeightMultiplier;
+    const height = Number.isFinite(amplified)
+      ? clamp(Math.round(amplified), this.config.bedrockThickness, this.config.worldDepth - 8)
       : this.fallbackSurfaceHeight();
     this.rememberHeight(this.heightCache, key, height);
     return height;
@@ -1439,6 +1460,11 @@ export class AdvancedTerrainGenerator {
    */
   private applySurfacePass(chunk: Chunk): void {
     const seaLevel = this.config.seaLevel;
+    // Developer toggles (panel): "Surface Paint" guards the biome coat
+    // (steps 1-4), "Lakes" guards the sea-level water fill (step 5).
+    const paint = this.devBiomeMods.surfacePaint;
+    const waterFill = this.devBiomeMods.lakes;
+    if (!paint && !waterFill) return;
 
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -1446,46 +1472,47 @@ export class AdvancedTerrainGenerator {
         const wz = chunk.z * CHUNK_SIZE + lz;
         if (Math.hypot(wx, wz) < SPAWN_PROTECTED_RADIUS) continue;
 
-        const biome = this.getBiomeAt(wx, wz);
-        const palette = this.surfacePaletteFor(biome.id);
-
         // --- step 1: find the real, sky-exposed top of this column ----------
         const surfaceY = this.findSkyExposedSurface(chunk, lx, lz);
         if (surfaceY < 0) continue;                       // column is all air
         if (surfaceY <= this.config.bedrockThickness) continue;
 
-        // Underwater columns keep a sediment bed rather than grass; grass
-        // below the waterline was another source of odd-looking surfaces.
-        const submerged = surfaceY < seaLevel;
-        const top = submerged
-          ? (palette.top === BLOCK.SAND ? BLOCK.SAND : BLOCK.GRAVEL)
-          : palette.top;
+        if (paint) {
+          const biome = this.getBiomeAt(wx, wz);
+          const palette = this.surfacePaletteFor(biome.id);
+          // Underwater columns keep a sediment bed rather than grass; grass
+          // below the waterline was another source of odd-looking surfaces.
+          const submerged = surfaceY < seaLevel;
+          const top = submerged
+            ? (palette.top === BLOCK.SAND ? BLOCK.SAND : BLOCK.GRAVEL)
+            : palette.top;
 
-        // --- step 2: paint the exposed block, and only that block -----------
-        const existing = chunk.getBlock(lx, surfaceY, lz);
-        // Never repaint structural / placed materials (logs, bricks, ores,
-        // obsidian...). Only natural ground accepts a surface coat.
-        if (isNaturalGround(existing)) {
-          chunk.setBlock(lx, surfaceY, lz, top);
-        }
+          // --- step 2: paint the exposed block, and only that block ---------
+          const existing = chunk.getBlock(lx, surfaceY, lz);
+          // Never repaint structural / placed materials (logs, bricks, ores,
+          // obsidian...). Only natural ground accepts a surface coat.
+          if (isNaturalGround(existing)) {
+            chunk.setBlock(lx, surfaceY, lz, top);
+          }
 
-        // --- step 3: filler directly beneath, while it is still dirt --------
-        for (let d = 1; d <= palette.fillerDepth; d++) {
-          const y = surfaceY - d;
-          if (y <= this.config.bedrockThickness) break;
-          if (chunk.getBlock(lx, y, lz) !== BLOCK.DIRT) break;
-          chunk.setBlock(lx, y, lz, palette.filler);
-        }
+          // --- step 3: filler directly beneath, while it is still dirt ------
+          for (let d = 1; d <= palette.fillerDepth; d++) {
+            const y = surfaceY - d;
+            if (y <= this.config.bedrockThickness) break;
+            if (chunk.getBlock(lx, y, lz) !== BLOCK.DIRT) break;
+            chunk.setBlock(lx, y, lz, palette.filler);
+          }
 
-        // --- step 4: snow cap on genuinely cold, high ground ----------------
-        if (!submerged && surfaceY > 50 && biome.temperature === 'cold' && isNaturalGround(chunk.getBlock(lx, surfaceY, lz))) {
-          chunk.setBlock(lx, surfaceY, lz, BLOCK.SNOW);
+          // --- step 4: snow cap on genuinely cold, high ground --------------
+          if (!submerged && surfaceY > 50 && biome.temperature === 'cold' && isNaturalGround(chunk.getBlock(lx, surfaceY, lz))) {
+            chunk.setBlock(lx, surfaceY, lz, BLOCK.SNOW);
+          }
         }
 
         // --- step 5: sea-level fill, only into air --------------------------
         // Bounded by the *actual* surface, and it refuses to overwrite
         // anything solid, so it can no longer bury terrain in water.
-        if (surfaceY < seaLevel) {
+        if (waterFill && surfaceY < seaLevel) {
           for (let y = surfaceY + 1; y <= seaLevel; y++) {
             if (chunk.getBlock(lx, y, lz) !== BLOCK.AIR) continue;
             chunk.setBlock(lx, y, lz, BLOCK.WATER);
@@ -2272,6 +2299,33 @@ export class AdvancedTerrainGenerator {
 
   getEdits(): WorldBlockEdit[] { return Array.from(this.editOverrides.values()).map((e) => ({ ...e })); }
   getEditCount(): number { return this.editOverrides.size; }
+
+  /**
+   * DevTunableTerrain — developer panel world-tuning. Applying tuning drops
+   * every cached chunk and height lookup so freshly streamed chunks honour it
+   * immediately; saved player edits survive because they live in
+   * `editOverrides` and are re-applied by `applySavedEdits` on regeneration.
+   */
+  setDeveloperTuning(tuning: { heightMultiplier: number; biomeMods: BiomeModificationFlags }): void {
+    const multiplier = Number.isFinite(tuning.heightMultiplier)
+      ? Math.min(3, Math.max(0.25, tuning.heightMultiplier))
+      : 1;
+    const nextMods: BiomeModificationFlags = { ...DEFAULT_BIOME_MODS, ...tuning.biomeMods };
+    const changed = multiplier !== this.devHeightMultiplier
+      || BIOME_MOD_KEYS.some((k) => this.devBiomeMods[k] !== nextMods[k]);
+    this.devHeightMultiplier = multiplier;
+    this.devBiomeMods = nextMods;
+    if (changed) this.invalidateGeneratedChunks();
+  }
+
+  /** Drop all cached chunks and height/biome lookups (player edits persist). */
+  invalidateGeneratedChunks(): void {
+    this.chunks.clear();
+    this.heightCache.clear();
+    this.rawHeightCache.clear();
+    this.smoothHeightCache.clear();
+    this.biomeCache.clear();
+  }
 
   /**
    * Cheap analytic ground estimate for a column.
