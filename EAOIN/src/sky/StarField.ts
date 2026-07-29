@@ -5,9 +5,15 @@
  * draw call. Like every other sky element they live on a node that is
  * re-centred on the camera each frame, so they behave as a true skybox.
  *
- * The aurora is a set of tall vertical curtain planes arranged in an arc
- * overhead. Each curtain waves independently and cycles hue along the classic
- * green → cyan → violet aurora ramp.
+ * ## Aurora
+ *
+ * The aurora used to be a fan of flat `CreatePlane` cards, individually
+ * rescaled every frame in JS. Cards popping between independent poses is
+ * what read as "broken, sunrise-style popping triangles along the horizon".
+ * It is now delegated to `AuroraRibbon`: real ribbon meshes built from a
+ * continuous vertical strip of geometry, animated entirely by a custom
+ * vertex/fragment shader so the curtains flow as one continuous surface with
+ * genuinely travelling neon green → violet colour, high above the clouds.
  */
 import {
   Color3,
@@ -19,13 +25,12 @@ import {
   StandardMaterial,
   TransformNode,
   Vector3,
-  DynamicTexture,
 } from '@babylonjs/core';
+import { AuroraRibbon } from './AuroraRibbon';
 
 /** Radius of the celestial star shell. */
 const STAR_SHELL_RADIUS = 1000;
 const STAR_COUNT = 1400;
-const AURORA_CURTAINS = 14;
 
 interface ShootingStar {
   mesh: Mesh;
@@ -49,9 +54,7 @@ export class StarField {
   private starScales: Float32Array | null = null;
   private starPositions: Float32Array | null = null;
 
-  private auroraRoot: TransformNode | null = null;
-  private auroraCurtains: Mesh[] = [];
-  private auroraMaterials: StandardMaterial[] = [];
+  private readonly aurora: AuroraRibbon;
 
   private shootingStars: ShootingStar[] = [];
   private elapsed = 0;
@@ -62,11 +65,13 @@ export class StarField {
     this.scene = scene;
     this.seed = seed;
     this.root = new TransformNode('star_field_root', scene);
+    this.aurora = new AuroraRibbon(scene);
   }
 
   attach(): void {
     this.createStars();
-    this.createAurora();
+    this.aurora.attach();
+    this.aurora.root.parent = this.root;
     this.createShootingStars();
   }
 
@@ -153,67 +158,6 @@ export class StarField {
 
     this.starMesh.thinInstanceSetBuffer('matrix', this.starMatrices, 16, false);
     this.starMesh.thinInstanceCount = visible;
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Aurora Borealis                                                     */
-  /* ------------------------------------------------------------------ */
-
-  private createAurora(): void {
-    const root = new TransformNode('aurora_root', this.scene);
-    root.parent = this.root;
-
-    // A soft vertical gradient: opaque in the middle, transparent at both ends,
-    // so each curtain fades out at top and bottom like the real thing.
-    const gradient = new DynamicTexture('aurora_gradient', { width: 8, height: 128 }, this.scene, false);
-    const ctx = gradient.getContext() as unknown as CanvasRenderingContext2D;
-    const grd = ctx.createLinearGradient(0, 0, 0, 128);
-    grd.addColorStop(0.00, 'rgba(0,0,0,0)');
-    grd.addColorStop(0.22, 'rgba(90,90,90,0.55)');
-    grd.addColorStop(0.55, 'rgba(255,255,255,1)');
-    grd.addColorStop(0.82, 'rgba(120,120,120,0.5)');
-    grd.addColorStop(1.00, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, 8, 128);
-    gradient.update(false);
-
-    for (let i = 0; i < AURORA_CURTAINS; i += 1) {
-      const curtain = MeshBuilder.CreatePlane(
-        `aurora_curtain_${i}`,
-        { width: 260, height: 420, sideOrientation: Mesh.DOUBLESIDE },
-        this.scene
-      );
-      const mat = new StandardMaterial(`aurora_curtain_mat_${i}`, this.scene);
-      mat.emissiveColor = new Color3(0.25, 1.0, 0.55);
-      mat.diffuseColor = Color3.Black();
-      mat.specularColor = Color3.Black();
-      mat.disableLighting = true;
-      mat.opacityTexture = gradient;
-      mat.fogEnabled = false;
-      mat.backFaceCulling = false;
-      // Additive blending is what gives the aurora its luminous, layered look.
-      mat.alphaMode = 1;
-      mat.alpha = 0.5;
-      curtain.material = mat;
-
-      curtain.parent = root;
-      curtain.isPickable = false;
-      curtain.checkCollisions = false;
-      curtain.applyFog = false;
-      curtain.renderingGroupId = 0;
-      curtain.alwaysSelectAsActiveMesh = true;
-
-      // Arrange the curtains in a wide arc across the northern sky.
-      const a = (i / AURORA_CURTAINS) * Math.PI * 1.5 - Math.PI * 0.25;
-      const r = 620;
-      curtain.position.set(Math.cos(a) * r, 430, Math.sin(a) * r);
-      curtain.rotation.y = -a + Math.PI / 2;
-
-      this.auroraCurtains.push(curtain);
-      this.auroraMaterials.push(mat);
-    }
-
-    this.auroraRoot = root;
   }
 
   /* ------------------------------------------------------------------ */
@@ -316,29 +260,8 @@ export class StarField {
   }
 
   private updateAurora(deltaSeconds: number, nightFactor: number, strength: number): void {
-    void deltaSeconds;
     const intensity = nightFactor * strength;
-    const visible = intensity > 0.02;
-    if (this.auroraRoot) this.auroraRoot.setEnabled(visible);
-    if (!visible) return;
-
-    this.auroraCurtains.forEach((curtain, i) => {
-      // Each curtain waves on its own phase so the sheet ripples.
-      const wave = Math.sin(this.elapsed * 0.34 + i * 0.7);
-      const wave2 = Math.cos(this.elapsed * 0.21 + i * 1.3);
-      curtain.scaling.y = 0.75 + 0.45 * (0.5 + 0.5 * wave);
-      curtain.scaling.x = 0.85 + 0.30 * (0.5 + 0.5 * wave2);
-      curtain.position.y = 430 + wave * 46;
-      curtain.rotation.z = wave2 * 0.12;
-
-      const mat = this.auroraMaterials[i];
-      if (mat) {
-        // Cycle along the green → cyan → violet aurora ramp.
-        const hue = (this.elapsed * 0.08 + i * 0.11) % 1;
-        mat.emissiveColor = auroraColor(hue);
-        mat.alpha = intensity * (0.26 + 0.24 * (0.5 + 0.5 * wave));
-      }
-    });
+    this.aurora.update(deltaSeconds, intensity);
   }
 
   private updateShootingStars(deltaSeconds: number, nightFactor: number): void {
@@ -378,17 +301,9 @@ export class StarField {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.aurora.dispose();
     this.root.dispose(false, true);
   }
-}
-
-/** Green → cyan → violet aurora ramp. */
-function auroraColor(t: number): Color3 {
-  const green = new Color3(0.22, 1.0, 0.48);
-  const cyan = new Color3(0.24, 0.86, 0.96);
-  const violet = new Color3(0.62, 0.34, 1.0);
-  if (t < 0.5) return Color3.Lerp(green, cyan, t * 2);
-  return Color3.Lerp(cyan, violet, (t - 0.5) * 2);
 }
 
 const tempMatrix = Matrix.Identity();

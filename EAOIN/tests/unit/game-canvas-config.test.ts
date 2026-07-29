@@ -4,6 +4,7 @@ import {
   adaptiveBudgetKey,
   effectTierForQualityPreset,
   rayTracingSettingsKey,
+  resolveCameraPenetrationY,
   shouldEnableAtmosphereParticles,
 } from '../../src/engine/GameCanvasConfig';
 import { createDefaultSettings } from '../../src/settings/GameSettings';
@@ -47,5 +48,47 @@ describe('GameCanvas runtime config helpers', () => {
     expect(rayTracingSettingsKey({ ...base, rayTracedReflections: !base.rayTracedReflections })).not.toBe(key);
     expect(rayTracingSettingsKey({ ...base, rayTracedShadows: !base.rayTracedShadows })).not.toBe(key);
     expect(rayTracingSettingsKey({ ...base, rayTracedAO: !base.rayTracedAO })).not.toBe(key);
+  });
+
+  describe('resolveCameraPenetrationY — surface X-ray cutaway repair', () => {
+    // A column that is solid stone from y=0..9, then open air above.
+    const solidColumn = (x: number, y: number, z: number): number => {
+      void x; void z;
+      return y < 10 ? 3 /* stone */ : 0;
+    };
+
+    it('does nothing when the eye is in open air', () => {
+      expect(resolveCameraPenetrationY(solidColumn, 5.5, 12.4, 5.5, 128)).toBeNull();
+    });
+
+    it('does nothing when the eye is underwater (water is not opaque)', () => {
+      const withWater = (x: number, y: number, z: number): number =>
+        y === 10 ? 5 /* water */ : solidColumn(x, y, z);
+      expect(resolveCameraPenetrationY(withWater, 5.5, 10.4, 5.5, 128)).toBeNull();
+    });
+
+    it('lifts the eye above solid ground when the camera is stuck inside a block', () => {
+      // Eye sits at y=4.3, deep inside the solid column: this is exactly the
+      // "look down and see through the ground" state — a culled block face
+      // with nothing behind it to stop the ray.
+      const lifted = resolveCameraPenetrationY(solidColumn, 5.5, 4.3, 5.5, 128);
+      expect(lifted).not.toBeNull();
+      // Must land in the first open block above the solid column (y=10), not
+      // merely nudge upward by a fraction and remain inside geometry.
+      expect(lifted).toBe(10.5);
+    });
+
+    it('gives up within the search cap rather than searching forever on an all-solid column', () => {
+      const allSolid = () => 3;
+      expect(resolveCameraPenetrationY(allSolid, 0.5, 0.4, 0.5, 128, 8)).toBeNull();
+    });
+
+    it('never reports a fix at exactly the boundary between solid and open', () => {
+      // Eye at y=9.9 is still inside the last solid layer (floor(9.9) === 9).
+      const lifted = resolveCameraPenetrationY(solidColumn, 0.5, 9.9, 0.5, 128);
+      expect(lifted).toBe(10.5);
+      // Eye at y=10.1 is already in the open air above — no fix needed.
+      expect(resolveCameraPenetrationY(solidColumn, 0.5, 10.1, 0.5, 128)).toBeNull();
+    });
   });
 });

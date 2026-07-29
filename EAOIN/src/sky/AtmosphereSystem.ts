@@ -68,6 +68,12 @@ export interface AtmosphereFrame {
   profile: SkyProfile;
   /** True while the sky is bright enough to be considered daytime. */
   isDay: boolean;
+  /**
+   * 0-1: how deeply the camera is inside the volumetric cloud deck this
+   * frame. 0 outside it entirely, 1 buried in the dense middle of the band.
+   * Drives the "flying through real clouds" whiteout/fog effect.
+   */
+  cloudImmersion: number;
 }
 
 /**
@@ -279,6 +285,7 @@ export class AtmosphereSystem {
       ambient,
       profile,
       isDay: dayFactor > 0.15,
+      cloudImmersion: this.clouds.getImmersion(cameraPosition.y),
     };
   }
 
@@ -316,6 +323,7 @@ export class AtmosphereSystem {
       ambient: new Color3(0.3, 0.3, 0.3),
       profile: this.current,
       isDay: true,
+      cloudImmersion: 0,
     };
   }
 

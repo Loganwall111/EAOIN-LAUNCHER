@@ -108,7 +108,12 @@ export class PortalWindow {
    */
   private paint(time: number): void {
     if (!this.texture) return;
-    const ctx = this.texture.getContext() as unknown as CanvasRenderingContext2D;
+    const ctx = this.texture.getContext() as unknown as CanvasRenderingContext2D | null;
+    // Headless/test environments without the optional `canvas` package (or
+    // any canvas-less render target) report no 2D context. The portal mesh
+    // and material must still exist and behave correctly there — only the
+    // painted destination preview is skipped.
+    if (!ctx) return;
     const s = VIEW_SIZE;
     const p = this.profile;
 

@@ -33,6 +33,7 @@ import {
   adaptiveBudgetKey,
   effectTierForQualityPreset,
   rayTracingSettingsKey,
+  resolveCameraPenetrationY,
   shouldEnableAtmosphereParticles,
 } from './GameCanvasConfig';
 import { LogicRuntime } from '../redstone/LogicRuntime';
@@ -41,11 +42,13 @@ import { RuntimeStatus } from '../runtime/RuntimeStatus';
 import { GameSettings, qualityRenderDistance, clampSettings } from '../settings/GameSettings';
 import { TerrainGenerator } from '../world/TerrainGenerator';
 import AdvancedTerrainGenerator, { FLOATING_ISLANDS_CONFIG } from '../world/AdvancedTerrainGenerator';
+import { CHUNK_HEIGHT } from '../world/Chunk';
 import { FloatingIslandsGenerator } from '../world/FloatingIslands';
 import { AdvancedPhysicsRuntime } from '../physics/AdvancedPhysics';
 import { AtmosphereSystem, AtmosphereFrame } from '../sky/AtmosphereSystem';
 import { getWorldType, isLegacySkyWorldSeed, worldTypeFromSeed, WorldTypeConfig } from '../world/WorldTypes';
 import { PortalSystem } from '../portals/PortalSystem';
+import { PhysicalPlanets } from '../space/PhysicalPlanets';
 import { RealityRiftSystem } from '../world/RealityRifts';
 import { CommandBlockSystem } from '../redstone/CommandBlockSystem';
 import { CinematicLighting, DEFAULT_CINEMATIC } from '../rendering/CinematicLighting';
@@ -448,6 +451,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
       const moddingRuntime = new ModdingRuntime(); moddingRuntime.registerMockPack();
       const nextGenRuntime = new NextGenRuntime(scene, terrain, seed, gameMode, spawn);
+      // Physical, enterable planets: real fixed-coordinate spheres that scale
+      // as the player approaches and swap the voxel world when the player
+      // flies into one's atmospheric boundary.
+      const physicalPlanets = new PhysicalPlanets(scene, new Vector3(spawn.x, spawn.y, spawn.z));
+      physicalPlanets.attach();
       const logicRuntime = new LogicRuntime(scene, terrain, spawn);
       const settlementRuntime = new SettlementRuntime(scene, terrain, seed);
       const authorityRuntime = new LocalAuthorityRuntime(seed);
@@ -889,6 +897,45 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
 
       /**
+       * Surface X-ray cutaway repair.
+       *
+       * Every material in `BlockMaterials` sets `backFaceCulling = true`, which
+       * is correct and necessary — without it every block would render both
+       * its outside and its inside faces, doubling overdraw for nothing a
+       * player standing outside the block would ever see. But it has one sharp
+       * edge: a camera whose eye point ends up *inside* a solid voxel (a fast
+       * fall landing a frame late, a teleport/respawn placed a hair too low,
+       * or standing dead-centre in a doorway that regenerated after a chunk
+       * edit) is now looking at that block's culled interior. The interior has
+       * no far face to stop the ray, so the next thing the depth buffer finds
+       * is whatever is behind it — a cave, open air, or the next chunk over.
+       * That reads exactly as "look down and see straight through solid
+       * ground into the caves below": the ground is not actually transparent,
+       * the camera is standing inside it.
+       *
+       * `moveWithCollisions` (used above for gravity and flight) resolves
+       * *swept* collisions along a movement vector, but it does nothing for a
+       * camera that is already resting inside solid geometry with no velocity
+       * to sweep against — which is exactly the stuck cases listed above. This
+       * runs every frame, is O(1), and simply lifts the eye to just above the
+       * nearest open block whenever the voxel actually containing the camera
+       * is solid, so the player is never inside opaque, culled geometry.
+       */
+      const resolveCameraPenetration = (pos: Vector3): void => {
+        const lifted = resolveCameraPenetrationY(
+          (x, y, z) => terrain.getBlockAt(x, y, z),
+          pos.x,
+          pos.y,
+          pos.z,
+          CHUNK_HEIGHT
+        );
+        if (lifted !== null) {
+          pos.y = lifted;
+          velocityY = 0;
+        }
+      };
+
+      /**
        * Push an effect tier into the live scene.
        *
        * Everything here is reversible and cheap to toggle, which is the whole
@@ -933,6 +980,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let chunkWorkLastFrame = false;
       /** Tracks surface/submerged transitions so we only re-theme on change. */
       let wasSubmerged = false;
+      /** Tracks cloud-deck entry/exit so the "flying into weather" message fires once. */
+      let wasInClouds = false;
       let startupLoadingComplete = !renderer.hasPendingChunks(
         streamCenter.cx,
         streamCenter.cz,
@@ -1186,6 +1235,31 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           scene.environmentIntensity = 0.48;
           atmosphere.setDimension(dimensionRuntime.getState().id);
           showActionMessage('You break the surface.');
+        } else {
+          // Volumetric cloud immersion: flying up into the 64-block deck
+          // must feel like an airplane punching into real weather — a thick,
+          // sweeping, foggy mist that thickens as the player goes deeper in
+          // and clears smoothly on the way out. Skipped entirely while
+          // submerged, since the ocean fog above already owns the screen.
+          const immersion = atmosphereFrame.cloudImmersion;
+          if (immersion > 0.01) {
+            const cloudColor = atmosphere.clouds.getMistColor();
+            scene.fogMode = Scene.FOGMODE_EXP2;
+            // Ramp density from the ambient atmosphere value up to a thick,
+            // near-whiteout soup at full immersion.
+            const baseDensity = atmosphereFrame.profile.fogDensity;
+            scene.fogDensity = baseDensity + immersion * 0.045;
+            scene.fogColor = Color3.Lerp(scene.fogColor, cloudColor, immersion);
+            if (!wasInClouds && immersion > 0.5) {
+              wasInClouds = true;
+              showActionMessage('Flying into the clouds — visibility dropping in the mist');
+            } else if (wasInClouds && immersion < 0.2) {
+              wasInClouds = false;
+              showActionMessage('Clear of the clouds');
+            }
+          } else if (wasInClouds) {
+            wasInClouds = false;
+          }
         }
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
@@ -1196,6 +1270,19 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         physics.update(deltaSeconds);
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
+        // Seamless dimension traversal: crossing a physical planet's
+        // atmospheric boundary swaps the voxel world to that planet's own
+        // ground dimension, exactly like walking through a portal frame.
+        const planetApproaches = physicalPlanets.update(deltaSeconds, camera.position);
+        for (const approach of planetApproaches) {
+          const targetDimension = approach.planet.dimension;
+          dimensionRuntime.setDimension(targetDimension);
+          dimensionRuntime.triggerTransitionEffect(camera.position, true);
+          atmosphere.setDimension(targetDimension);
+          chunkSource.setDimension(targetDimension);
+          forceTerrainCoverage = true;
+          showActionMessage(`Entering ${approach.planet.name}'s atmosphere — welcome to ${dimensionRuntime.getDefinition().name}`);
+        }
         realityRifts.update(deltaSeconds, camera.position, camera.position);
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
@@ -1300,6 +1387,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           }
           if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
         }
+
+        // Runs after every movement path (flight, falling, walking) so the
+        // player's eye can never end up resting inside opaque, backface-
+        // culled voxel geometry — see `resolveCameraPenetration` above for
+        // why that specific state is what produces the "see through solid
+        // ground into the caves below" report.
+        resolveCameraPenetration(camera.position);
 
         const horiz = Math.hypot(camera.position.x - lastCameraPosition.x, camera.position.z - lastCameraPosition.z);
         const moving = horiz > 0.01;
@@ -1658,7 +1752,28 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const keyIndex = Number.parseInt(event.key, 10) - 1;
         if (keyIndex >= 0 && keyIndex < HOTBAR_BLOCKS.length && !Number.isNaN(keyIndex)) { event.preventDefault(); const nextBlock = HOTBAR_BLOCKS[keyIndex]; selectedBlockRef.current = nextBlock; onSelectedBlockChange(nextBlock); showActionMessage(`Selected ${getBlock(nextBlock).name}`); return; }
         if (event.key.toLowerCase() === 'i' || event.key.toLowerCase() === 'e') { event.preventDefault(); onToggleInventory(); audio.play('ui', settingsRef.current); showActionMessage('Inventory with block logos + 2x2/3x3 crafting'); return; }
-        if (event.key.toLowerCase() === 'p') { event.preventDefault(); const used = hasNearbyBlock(terrain, camera.position, 15, 5); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return; }
+        if (event.key.toLowerCase() === 'p') {
+          event.preventDefault();
+          // Portal Activation Loops repair: if the player is standing at a
+          // real, built portal frame, resolve its ACTUAL configured
+          // destination rather than blindly cycling the dimension list —
+          // that mismatch was why lighting a portal could drop you
+          // somewhere with no relation to the frame you built.
+          const activePortal = portalSystem.findActivePortal(camera.position.x, camera.position.y, camera.position.z);
+          if (activePortal) {
+            dimensionRuntime.setDimension(activePortal.dimension);
+            dimensionRuntime.triggerTransitionEffect(camera.position, true);
+            atmosphere.setDimension(activePortal.dimension);
+            chunkSource.setDimension(activePortal.dimension);
+            forceTerrainCoverage = true;
+            authorityRuntime.recordAction();
+            audio.play('ui', settingsRef.current);
+            showActionMessage(`Portal activated — ${dimensionRuntime.getDefinition().name}`);
+            publishRuntimeStatus();
+            return;
+          }
+          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
+        }
         if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameModeRef.current === 'creative' || gameModeRef.current === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'c') { event.preventDefault(); showActionMessage(nextGenRuntime.startCredits()); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'k') { event.preventDefault(); showActionMessage(nextGenRuntime.skipCredits()); publishRuntimeStatus(); return; }
@@ -1871,7 +1986,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 

@@ -3,6 +3,7 @@ import { BlockID } from '@shared/blocks/BlockRegistry';
 import { craftRecipe, RECIPES, RecipeID } from './crafting/RecipeBook';
 import MainMenu from './ui/MainMenu';
 import TitleScreen from './ui/TitleScreen';
+import HowToPlayGuide from './ui/HowToPlayGuide';
 import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import ModsScreen from './ui/ModsScreen';
@@ -62,7 +63,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options' | 'marketplace' | 'editor';
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options' | 'marketplace' | 'editor' | 'guide';
   // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
   // forced before you could reach the menu. Boot now runs first and hands off
   // to the title screen; sign-in is reached only by pressing the button there.
@@ -313,10 +314,19 @@ export default function App() {
             onQuit={() => window.close()}
             onEditCharacter={() => setAppPhase('creator')}
             onOpenNews={() => setAppPhase('worlds')}
-            onOpenGuide={() => setAppPhase('worlds')}
+            onOpenGuide={() => setAppPhase('guide')}
             onOpenStats={() => setAppPhase('options')}
             onOpenFriends={() => setAppPhase('multiplayer')}
           />
+        </div>
+      );
+    }
+    if (appPhase === 'guide') {
+      return (
+        <div className={shellClass}>
+          <div className="game-hud-overlay" aria-label="How to Play">
+            <HowToPlayGuide onClose={() => setAppPhase('title')} />
+          </div>
         </div>
       );
     }

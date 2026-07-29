@@ -56,6 +56,35 @@ const MAX_CLOUD_BLOCKS = 2600;
  */
 const CLOUD_PUFF_ALPHA = 0.30;
 
+/* ------------------------------------------------------------------ */
+/* Tornado macro formation                                             */
+/* ------------------------------------------------------------------ */
+//
+// "Arrange the macro layout of this volumetric cloud layer into a massive
+// swirling vortex tornado pattern above the overworld that players can fly
+// through." The ordinary field above is a dispersed cumulus deck; this is a
+// second, deliberate macro structure seated inside it: a funnel of puffs
+// whose ring radius widens and whose ring angle advances with height, so the
+// silhouette reads as a slow, continuous swirl rather than a scattered pile
+// of boxes. It is built from the same soft alpha-blended puffs as the rest
+// of the deck, so flying into it gives the same "thick mist" immersion.
+
+/** Field-local position of the funnel's centre line (wraps with the field). */
+const TORNADO_CENTER_X = 0;
+const TORNADO_CENTER_Z = 0;
+/** Vertical span of the funnel, centred on the deck's own vertical band. */
+const TORNADO_HEIGHT = CLOUD_DECK_THICKNESS * 2.4;
+/** Puff rings stacked from the narrow base to the wide crown. */
+const TORNADO_RING_COUNT = 22;
+/** Puffs placed around each ring. */
+const TORNADO_PUFFS_PER_RING = 11;
+/** Radius at the narrowest ring, near the base of the funnel. */
+const TORNADO_BASE_RADIUS = 20;
+/** Radius at the widest ring, where the funnel opens into the deck above. */
+const TORNADO_TOP_RADIUS = 150;
+/** Full turns the spiral completes from base to crown — the "swirl". */
+const TORNADO_TURNS = 3.25;
+
 export interface CloudFieldOptions {
   /** 0-1 from the active SkyProfile. Scales cluster count and puff density. */
   coverage: number;
@@ -182,6 +211,13 @@ export class VolumetricClouds {
     const effectiveCoverage = Math.max(0, Math.min(1, this.coverage * this.densityScale));
     const gate = 1 - effectiveCoverage;
 
+    // The dedicated tornado macro-formation is seated first so it always
+    // gets its full allocation of puffs. Building the dispersed cluster
+    // field first would spend the whole `MAX_CLOUD_BLOCKS` budget before the
+    // tornado ever got a turn, silently dropping the one deliberate macro
+    // shape the brief actually asks for.
+    this.buildTornado(effectiveCoverage);
+
     for (let x = -CLOUD_FIELD_EXTENT; x <= CLOUD_FIELD_EXTENT; x += CLUSTER_SPACING) {
       for (let z = -CLOUD_FIELD_EXTENT; z <= CLOUD_FIELD_EXTENT; z += CLUSTER_SPACING) {
         if (this.blocks.length >= MAX_CLOUD_BLOCKS) break;
@@ -254,6 +290,61 @@ export class VolumetricClouds {
         scale: new Vector3(w, h, dp),
         phase: this.hash(`ph:${cx}:${cz}:${i}`) * Math.PI * 2,
       });
+    }
+  }
+
+  /**
+   * The tornado macro-formation: a funnel of puff rings that narrows near
+   * its base and widens as it climbs, each ring rotated further than the
+   * last so the whole shape reads as one continuous swirling vortex.
+   *
+   * Built the same way `buildCluster` is — many overlapping soft boxes, same
+   * material, same thin-instance buffer — so it costs nothing extra to
+   * render and blends seamlessly with the rest of the deck; only the *macro
+   * layout* differs, which is exactly what turns "a pile of cumulus puffs"
+   * into a shape the player can recognise and fly through.
+   */
+  private buildTornado(strength: number): void {
+    if (strength <= 0.001) return;
+
+    for (let ring = 0; ring < TORNADO_RING_COUNT; ring += 1) {
+      if (this.blocks.length >= MAX_CLOUD_BLOCKS) return;
+      // 0 at the base, 1 at the crown.
+      const t = ring / Math.max(1, TORNADO_RING_COUNT - 1);
+      // Ease the radius growth so the silhouette bells outward like a real
+      // funnel cloud instead of a perfect cone.
+      const eased = t * t * (3 - 2 * t);
+      const ringRadius = TORNADO_BASE_RADIUS + (TORNADO_TOP_RADIUS - TORNADO_BASE_RADIUS) * eased;
+      // The spiral: each ring is rotated further round than the one below
+      // it, so following the rings upward traces a continuous swirl.
+      const ringAngle = t * TORNADO_TURNS * Math.PI * 2;
+      const ringY = (t - 0.5) * TORNADO_HEIGHT;
+      // Puffs shrink toward the narrow base and swell toward the open crown,
+      // matching a funnel's real silhouette.
+      const puffScale = 0.45 + eased * 0.9;
+
+      for (let i = 0; i < TORNADO_PUFFS_PER_RING; i += 1) {
+        if (this.blocks.length >= MAX_CLOUD_BLOCKS) return;
+        const key = `tornado:${ring}:${i}`;
+        const spread = (i / TORNADO_PUFFS_PER_RING) * Math.PI * 2;
+        const wobble = (this.hash(`${key}:w`) - 0.5) * 0.4;
+        const a = ringAngle + spread + wobble;
+        const r = ringRadius * (0.86 + this.hash(`${key}:r`) * 0.28);
+
+        const px = TORNADO_CENTER_X + Math.cos(a) * r;
+        const pz = TORNADO_CENTER_Z + Math.sin(a) * r;
+        const py = ringY + (this.hash(`${key}:y`) - 0.5) * (TORNADO_HEIGHT / TORNADO_RING_COUNT) * 1.4;
+
+        const w = (30 + this.hash(`${key}:sw`) * 30) * puffScale;
+        const h = (16 + this.hash(`${key}:sh`) * 16) * puffScale;
+        const dp = (30 + this.hash(`${key}:sd`) * 30) * puffScale;
+
+        this.blocks.push({
+          base: new Vector3(px, py, pz),
+          scale: new Vector3(w, h, dp),
+          phase: this.hash(`${key}:ph`) * Math.PI * 2,
+        });
+      }
     }
   }
 
@@ -355,6 +446,49 @@ export class VolumetricClouds {
 
   getBlockCount(): number {
     return this.blocks.length;
+  }
+
+  /**
+   * Read-only snapshot of every puff's base position (before wind offset).
+   *
+   * Exists for regression tests that need to verify the macro *shape* of the
+   * field — e.g. that the tornado formation actually widens and spirals with
+   * height rather than just existing as a blob of extra boxes — without
+   * reaching into a private field.
+   */
+  getDebugBlocks(): ReadonlyArray<{ x: number; y: number; z: number }> {
+    return this.blocks.map((b) => ({ x: b.base.x, y: b.base.y, z: b.base.z }));
+  }
+
+  /**
+   * How deeply the given altitude sits inside the cloud deck's vertical
+   * band, in [0, 1].
+   *
+   * This is what makes flying up into the deck feel like flying an airplane
+   * into real weather: 0 well below or above the deck, ramping up smoothly
+   * to 1 once the camera is inside the dense middle of the band. The caller
+   * (`AtmosphereSystem` / the render loop) uses this to thicken fog and tint
+   * the view, rather than the clouds staying purely decorative geometry you
+   * can fly through without anything changing on screen.
+   */
+  getImmersion(altitude: number): number {
+    if (this.coverage <= 0.001) return 0;
+    const half = CLOUD_DECK_THICKNESS * 0.5;
+    // Soft edges: full band ± half thickness, with an extra half-thickness
+    // of ramp on each side so entering/leaving the deck fades rather than
+    // snapping.
+    const distance = Math.abs(altitude - CLOUD_DECK_ALTITUDE);
+    if (distance >= half + CLOUD_DECK_THICKNESS) return 0;
+    if (distance <= half) return 1;
+    const t = 1 - (distance - half) / CLOUD_DECK_THICKNESS;
+    return Math.max(0, Math.min(1, t));
+  }
+
+  /** The colour the screen should fog toward while flying through the deck. */
+  getMistColor(): Color3 {
+    // A soft, bright, slightly warm-neutral grey-white — real cloud mist, not
+    // a flat opaque colour swatch.
+    return Color3.Lerp(this.tint, new Color3(0.92, 0.93, 0.96), 0.6);
   }
 
   dispose(): void {

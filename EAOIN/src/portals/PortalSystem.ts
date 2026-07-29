@@ -72,6 +72,63 @@ export const PORTAL_DEFS: PortalDef[] = [
   { dimension: 'moon', name: 'Lunar Gate', emoji: '🌙', color1: new Color3(0.75, 0.78, 0.85), color2: new Color3(0.95, 0.95, 1), size: 2.6, frameBlock: 23, particleCount: 18, description: 'A pale arch of moon-rock light.' },
 ];
 
+export interface PortalCoordinate {
+  dimension: RuntimeDimensionID;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * How close the player must stand to a portal's centre for it to actually
+ able to be activated and used, in world units.
+ */
+export const PORTAL_ACTIVATION_RADIUS = 3.5;
+
+/**
+ * Pure coordinate-resolution logic for "which portal is the player standing
+ * in front of, and where does it actually lead".
+ *
+ * ## The bug this repairs
+ *
+ * The 'P' key used to call `dimensionRuntime.cycle()` unconditionally,
+ * advancing through the dimension list by one **regardless of which portal,
+ * if any, the player was standing next to**. A player who built and lit a
+ * Nether-style obsidian frame and stepped through it could be sent to the
+ * Moon, the Aether, or back to the Overworld depending purely on how many
+ * times any portal anywhere had ever been used this session — the frame's
+ * own colour, shape and destination were pure decoration. That is "the
+ * trigger math resolves to the wrong dimension" bug.
+ *
+ * This function is the fix: given the portals that actually exist in the
+ * world and the player's real position, it resolves the *specific* portal
+ * within activation range and returns its *actual* configured destination —
+ * never an arbitrary neighbour in a list. `null` means no portal is close
+ * enough to activate, so the caller can fall back to the monument/cycle
+ * behaviour for players not standing at a built frame.
+ */
+export function resolvePortalDestination(
+  portals: ReadonlyArray<PortalCoordinate>,
+  playerX: number,
+  playerY: number,
+  playerZ: number,
+  radius: number = PORTAL_ACTIVATION_RADIUS
+): PortalCoordinate | null {
+  let nearest: PortalCoordinate | null = null;
+  let nearestDistanceSq = radius * radius;
+  for (const portal of portals) {
+    const dx = portal.x - playerX;
+    const dy = portal.y - playerY;
+    const dz = portal.z - playerZ;
+    const distanceSq = dx * dx + dy * dy + dz * dz;
+    if (distanceSq <= nearestDistanceSq) {
+      nearest = portal;
+      nearestDistanceSq = distanceSq;
+    }
+  }
+  return nearest;
+}
+
 export class PortalInstance {
   mesh: Mesh;
   innerMesh: Mesh;
@@ -193,6 +250,24 @@ export class PortalSystem {
   update(dt: number, camera: Vector3): void {
     this.time += dt;
     for (const p of this.portals) if (p.alive) p.update(dt, camera);
+  }
+
+  /**
+   * The specific, real portal the player is standing in front of right now
+   * (if any), and its true configured destination — never an arbitrary
+   * cycle through the dimension list. See `resolvePortalDestination` for
+   * the full rationale.
+   */
+  findActivePortal(playerX: number, playerY: number, playerZ: number): PortalCoordinate | null {
+    const coordinates: PortalCoordinate[] = this.portals
+      .filter((p) => p.alive)
+      .map((p) => ({
+        dimension: p.def.dimension,
+        x: p.position.x,
+        y: p.position.y,
+        z: p.position.z,
+      }));
+    return resolvePortalDestination(coordinates, playerX, playerY, playerZ);
   }
 
   dispose(): void {

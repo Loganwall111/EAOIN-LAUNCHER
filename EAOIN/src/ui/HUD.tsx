@@ -15,6 +15,7 @@ import { ModPackRegistry, ModDefinition, ALL_MODS, MOD_CATEGORY_LABELS, MOD_CATE
 import { ALL_SERVERS, ServerEntry, DEMO_FRIENDS, DEMO_GUILDS, DEMO_NATIONS } from '../networking/ServerBrowser';
 import { ALL_DIMENSIONS } from '../dimensions/DimensionRuntime';
 import DimensionSigil from './DimensionSigil';
+import HowToPlayGuide from './HowToPlayGuide';
 import { ALL_BOSSES, BOSS_TIER_LABELS } from '../creatures/BossRegistry';
 import { ALL_QUESTS, QUEST_TYPES, QUEST_TYPE_LABELS } from '../objectives/QuestRegistry';
 import { CIVILIZATIONS, RACE_NAMES, TECH_AGE_LABELS, TECH_AGE_ICONS } from '../civilization/CivilizationTech';
@@ -128,6 +129,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
 
   /* ---- biomes menu ---- */
   const [biomesOpen, setBiomesOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   /* ---- shader settings that actually change visuals ---- */
   const applyShader = (sh: ShaderDefinition) => {
@@ -251,6 +253,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
               <p>Mode: {gameMode} • Version {GAME_VERSION} • {craftingMessage}</p>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setGuideOpen(true)}>📖 How to Play</button>
               <button onClick={() => setBiomesOpen(true)}>🌍 Biomes</button>
               <button onClick={onCloseInventory}>Close [E]</button>
             </div>
@@ -580,6 +583,9 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
           </div>
         </div>
       )}
+
+      {/* ===================== HOW TO PLAY GUIDE ===================== */}
+      {guideOpen && <HowToPlayGuide onClose={() => setGuideOpen(false)} />}
 
       {/* ===================== BIOMES MENU ===================== */}
       {biomesOpen && (
