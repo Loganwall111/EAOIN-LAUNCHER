@@ -18,6 +18,7 @@
  */
 import {
   Color3,
+  Material,
   Matrix,
   Mesh,
   MeshBuilder,
@@ -29,12 +30,31 @@ import {
 
 /** Height above the world origin at which the cloud deck sits. */
 export const CLOUD_DECK_ALTITUDE = 192;
+/**
+ * Vertical thickness of the deck, in world units.
+ *
+ * The deck is a *volume*, not a sheet: puffs are distributed through this
+ * full height so flying up into it gives the airliner "inside the weather"
+ * feeling — mist above, below and around you — instead of punching through
+ * an infinitely thin plane.
+ */
+export const CLOUD_DECK_THICKNESS = 64;
 /** Half-width of the tiling cloud field, in world units. */
 export const CLOUD_FIELD_EXTENT = 1400;
 /** Spacing between candidate cluster centres. */
 const CLUSTER_SPACING = 190;
 /** Hard cap on instances, so a dense preset can't tank the frame rate. */
 const MAX_CLOUD_BLOCKS = 2600;
+/**
+ * Peak opacity of a single puff.
+ *
+ * Deliberately low. Each cluster stacks 14-50 overlapping boxes, so the
+ * *accumulated* opacity through a cluster is what the player reads as cloud
+ * density. Setting this high made every individual box visible as a hard
+ * white slab, which is what made the deck look like floating geometry rather
+ * than weather.
+ */
+const CLOUD_PUFF_ALPHA = 0.30;
 
 export interface CloudFieldOptions {
   /** 0-1 from the active SkyProfile. Scales cluster count and puff density. */
@@ -86,17 +106,44 @@ export class VolumetricClouds {
     // readable at dawn/dusk without blowing out to pure white.
     this.material.emissiveColor = this.tint.scale(0.42);
     this.material.specularColor = Color3.Black();
-    this.material.alpha = 0.86;
-    this.material.backFaceCulling = true;
+    this.material.alpha = CLOUD_PUFF_ALPHA;
+
+    // --- soft, flyable-through volume ------------------------------------
+    //
+    // `backFaceCulling = false` is what lets the player fly *into* the deck.
+    // With culling on, entering a puff clips away its far side and the cloud
+    // visibly pops inside-out around the camera. Rendering both faces keeps
+    // the volume coherent from within.
+    this.material.backFaceCulling = false;
+
+    // Force the alpha-blended path. Babylon decides transparency from alpha
+    // and texture, and a StandardMaterial with no diffuse texture at alpha 1
+    // would take the opaque path and draw hard white slabs.
+    this.material.needAlphaBlending = () => true;
+    this.material.transparencyMode = Material.MATERIAL_ALPHABLEND;
+
+    // Do NOT write depth. This is the single most important line for making
+    // stacked puffs read as one soft mass: with depth writes on, whichever
+    // box draws first occludes every box behind it, so the deck resolves into
+    // visible hard-edged cubes. Depth-testing stays on so terrain still
+    // correctly occludes clouds.
+    this.material.disableDepthWrite = true;
+    // Blend back-to-front without sorting artifacts inside a cluster.
+    this.material.separateCullingPass = true;
+
     // Clouds must not be tinted by ground fog — they are above the fog layer.
     this.material.fogEnabled = false;
 
     this.template = MeshBuilder.CreateBox('volumetric_cloud_block', { size: 1 }, this.scene);
     this.template.material = this.material;
     this.template.isPickable = false;
+    // The deck is atmosphere, never a surface: the player flies straight
+    // through it rather than landing on it.
     this.template.checkCollisions = false;
     this.template.applyFog = false;
-    this.template.renderingGroupId = 0;
+    // Rendering group 1 draws the deck after opaque terrain, so the soft
+    // volume blends over the world instead of being blended under it.
+    this.template.renderingGroupId = 1;
     this.template.alwaysSelectAsActiveMesh = true;
     this.template.doNotSyncBoundingInfo = true;
     // Never let the sky deck take part in shadow casting or picking.
@@ -177,7 +224,10 @@ export class VolumetricClouds {
     // Big clusters — "make the clouds larger and in bigger clusters".
     const radius = 58 + this.hash(`r:${cx}:${cz}`) * 96;
     const puffCount = Math.round(14 + density * 26 + this.hash(`n:${cx}:${cz}`) * 12);
-    const baseY = (this.hash(`y:${cx}:${cz}`) - 0.5) * 46;
+    // Seat each cluster somewhere inside the deck's vertical band, leaving
+    // headroom at the top and bottom for the per-puff lift/jitter below so
+    // the volume has soft, ragged edges rather than a flat ceiling and floor.
+    const baseY = (this.hash(`y:${cx}:${cz}`) - 0.5) * CLOUD_DECK_THICKNESS * 0.55;
     const jitterX = (this.hash(`jx:${cx}:${cz}`) - 0.5) * CLUSTER_SPACING * 0.8;
     const jitterZ = (this.hash(`jz:${cx}:${cz}`) - 0.5) * CLUSTER_SPACING * 0.8;
 
@@ -274,7 +324,11 @@ export class VolumetricClouds {
     let emissive = this.tint.scale(0.06 + dayFactor * 0.30);
     emissive = Color3.Lerp(emissive, sunsetGlow.scale(0.40), horizonFactor * 0.65);
     this.material.emissiveColor = emissive;
-    this.material.alpha = 0.72 + dayFactor * 0.16;
+    // Stay within the soft per-puff budget. Opacity accumulates across the
+    // many overlapping boxes in a cluster, so this is the density of a single
+    // wisp, not of the cloud as a whole — pushing it toward 1 is what turned
+    // the deck back into hard white blocks.
+    this.material.alpha = CLOUD_PUFF_ALPHA * (0.82 + dayFactor * 0.18);
   }
 
   update(deltaSeconds: number, cameraPosition: Vector3): void {
