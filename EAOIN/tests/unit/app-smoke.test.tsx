@@ -29,8 +29,8 @@ describe('App smoke', () => {
     vi.useFakeTimers();
 
     render(<App />);
-    // The boot sequence (warning → engine → studio → credits → presents →
-    // logo → title → ready) runs on timers totalling ~30s.
+    // The boot sequence (warning → engine → studio → credits → introducing →
+    // one persistent logo/ready scene) runs on timers totalling ~22s.
     await act(async () => { vi.advanceTimersByTime(45_000); });
 
     vi.useRealTimers();

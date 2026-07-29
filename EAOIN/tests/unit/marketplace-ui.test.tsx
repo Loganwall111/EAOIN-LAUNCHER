@@ -256,6 +256,8 @@ describe('CinematicBoot', () => {
     const { container } = render(<CinematicBoot onComplete={noop} />);
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(container.querySelector('.cb-ready')).not.toBeNull();
+    expect(container.querySelectorAll('.cb-logo-mark')).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-label="EAOIN"]')).toHaveLength(1);
   });
 
   it('never shows a loading bar during boot', () => {
@@ -271,12 +273,17 @@ describe('CinematicBoot', () => {
     const { container } = render(<CinematicBoot onComplete={noop} reducedMotion />);
     expect(container.querySelector('.cb-logo')).not.toBeNull();
     expect(container.querySelectorAll('.cb-logo-letter').length).toBe(5);
+    expect(container.querySelectorAll('.cb-logo-mark')).toHaveLength(1);
   });
 
   it('calls onComplete exactly once', async () => {
     const onComplete = vi.fn();
-    render(<CinematicBoot onComplete={onComplete} reducedMotion />);
-    await waitFor(() => expect(document.querySelector('.cb-ready')).not.toBeNull(), { timeout: 5000 });
+    const { container } = render(<CinematicBoot onComplete={onComplete} reducedMotion />);
+    const originalWordmark = container.querySelector('.cb-logo-mark');
+    await waitFor(() => expect(container.querySelector('.cb-ready')).not.toBeNull(), { timeout: 5000 });
+    // LOGO → READY adds controls around the existing wordmark; it must not
+    // destroy and remount a second copy of the game title.
+    expect(container.querySelector('.cb-logo-mark')).toBe(originalWordmark);
     fireEvent.keyDown(window, { key: 'Enter' });
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(onComplete).toHaveBeenCalledTimes(1);
