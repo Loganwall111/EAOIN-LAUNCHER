@@ -11,7 +11,7 @@ import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
 import { BlockMaterialMap, materialForSurface } from './BlockMaterials';
 import { faceVariantFor } from './BlockTextureSource';
-import { decodeSurfaceKey, greedyMesh, SurfaceKey } from './GreedyMesher';
+import { decodeSurfaceKey, encodeSurfaceKey, greedyMesh, SurfaceKey } from './GreedyMesher';
 
 export interface ChunkRenderStats {
   loadedChunks: number;
@@ -68,12 +68,14 @@ interface FaceDefinition {
 }
 
 const FACE_DEFINITIONS: FaceDefinition[] = [
-  { normal: new Vector3(0, 1, 0), vertices: [[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1]] },
-  { normal: new Vector3(0, -1, 0), vertices: [[0, 0, 1], [1, 0, 1], [1, 0, 0], [0, 0, 0]] },
-  { normal: new Vector3(1, 0, 0), vertices: [[1, 0, 0], [1, 0, 1], [1, 1, 1], [1, 1, 0]] },
-  { normal: new Vector3(-1, 0, 0), vertices: [[0, 0, 1], [0, 0, 0], [0, 1, 0], [0, 1, 1]] },
-  { normal: new Vector3(0, 0, 1), vertices: [[1, 0, 1], [0, 0, 1], [0, 1, 1], [1, 1, 1]] },
-  { normal: new Vector3(0, 0, -1), vertices: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]] },
+  // Vertex order is counter-clockwise when viewed from outside. The geometric
+  // cross product therefore agrees with the declared normal on all six faces.
+  { normal: new Vector3(0, 1, 0), vertices: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]] },
+  { normal: new Vector3(0, -1, 0), vertices: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] },
+  { normal: new Vector3(1, 0, 0), vertices: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
+  { normal: new Vector3(-1, 0, 0), vertices: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]] },
+  { normal: new Vector3(0, 0, 1), vertices: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]] },
+  { normal: new Vector3(0, 0, -1), vertices: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]] },
 ];
 
 const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
@@ -84,6 +86,23 @@ const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
   [0, 0, 1],
   [0, 0, -1],
 ];
+
+/**
+ * Single visibility rule used by both meshers.
+ *
+ * - Air (including an unloaded chunk boundary) exposes the current face.
+ * - A solid neighbour owns the shared boundary, so no internal face is emitted.
+ * - Non-solid media only expose a boundary when the media differ.
+ *
+ * The asymmetry at a solid/non-solid boundary is deliberate: the solid block
+ * emits its opaque wall and the fluid/plant side does not emit a coplanar face.
+ */
+export function shouldRenderVoxelFace(blockId: BlockID, neighborId: BlockID): boolean {
+  if (blockId === 0) return false;
+  if (neighborId === 0) return true;
+  if (getBlock(neighborId).solid) return false;
+  return blockId !== neighborId;
+}
 
 /** Monotonic clock, falling back to Date.now in non-browser test environments. */
 const now = (): number =>
@@ -433,11 +452,7 @@ export class ChunkRenderManager {
         if (x >= 0 && x < CHUNK_SIZE && z >= 0 && z < CHUNK_SIZE) return chunk.getBlock(x, y, z);
         return this.getLoadedBlockAt(originX + x, y, originZ + z);
       },
-      isFaceVisible: (blockId, neighborId) => {
-        if (neighborId === 0) return true;
-        if (neighborId === blockId) return false;
-        return getBlock(blockId).transparent || getBlock(neighborId).transparent;
-      },
+      isFaceVisible: shouldRenderVoxelFace,
       // Grass/log get distinct top and bottom materials; everything else
       // stays a single group so we do not multiply draw calls.
       faceVariantOf: (blockId, direction) => faceVariantFor(blockId, direction),
@@ -493,25 +508,37 @@ export class ChunkRenderManager {
           const worldZ = chunk.z * CHUNK_SIZE + z;
           for (let faceIndex = 0; faceIndex < FACE_DEFINITIONS.length; faceIndex += 1) {
             const [dx, dy, dz] = FACE_OFFSETS[faceIndex];
-            if (this.shouldDrawFace(blockId, worldX + dx, y + dy, worldZ + dz)) {
-              this.appendFace(this.dataFor(groups, blockId), worldX, y, worldZ, FACE_DEFINITIONS[faceIndex]);
-            }
+            if (!this.shouldDrawFace(blockId, worldX + dx, y + dy, worldZ + dz)) continue;
+
+            const direction = faceIndex === 0 ? 'top' : faceIndex === 1 ? 'bottom' : 'side';
+            const surfaceKey = encodeSurfaceKey(blockId, faceVariantFor(blockId, direction));
+            this.appendFace(
+              this.dataFor(groups, surfaceKey),
+              worldX,
+              y,
+              worldZ,
+              FACE_DEFINITIONS[faceIndex]
+            );
           }
         }
       }
     }
   }
 
-  private shouldDrawFace(blockId: BlockID, neighborWorldX: number, neighborY: number, neighborWorldZ: number): boolean {
+  private shouldDrawFace(
+    blockId: BlockID,
+    neighborWorldX: number,
+    neighborY: number,
+    neighborWorldZ: number
+  ): boolean {
+    // Outside vertical storage and outside the loaded horizontal set both act
+    // as open space. Emitting this boundary face keeps the current chunk a
+    // closed, depth-writing shell while its neighbour is still streaming.
     if (neighborY < 0 || neighborY >= CHUNK_HEIGHT) return true;
-
-    const neighborId = this.getLoadedBlockAt(neighborWorldX, neighborY, neighborWorldZ);
-    if (neighborId === 0) return true;
-    if (neighborId === blockId) return false;
-
-    const current = getBlock(blockId);
-    const neighbor = getBlock(neighborId);
-    return current.transparent || neighbor.transparent;
+    return shouldRenderVoxelFace(
+      blockId,
+      this.getLoadedBlockAt(neighborWorldX, neighborY, neighborWorldZ)
+    );
   }
 
   private getLoadedBlockAt(worldX: number, y: number, worldZ: number): BlockID {

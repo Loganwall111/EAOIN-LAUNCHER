@@ -11,6 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { greedyMesh, countTriangles, MeshBuffers } from '../../src/rendering/GreedyMesher';
+import { shouldRenderVoxelFace } from '../../src/rendering/ChunkRenderManager';
 import {
   AdaptivePerformance,
   BUDGET_PRESETS,
@@ -53,7 +54,7 @@ function meshVolume(volume: TestVolume) {
     sizeX: volume.sx, sizeY: volume.sy, sizeZ: volume.sz,
     getBlock: (x, y, z) => volume.get(x, y, z),
     getNeighbor: (x, y, z) => volume.get(x, y, z),
-    isFaceVisible: (blockId, neighborId) => neighborId === 0 || neighborId !== blockId,
+    isFaceVisible: shouldRenderVoxelFace,
   });
 }
 
@@ -68,7 +69,7 @@ function naiveFaceCount(volume: TestVolume): number {
         if (id === 0) continue;
         for (const [dx, dy, dz] of offsets) {
           const n = volume.get(x + dx, y + dy, z + dz);
-          if (n === 0 || n !== id) faces += 1;
+          if (shouldRenderVoxelFace(id, n)) faces += 1;
         }
       }
   return faces;
@@ -144,6 +145,11 @@ describe('GreedyMesher — correctness', () => {
     const groups = meshVolume(volume);
     expect(groups.has(1 as BlockID)).toBe(true);
     expect(groups.has(2 as BlockID)).toBe(true);
+    // Dirt touching grass is a solid/solid boundary: neither hidden internal
+    // face may survive. Air or an unloaded neighbour still exposes the shell.
+    expect(shouldRenderVoxelFace(1, 2)).toBe(false);
+    expect(shouldRenderVoxelFace(2, 1)).toBe(false);
+    expect(shouldRenderVoxelFace(1, 0)).toBe(true);
     // Area is still conserved per-material.
     expect(totalQuadArea(groups)).toBeCloseTo(naiveFaceCount(volume), 6);
   });

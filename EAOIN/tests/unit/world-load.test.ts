@@ -20,6 +20,58 @@ describe('main world load', () => {
     const h = terrain.getTerrainHeight(300, 300);
     expect(Number.isFinite(h)).toBe(true);
     expect(h).toBeGreaterThan(0);
+
+    // Corrupted config/noise must become a finite stone column, not NaN-driven
+    // empty storage. This models a malformed texture/world preset migration.
+    const damaged = new AdvancedTerrainGenerator({
+      seed: 'nan-boundary-safety',
+      continentScale: Number.NaN,
+      detailScale: Number.NaN,
+      mountainIntensity: Number.NaN,
+      bedrockThickness: Number.NaN,
+      worldDepth: Number.NaN,
+      seaLevel: Number.NaN,
+      ravines: false,
+      sinkholes: false,
+      undergroundOceans: false,
+      undergroundRivers: false,
+    });
+    const internals = damaged as unknown as {
+      noise: {
+        fbm2D: (...args: number[]) => number;
+        ridge2D: (...args: number[]) => number;
+        warpPoint2D: (...args: number[]) => { x: number; y: number };
+      };
+      detailNoise: { fbm2D: (...args: number[]) => number };
+      caveNoise: {
+        fbm2D: (...args: number[]) => number;
+        fbm3D: (...args: number[]) => number;
+      };
+    };
+    internals.noise.fbm2D = () => Number.NaN;
+    internals.noise.ridge2D = () => Number.NaN;
+    internals.noise.warpPoint2D = () => ({ x: Number.NaN, y: Number.NaN });
+    internals.detailNoise.fbm2D = () => Number.NaN;
+    internals.caveNoise.fbm2D = () => Number.NaN;
+    internals.caveNoise.fbm3D = () => Number.NaN;
+
+    expect(Number.isFinite(damaged.getTerrainHeight(300, 300))).toBe(true);
+    const safeChunk = damaged.generateChunk(8, 8);
+    for (let x = 0; x < 16; x += 1) {
+      for (let z = 0; z < 16; z += 1) {
+        for (let y = 0; y < damaged.config.bedrockThickness; y += 1) {
+          expect(safeChunk.getBlock(x, y, z)).not.toBe(0);
+        }
+        let opaqueStructure = false;
+        for (let y = damaged.config.bedrockThickness; y < 128; y += 1) {
+          if ([1, 2, 3, 12, 24, 26, 27, 28, 29].includes(safeChunk.getBlock(x, y, z))) {
+            opaqueStructure = true;
+            break;
+          }
+        }
+        expect(opaqueStructure, `safe structure at ${x},${z}`).toBe(true);
+      }
+    }
   });
 
   it('generates a chunk with solid, non-empty terrain', () => {

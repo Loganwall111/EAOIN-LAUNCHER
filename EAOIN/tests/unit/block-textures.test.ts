@@ -9,6 +9,7 @@
  *   - "when I'm in the trees the blocks are dark and I cannot see anything"
  *     (leaves must be cut-out, not solid, so light reaches through)
  */
+import { NullEngine, Scene } from '@babylonjs/core';
 import { describe, it, expect } from 'vitest';
 import {
   archetypeFor,
@@ -23,6 +24,10 @@ import {
   VARIANT_TOP,
 } from '../../src/rendering/BlockTextureSource';
 import { ALL_BLOCK_IDS, getBlock } from '../../shared/src/blocks/BlockRegistry';
+import {
+  createBlockMaterials,
+  OPAQUE_GROUND_BLOCKS,
+} from '../../src/rendering/BlockMaterials';
 
 /** Count distinct opaque colours in a texture. */
 function distinctColors(texels: Uint8ClampedArray): number {
@@ -85,9 +90,29 @@ describe('procedural block textures', () => {
   });
 
   it('keeps ordinary building blocks fully opaque', () => {
-    for (const id of [1, 2, 3, 24, 34]) {
+    for (const id of [1, 2, 3, 12, 24, 34]) {
       expect(transparentFraction(buildBlockTexels({ id, face: 'side' })), `${id}`).toBe(0);
     }
+
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const materials = createBlockMaterials(scene);
+    expect(Array.from(OPAQUE_GROUND_BLOCKS)).toEqual([1, 2, 3, 12]);
+
+    for (const id of OPAQUE_GROUND_BLOCKS) {
+      const material = materials.get(id);
+      expect(material, `${id} registered`).toBeDefined();
+      expect(material!.alpha, `${id} alpha`).toBe(1);
+      expect(material!.transparencyMode, `${id} transparency mode`).toBe(0);
+      expect(material!.useAlphaFromDiffuseTexture, `${id} diffuse alpha`).toBe(false);
+      expect(material!.needAlphaBlending(), `${id} alpha blend`).toBe(false);
+      expect(material!.needAlphaTesting(), `${id} alpha test`).toBe(false);
+      expect(material!.diffuseTexture?.hasAlpha, `${id} texture alpha`).toBe(false);
+      expect(material!.disableDepthWrite, `${id} depth writes`).toBe(false);
+    }
+
+    scene.dispose();
+    engine.dispose();
   });
 });
 

@@ -117,10 +117,13 @@ describe('cinematic intro: each name is introduced exactly once', () => {
     expect(BOOT).not.toContain("phase === 'TITLE'");
   });
 
-  it('renders the game wordmark from a single phase', () => {
-    // `.cb-game-title` used to appear in both the TITLE and READY phases.
-    const titleUses = BOOT.match(/cb-game-title/g) ?? [];
-    expect(titleUses.length).toBeLessThanOrEqual(1);
+  it('renders one persistent game wordmark across logo and ready states', () => {
+    // LOGO and READY share one JSX lockup. READY may add controls, but it must
+    // never mount another title node or a second literal copy of the game name.
+    expect(BOOT.match(/cb-logo-mark/g) ?? []).toHaveLength(1);
+    expect(BOOT.match(/EAOIN/g) ?? []).toHaveLength(1);
+    expect(BOOT).not.toContain('cb-game-title');
+    expect(BOOT).toContain("phase === 'LOGO' || phase === 'READY'");
   });
 
   it('does not re-print the studio name during the logo phase', () => {
@@ -139,6 +142,14 @@ describe('cinematic intro: each name is introduced exactly once', () => {
     );
     const found = order.filter((p) => seq.includes(`'${p}'`));
     expect(found).toEqual(order);
+
+    // The premium layout rewrite must not disconnect the classic synchronized
+    // boot chime, its autoplay retry, or its cleanup lifecycle.
+    expect(BOOT).toContain("import { BootChime } from '../audio/BootChime'");
+    expect(BOOT).toContain('new BootChime()');
+    expect(BOOT).toContain("if (phase !== 'LOGO') return");
+    expect(BOOT).toContain('chime.play({ volume: reducedMotion ? 0.3 : 0.55 })');
+    expect(BOOT).toContain('chime.dispose()');
   });
 
   it('never falls back to a phase that does not exist', () => {
