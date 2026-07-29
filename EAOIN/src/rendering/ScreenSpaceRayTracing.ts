@@ -28,6 +28,7 @@
 import {
   Camera,
   Constants,
+  DepthRenderer,
   Effect,
   PostProcess,
   Scene,
@@ -265,6 +266,14 @@ void main(void) {
  */
 export class ScreenSpaceRayTracer {
   private postProcess: PostProcess | null = null;
+  /**
+   * The depth map the ray marcher reads. Owned by us only when we created it;
+   * `scene.enableDepthRenderer` returns the *shared* per-camera renderer, so
+   * if another consumer (e.g. the pipeline's depth-of-field effect) enabled
+   * it first, we must not tear it out from under them on detach.
+   */
+  private depthRenderer: DepthRenderer | null = null;
+  private ownsDepthRenderer = false;
   private settings: RayTracingSettings = {
     quality: 'off',
     reflections: true,
@@ -313,8 +322,13 @@ export class ScreenSpaceRayTracer {
     const profile = RT_QUALITY[quality];
 
     // A depth renderer is mandatory: the ray march walks the depth buffer.
-    const depthRenderer = this.scene.enableDepthRenderer(this.camera, false);
-    const depthTexture = depthRenderer.getDepthMap();
+    // Remember whether it already existed — the registry is shared per camera
+    // — so detach() only disposes what attach() actually created.
+    const registry = (this.scene as unknown as { _depthRenderer?: Record<string, DepthRenderer | undefined> })._depthRenderer;
+    const preExisting = registry ? registry[this.camera.id] : undefined;
+    this.depthRenderer = this.scene.enableDepthRenderer(this.camera, false);
+    this.ownsDepthRenderer = !preExisting;
+    const depthTexture = this.depthRenderer.getDepthMap();
 
     this.postProcess = new PostProcess(
       'eaoin_screen_space_rt',
@@ -361,6 +375,21 @@ export class ScreenSpaceRayTracer {
   private detach(): void {
     this.postProcess?.dispose();
     this.postProcess = null;
+
+    // Free the depth map we own. Left behind, a stale DepthRenderer keeps
+    // re-rendering every active mesh each frame with replacement depth
+    // materials — a wasted full pass that also survives any "post effects
+    // disabled" recovery, because DepthRenderer does not honour
+    // scene.postProcessesEnabled. Disposing removes it from the scene's
+    // depth-renderer registry, so the extra pass genuinely stops. Chunk mesh
+    // materials and their depth state in the forward pass are untouched.
+    if (this.ownsDepthRenderer && this.depthRenderer) {
+      try {
+        this.depthRenderer.dispose();
+      } catch { /* best effort — detach must never throw */ }
+    }
+    this.depthRenderer = null;
+    this.ownsDepthRenderer = false;
   }
 
   dispose(): void {
