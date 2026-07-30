@@ -20,6 +20,7 @@ type BootPhase =
   | 'STUDIO'
   | 'CREDITS'
   | 'INTRODUCING'
+  | 'NARRATION'
   | 'LOGO'
   | 'READY'
   | 'DONE';
@@ -33,6 +34,7 @@ const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
   { phase: 'STUDIO', durationMs: 3000 },
   { phase: 'CREDITS', durationMs: 7200 },
   { phase: 'INTRODUCING', durationMs: 1800 },
+  { phase: 'NARRATION', durationMs: 8500 },
   { phase: 'LOGO', durationMs: 4400 },
   { phase: 'READY', durationMs: 0 },
 ];
@@ -46,27 +48,27 @@ interface CreditCard {
 
 const CREDIT_CARDS: CreditCard[] = [
   {
-    eyebrow: 'CREATIVE DIRECTION',
-    title: 'Worlds without walls',
-    detail: 'A sandbox shaped by every choice you make.',
+    eyebrow: 'CREATIVE VISION',
+    title: 'A world reborn in light',
+    detail: 'Next-generation voxel technology meets timeless sandbox freedom.',
     atMs: 0,
   },
   {
-    eyebrow: 'ENGINE & RENDERING',
-    title: 'Built from light and voxels',
-    detail: 'WebGPU · WebGL2 · Native Vulkan foundations',
+    eyebrow: 'TECHNICAL EXCELLENCE',
+    title: 'Obsidian Voxel Engine 2.0',
+    detail: 'Volumetric atmosphere · Ray-traced lighting · Dynamic seasons',
     atMs: 1800,
   },
   {
-    eyebrow: 'WORLD GENERATION',
-    title: 'Every horizon is different',
-    detail: 'Continents · Cliffs · Living cave systems',
+    eyebrow: 'LIVING WORLDS',
+    title: 'Every horizon tells a story',
+    detail: 'Procedural ecosystems · Wind simulation · Evolving biomes',
     atMs: 3600,
   },
   {
-    eyebrow: 'FOR THE PLAYERS',
-    title: 'The next block is yours',
-    detail: 'Create · Survive · Discover · Begin again',
+    eyebrow: 'FOR THE DREAMERS',
+    title: 'Your legend begins now',
+    detail: 'Create · Explore · Build · Become infinite',
     atMs: 5400,
   },
 ];
@@ -89,6 +91,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
   const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const [skipHintVisible, setSkipHintVisible] = useState(false);
   const [creditIndex, setCreditIndex] = useState(0);
+  const [narrationLine, setNarrationLine] = useState('');
   const completedRef = useRef(false);
 
   const finish = useCallback(() => {
@@ -198,6 +201,58 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     ));
     return () => { for (const timer of timers) window.clearTimeout(timer); };
   }, [phase, reducedMotion]);
+
+  // Deep wise male narrator voice (AAA cinematic style)
+  useEffect(() => {
+    if (phase !== 'NARRATION') return;
+
+    const narrationLines = [
+      "The world has been waiting for you.",
+      "Your time has come.",
+      "Welcome to EAOIN.",
+      "This world awaits."
+    ];
+
+    let currentIndex = 0;
+    setNarrationLine(narrationLines[0]);
+
+    const speak = (text: string) => {
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.88;
+        utterance.pitch = 0.92;
+        utterance.volume = 0.95;
+        
+        // Try to select a deep male voice
+        const voices = window.speechSynthesis.getVoices();
+        const deepVoice = voices.find(v => 
+          v.name.toLowerCase().includes('male') || 
+          v.name.toLowerCase().includes('david') ||
+          v.name.toLowerCase().includes('james') ||
+          v.name.toLowerCase().includes('deep')
+        );
+        if (deepVoice) utterance.voice = deepVoice;
+        
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    const interval = setInterval(() => {
+      currentIndex++;
+      if (currentIndex < narrationLines.length) {
+        setNarrationLine(narrationLines[currentIndex]);
+        speak(narrationLines[currentIndex]);
+      } else {
+        clearInterval(interval);
+        setTimeout(() => setPhase('LOGO'), 1200);
+      }
+    }, 1950);
+
+    // Speak first line immediately
+    speak(narrationLines[0]);
+
+    return () => clearInterval(interval);
+  }, [phase]);
 
   const motes = useMemo(
     () => Array.from({ length: 20 }, (_, index) => ({
@@ -348,6 +403,26 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
             <h1>A new world awakens</h1>
           </div>
           <span className="cb-intro-line" aria-hidden="true" />
+        </main>
+      )}
+
+      {phase === 'NARRATION' && (
+        <main className="cb-scene cb-narration-scene" style={{ textAlign: 'center' }}>
+          <div style={{ maxWidth: '820px', padding: '0 40px' }}>
+            <span className="cb-eyebrow" style={{ letterSpacing: '0.4em', color: 'var(--cb-gold)' }}>
+              THE ANCIENT VOICE
+            </span>
+            <h1 style={{
+              margin: '32px 0 0',
+              fontSize: 'clamp(42px, 6.2vw, 78px)',
+              fontWeight: 300,
+              lineHeight: 1.05,
+              color: '#f4f8fc',
+              textShadow: '0 4px 40px rgba(0,0,0,0.6)'
+            }}>
+              {narrationLine}
+            </h1>
+          </div>
         </main>
       )}
 
