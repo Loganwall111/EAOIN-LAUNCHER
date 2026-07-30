@@ -46,27 +46,27 @@ interface CreditCard {
 
 const CREDIT_CARDS: CreditCard[] = [
   {
-    eyebrow: 'CREATIVE DIRECTION',
-    title: 'Worlds without walls',
-    detail: 'A sandbox shaped by every choice you make.',
+    eyebrow: 'CREATIVE VISION',
+    title: 'A world reborn in light',
+    detail: 'Next-generation voxel technology meets timeless sandbox freedom.',
     atMs: 0,
   },
   {
-    eyebrow: 'ENGINE & RENDERING',
-    title: 'Built from light and voxels',
-    detail: 'WebGPU · WebGL2 · Native Vulkan foundations',
+    eyebrow: 'TECHNICAL EXCELLENCE',
+    title: 'Obsidian Voxel Engine 2.0',
+    detail: 'Volumetric atmosphere · Ray-traced lighting · Dynamic seasons',
     atMs: 1800,
   },
   {
-    eyebrow: 'WORLD GENERATION',
-    title: 'Every horizon is different',
-    detail: 'Continents · Cliffs · Living cave systems',
+    eyebrow: 'LIVING WORLDS',
+    title: 'Every horizon tells a story',
+    detail: 'Procedural ecosystems · Wind simulation · Evolving biomes',
     atMs: 3600,
   },
   {
-    eyebrow: 'FOR THE PLAYERS',
-    title: 'The next block is yours',
-    detail: 'Create · Survive · Discover · Begin again',
+    eyebrow: 'FOR THE DREAMERS',
+    title: 'Your legend begins now',
+    detail: 'Create · Explore · Build · Become infinite',
     atMs: 5400,
   },
 ];

@@ -63,6 +63,25 @@
   transform: scale(1.015);
 }
 
+/* Next-Gen Cinematic Reboot – New phase-specific backgrounds */
+.cb-phase-credits .cb-world-backdrop {
+  background-image: linear-gradient(rgba(5,8,13,0.65), rgba(2,4,7,0.85)), url('/assets/ui/menu-panorama.jpg');
+  background-position: center 38%;
+  filter: saturate(0.6) contrast(1.15) brightness(0.38);
+}
+
+.cb-phase-engine .cb-world-backdrop {
+  background-image: linear-gradient(rgba(8,14,22,0.7), rgba(3,6,10,0.9)), url('/assets/ui/menu-panorama.jpg');
+  background-position: center 55%;
+  filter: saturate(1.1) contrast(1.25) brightness(0.45);
+}
+
+.cb-phase-studio .cb-world-backdrop {
+  background-image: linear-gradient(rgba(12,18,26,0.55), rgba(4,8,13,0.82)), url('/assets/ui/menu-panorama.jpg');
+  background-position: center 42%;
+  filter: saturate(0.75) contrast(1.05) brightness(0.48);
+}
+
 .cb-atmosphere {
   z-index: -7;
   inset: 0;
