@@ -80,12 +80,10 @@ const ENGINE_OPTIONS = {
   stencil: true,
   antialias: true,
   adaptToDeviceRatio: true,
-  // Ask the browser for the discrete GPU on hybrid-graphics laptops. Without
-  // this, WebGPU frequently lands on the integrated chip and the game runs at
-  // a third of the framerate for no visible reason.
-  powerPreference: 'high-performance' as const,
-  // Voxel terrain writes a lot of depth; a packed depth/stencil buffer is
-  // cheaper than separate attachments.
+  // powerPreference is deliberately omitted: Chromium on Windows ignores it
+  // and logs a warning for every adapter request (crbug.com/369219127), which
+  // fires twice during StrictMode dev mounts. WebGPU already defaults to the
+  // discrete GPU when a <canvas> is visible, so the hint is unnecessary here.
   doNotHandleContextLost: false,
 };
 
