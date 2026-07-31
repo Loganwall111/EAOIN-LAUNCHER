@@ -209,7 +209,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     const narrationLines = [
       "The world has been waiting for you.",
       "Your time has come.",
-      "Welcome to EAOIN.",
+      "Welcome to this realm.",
       "This world awaits."
     ];
 
@@ -219,16 +219,19 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     const speak = (text: string) => {
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.88;
-        utterance.pitch = 0.92;
+        utterance.rate = 0.86;
+        utterance.pitch = 0.88;
         utterance.volume = 0.95;
         
-        // Try to select a deep male voice
+        // Prefer deep male voices like David, James, Mark, etc.
         const voices = window.speechSynthesis.getVoices();
         const deepVoice = voices.find(v => 
-          v.name.toLowerCase().includes('male') || 
           v.name.toLowerCase().includes('david') ||
           v.name.toLowerCase().includes('james') ||
+          v.name.toLowerCase().includes('mark') ||
+          v.name.toLowerCase().includes('george') ||
+          v.name.toLowerCase().includes('richard') ||
+          v.name.toLowerCase().includes('male') ||
           v.name.toLowerCase().includes('deep')
         );
         if (deepVoice) utterance.voice = deepVoice;
@@ -422,6 +425,23 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
             }}>
               {narrationLine}
             </h1>
+            <div style={{
+              margin: '28px auto 0',
+              width: '220px',
+              height: '4px',
+              background: 'rgba(255,255,255,0.1)',
+              borderRadius: '999px',
+              overflow: 'hidden',
+              boxShadow: '0 0 15px rgba(255,194,61,0.5)'
+            }}>
+              <div style={{
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(90deg, #ffc23d, #fff, #ffc23d)',
+                animation: 'voicePulse 1.5s ease-in-out infinite alternate',
+                boxShadow: '0 0 20px #ffc23d'
+              }} />
+            </div>
           </div>
         </main>
       )}

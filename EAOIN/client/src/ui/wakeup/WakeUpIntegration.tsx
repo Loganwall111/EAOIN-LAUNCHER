@@ -1,7 +1,6 @@
 // EAOIN — Wake Up Sequence Integration
 // Import this component after the cinematic boot finishes and the player spawns
 
-import React from 'react';
 import WakeUpSequence from './WakeUpSequence';
 import './WakeUpStyles.css';
 
