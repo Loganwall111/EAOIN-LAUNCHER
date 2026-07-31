@@ -74,7 +74,7 @@ export class BootChime {
       // Two detuned oscillators per note give it body rather than a pure sine.
       for (const [type, detune, gainScale] of [
         ['sine', 0, 1.0],
-        ['triangle', 6, 0.34],
+        ['sawtooth', 4, 0.22], // richer, less robotic tone
       ] as Array<[OscillatorType, number, number]>) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
