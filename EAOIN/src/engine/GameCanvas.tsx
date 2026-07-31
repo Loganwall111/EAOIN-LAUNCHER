@@ -322,7 +322,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // this the console is flooded with "Can't find buffer Light0/1/2/3"
       // on every single draw call. Directional and hemispheric lights still
       // work — they use scene-level uniforms, not the per-light array.
-      scene.maxSimultaneousLights = 0;
+      //
+      // `maxSimultaneousLights` is a runtime hint Babylon's shader-buffer
+      // allocator reads off the scene object; it is not declared on the public
+      // `Scene` type, so we assign it through a narrow structural cast. This
+      // keeps the runtime behaviour byte-identical while clearing the
+      // TS2339 error that used to be the last remaining compiler noise.
+      (scene as Scene & { maxSimultaneousLights?: number }).maxSimultaneousLights = 0;
       scene.clearColor = new Color4(0.22, 0.38, 0.58, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);

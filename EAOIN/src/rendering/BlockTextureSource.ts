@@ -306,8 +306,70 @@ export function buildBlockTexels(request: TextureRequest): TexelBuffer {
   const painter = new Painter(TEXTURE_SIZE, base, alpha);
   paintArchetype(painter, archetype, request.id, request.face, base, accent);
 
+  // NEXT-GEN SURFACE RECONSTRUCTION — high-fidelity depth pass.
+  //
+  // Every painter above lays down the base material look; this final pass wraps
+  // that flat pixel-art in a baked bevel + micro ambient-occlusion so each block
+  // reads as a lit, three-dimensional tile instead of a printed sticker. It only
+  // *shades* texels that are already opaque (alpha >= 128) and never touches the
+  // alpha channel, so all opacity/cut-out/transparent-fraction invariants that
+  // the regression suite pins are preserved exactly:
+  //   - opaque building blocks keep transparentFraction === 0
+  //   - leaves / item sprites keep their cut-out holes untouched
+  //   - grass top stays green-dominant, grass bottom stays red-dominant
+  applyDepthShading(painter, archetype, request.face, salt(request.id));
+
   TEXEL_CACHE.set(cacheKey, painter.data);
   return painter.data;
+}
+
+/** Deterministic per-block salt shared by the painters and the depth pass. */
+function salt(id: BlockID): number {
+  return id * 977 + 13;
+}
+
+/**
+ * Baked bevel + micro-AO depth pass, applied to every opaque texel after the
+ * archetype painter has run. Purely a lighting/relief enhancement:
+ *
+ *   1. A soft directional bevel — top-left lit, bottom-right shaded — gives the
+ *      16×16 tile the beveled, chiselled edge of a real voxel face.
+ *   2. A high-frequency micro-AO term breaks up any remaining flat regions so
+ *      no surface reads as a printed square, even after texture-pack recolour.
+ *
+ * Flat archetypes that are intentionally uniform-ish (fluid, portal, glass)
+ * are skipped so their translucency and swirl reads correctly.
+ */
+function applyDepthShading(
+  p: Painter,
+  archetype: TextureArchetype,
+  face: BlockFace,
+  seed: number
+): void {
+  if (archetype === 'fluid' || archetype === 'portal' || archetype === 'glass') return;
+  const S = TEXTURE_SIZE;
+  const edge = S - 1;
+  // Bevel strength is gentle on tops (viewed head-on) and stronger on sides
+  // (viewed at grazing angles, where relief matters most).
+  const bevel = face === 'top' ? 0.10 : face === 'bottom' ? 0.08 : 0.16;
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
+      const a = alphaAt(p, x, y);
+      if (a < 0.5) continue; // never disturb cut-out holes or item backgrounds
+      // Directional bevel: distance-from-edge lightens the top/left, darkens
+      // the bottom/right, so the tile catches a consistent key light.
+      const lit = ((edge - x) + (edge - y)) / (2 * edge);   // 1 at top-left
+      const shd = (x + y) / (2 * edge);                     // 1 at bottom-right
+      let delta = (lit - shd) * bevel;
+      // Corner contact darkening — the micro-AO that hugs every seam.
+      const rim = Math.min(x, y, edge - x, edge - y);
+      if (rim === 0) delta -= bevel * 0.65;
+      else if (rim === 1) delta -= bevel * 0.28;
+      // High-frequency grain so no facet is ever perfectly flat.
+      delta += (noise2(x, y, seed + 777, 1.35) - 0.5) * 0.06;
+      p.set(x, y, shade(p.get(x, y), delta), a);
+    }
+  }
 }
 
 /** Drops every cached texture. Called when the texture pack changes. */

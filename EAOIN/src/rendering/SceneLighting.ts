@@ -93,16 +93,19 @@ export function configureSceneLighting(scene: Scene, spawn: SpawnPoint): SceneLi
   sun.shadowMinZ = 1;
   sun.shadowMaxZ = 220;
 
-  // Real shadow map. Kept at 1024 with exponential filtering: 2048 + Poisson
-  // + close-ESM was three filtering modes fighting each other and cost several
-  // milliseconds per frame for shadows that were then darkened to mush.
-  const shadowGenerator = new ShadowGenerator(1024, sun);
-  shadowGenerator.useExponentialShadowMap = true;
+  // Real shadow map. NEXT-GEN pass: a 1536 map with blur-exponential filtering
+  // gives noticeably softer, higher-fidelity contact shadows than the old 1024
+  // hard ESM, while still being a single filtering mode (the 2048 + Poisson +
+  // close-ESM combo that fought itself and cost milliseconds stays retired).
+  const shadowGenerator = new ShadowGenerator(1536, sun);
+  shadowGenerator.useBlurExponentialShadowMap = true;
+  shadowGenerator.blurKernel = 24;
+  shadowGenerator.depthScale = 60;
   shadowGenerator.bias = 0.0012;
   shadowGenerator.normalBias = 0.03;
   // Much lighter shadows — the AO bake now carries the contact darkening.
   shadowGenerator.setDarkness(0.62);
-  shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+  shadowGenerator.filteringQuality = ShadowGenerator.QUALITY_HIGH;
 
   const spawnLight = new PointLight('spawn_point_light', new Vector3(spawn.x, spawn.y + 1.25, spawn.z), scene);
   spawnLight.diffuse = new Color3(0.35, 0.78, 1.0);

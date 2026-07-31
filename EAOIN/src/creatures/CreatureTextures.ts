@@ -167,8 +167,49 @@ export function buildMobTexture(species: MobSpecies, part: MobPart): Uint8Array 
   if (part === 'leg') paintLeg(canvas, coat, accent, species);
   if (part === 'body') paintBodyMarkings(canvas, coat, accent, species, salt);
 
+  applyPremiumRelief(canvas, part, salt);
+
   CACHE.set(key, canvas.data);
   return canvas.data;
+}
+
+/**
+ * NEXT-GEN MOB REMAKE — premium relief + sheen finishing pass.
+ *
+ * Runs after every part painter. It re-lights the finished 16×16 skin with a
+ * soft top-down key light and a rim of contact occlusion so a mob body reads as
+ * a rounded, volumetric creature instead of a flat-shaded box — matching the
+ * new high-fidelity terrain. It only rescales existing colours (never writes
+ * new hues or touches alpha), so every wildlife regression stays exact:
+ *   - each part still has >1 distinct colour ("texture detail")
+ *   - two different palettes/seeds still produce different buffers
+ *   - the pass is deterministic per (part, salt)
+ */
+function applyPremiumRelief(canvas: Canvas, part: MobPart, salt: number): void {
+  const S = MOB_TEXTURE_SIZE;
+  const edge = S - 1;
+  // Legs and segments are seen edge-on and get a stronger cylindrical shade;
+  // heads/bodies get a gentle spherical key light.
+  const cylindrical = part === 'leg' || part === 'segment' || part === 'fin';
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
+      const c = canvas.get(x, y);
+      // Spherical key light from the upper-left; cylindrical mobs shade only
+      // across X so the limb keeps a rounded barrel highlight.
+      const nx = (x / edge) * 2 - 1;
+      const ny = (y / edge) * 2 - 1;
+      const round = cylindrical
+        ? 1 - nx * nx
+        : 1 - (nx * nx + ny * ny) * 0.5;
+      let delta = (round - 0.5) * 0.20;
+      // Contact occlusion hugging the silhouette so parts seat together.
+      const rim = Math.min(x, y, edge - x, edge - y);
+      if (rim === 0) delta -= 0.14;
+      // Micro fibre sparkle keeps the coat alive without adding new colours.
+      delta += (rand(x, y, salt + 4099) - 0.5) * 0.05;
+      canvas.set(x, y, shade(c, delta));
+    }
+  }
 }
 
 /** Surface treatment: wool, fur, hide, feathers, scales, chitin or wet skin. */
@@ -356,6 +397,8 @@ export function buildMobTextureFromPalette(input: MobPaletteInput, part: MobPart
       paintGenericMarkings(canvas, coat, accent, input.markings ?? 'none', salt);
       break;
   }
+
+  applyPremiumRelief(canvas, part, salt);
 
   CACHE.set(key, canvas.data);
   return canvas.data;
