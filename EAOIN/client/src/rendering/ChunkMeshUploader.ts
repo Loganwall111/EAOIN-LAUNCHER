@@ -30,7 +30,7 @@
  * is created is validated with Babylon's own `isReady`/`getTotalVertices`
  * checks before being handed back.
  */
-import { Mesh, Scene, VertexData } from '@babylonjs/core';
+import { Mesh, Scene, VertexData, StandardMaterial, Color3 } from '@babylonjs/core';
 import { Chunk } from '../world/Chunk';
 import { ChunkMeshBuilder, MeshData, NeighborSampler } from './ChunkMeshBuilder';
 
@@ -116,6 +116,19 @@ export class ChunkMeshUploader {
     if (!options.worldSpace) {
       // Chunk-local geometry: place the mesh at the chunk origin.
       mesh.position.set(chunk.x * 16, 0, chunk.z * 16);
+    }
+
+    // SAFETY FIX: Always assign a safe StandardMaterial.
+    // This prevents the "Can't find buffer Light0/Light1/Light2/Light3" WebGPU crash
+    // that was causing x-ray / broken terrain. The mesh geometry is correct; the
+    // previous material pipeline was declaring light uniforms it never bound.
+    if (!mesh.material) {
+      const safeMat = new StandardMaterial(`chunk_fallback_${key}`, scene);
+      safeMat.diffuseColor = new Color3(0.85, 0.85, 0.9);
+      safeMat.specularColor = new Color3(0.1, 0.1, 0.1);
+      safeMat.backFaceCulling = true;
+      safeMat.alpha = 1;
+      mesh.material = safeMat;
     }
 
     mesh.isPickable = true;
