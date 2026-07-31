@@ -61,6 +61,29 @@
   animation: neuronPulse 3.5s ease-in-out infinite;
 }
 
+/* Realistic glowing lady visible during galaxy zoom */
+.galaxy-lady {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, #c8aaff 12%, #7a4dff 42%, transparent 78%);
+  border-radius: 50%;
+  box-shadow: 
+    0 0 140px #c8aaff,
+    0 0 260px #7a4dff,
+    0 0 380px rgba(122, 77, 255, 0.6);
+  animation: galaxyLadyZoom 6.2s cubic-bezier(0.23, 1, 0.32, 1) forwards, ladyPulse 3.5s ease-in-out infinite;
+  z-index: 2;
+}
+
+@keyframes galaxyLadyZoom {
+  from { transform: translate(-50%, -50%) scale(0.25); opacity: 0.3; }
+  to   { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+}
+
 .aaa-loading-bar {
   position: absolute;
   bottom: 11%;

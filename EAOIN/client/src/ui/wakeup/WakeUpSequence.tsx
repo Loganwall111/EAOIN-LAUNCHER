@@ -41,17 +41,21 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
     const speak = (text: string) => {
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.82;
-        utterance.pitch = 1.08;
-        utterance.volume = 0.92;
+        // More natural, less robotic settings
+        utterance.rate = 0.91;
+        utterance.pitch = 1.03;
+        utterance.volume = 0.95;
 
         const voices = window.speechSynthesis.getVoices();
+        // Prefer high-quality / neural female voices
         const femaleVoice = voices.find(v =>
-          v.name.toLowerCase().includes('female') ||
-          v.name.toLowerCase().includes('karen') ||
+          v.name.toLowerCase().includes('neural') ||
           v.name.toLowerCase().includes('samantha') ||
-          v.name.toLowerCase().includes('zira')
-        );
+          v.name.toLowerCase().includes('karen') ||
+          v.name.toLowerCase().includes('zira') ||
+          v.name.toLowerCase().includes('female')
+        ) || voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('en'));
+
         if (femaleVoice) utterance.voice = femaleVoice;
 
         window.speechSynthesis.speak(utterance);
@@ -102,7 +106,7 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
     }, 80);
 
     return () => clearInterval(wakeInterval);
-  }, [phase, onComplete]);
+  }, [phase]); // intentionally omit onComplete to prevent restart loop
 
   if (phase === 'DONE') return null;
 
@@ -115,6 +119,8 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
           <div className="galaxies" />
           <div className="whispers">Whispers from the mind…</div>
           <div className="neuron-field" />
+          {/* The Lady in Violet now visible & zooming during galaxy phase */}
+          <div className="galaxy-lady" />
           <div className="aaa-loading-bar">
             <div className="bar-fill" style={{ width: '100%' }} />
           </div>
