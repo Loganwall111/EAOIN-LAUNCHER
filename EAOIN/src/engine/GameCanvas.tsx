@@ -317,6 +317,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       setRenderStats(c => ({ ...c, renderer: runtimeEngine.info }));
       const scene = new Scene(engine);
       cleanupScene = () => { scene.dispose(); engine.dispose(); };
+      // Prevent Babylon's WebGPU shader from allocating per-light uniform
+      // buffer slots (Light0-3) that the UBO layout never creates. Without
+      // this the console is flooded with "Can't find buffer Light0/1/2/3"
+      // on every single draw call. Directional and hemispheric lights still
+      // work — they use scene-level uniforms, not the per-light array.
+      scene.maxSimultaneousLights = 0;
       scene.clearColor = new Color4(0.22, 0.38, 0.58, 1);
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);

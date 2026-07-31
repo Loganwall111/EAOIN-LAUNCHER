@@ -115,6 +115,7 @@ export class PortalWindow {
     // painted destination preview is skipped.
     if (!ctx) return;
     const s = VIEW_SIZE;
+    const c = s / 2;
     const p = this.profile;
 
     const css = (c: Color3, a = 1) =>
@@ -195,24 +196,19 @@ export class PortalWindow {
     }
 
     // --- Circular mask ----------------------------------------------------
-    // Everything outside the disc becomes transparent, and the rim fades so
-    // the opening blends into the portal frame instead of hard-clipping.
-    const mask = ctx.getImageData(0, 0, s, s);
-    const data = mask.data;
-    const c = s / 2;
-    for (let y = 0; y < s; y += 1) {
-      for (let x = 0; x < s; x += 1) {
-        const dx = x - c;
-        const dy = y - c;
-        const d = Math.sqrt(dx * dx + dy * dy) / c;
-        const idx = (y * s + x) * 4;
-        // Ripple the edge so the surface looks liquid.
-        const ripple = Math.sin(d * 22 - time * 3.2) * 0.02;
-        const edge = 1 - Math.min(1, Math.max(0, (d + ripple - 0.74) / 0.26));
-        data[idx + 3] = Math.round(255 * Math.min(1, edge * 1.15));
-      }
-    }
-    ctx.putImageData(mask, 0, 0);
+    // Use composite clipping instead of getImageData/putImageData readback.
+    // The old path triggered "Canvas2D: Multiple readback operations using
+    // getImageData are faster with the willReadFrequently attribute" because
+    // DynamicTexture canvases are not created with that hint, and Babylon
+    // does not expose a way to pass it. destination-in compositing achieves
+    // the same round soft-edged opening at zero readback cost.
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(c, c, c * 0.88, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.restore();
 
     this.texture.update(false);
   }
