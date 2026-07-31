@@ -651,6 +651,55 @@ export class CreatureManager {
       }
     }
 
+    // --- NEXT-GEN premium silhouette detail --------------------------------
+    // Higher-density static detail that refreshes the read of every mob without
+    // touching the animated `limbs` set or the `head` pick target. Each detail
+    // mesh is parented to an existing node (so it rides the same AI-driven
+    // transforms), added to `meshes` (so it is disposed and pickable) and never
+    // added to `limbs`, keeping walk/attack cycles byte-identical.
+    const addDetail = (mesh: AbstractMesh): void => { meshes.push(mesh); };
+
+    // Rounded nose/beak tip proud of the snout so the profile isn't a flat box.
+    const noseTip = MeshBuilder.CreateBox(`creature_${species.id}_nosetip`, {
+      width: plan.headSize * s * 0.34,
+      height: plan.headSize * s * 0.30,
+      depth: plan.headSize * s * 0.30,
+    }, this.scene);
+    noseTip.parent = head;
+    noseTip.position = new Vector3(0, -plan.headSize * s * 0.24, plan.headSize * s * 0.86);
+    noseTip.material = headMat;
+    addDetail(noseTip);
+
+    // Brow ridges above each eye — carries the expression at a distance.
+    for (const side of [-1, 1]) {
+      const brow = MeshBuilder.CreateBox(`creature_${species.id}_brow`, {
+        width: plan.headSize * s * 0.42,
+        height: plan.headSize * s * 0.14,
+        depth: plan.headSize * s * 0.30,
+      }, this.scene);
+      brow.parent = head;
+      brow.position = new Vector3(
+        side * plan.headSize * s * 0.22,
+        plan.headSize * s * 0.30,
+        plan.headSize * s * 0.42
+      );
+      brow.material = headMat;
+      addDetail(brow);
+    }
+
+    // A subtle back/spine ridge that rounds off the torso silhouette.
+    if (plan.segments === 0 && plan.bodyDepth > 0.3) {
+      const spine = MeshBuilder.CreateBox(`creature_${species.id}_spine`, {
+        width: plan.bodyWidth * s * 0.5,
+        height: plan.bodyHeight * s * 0.22,
+        depth: plan.bodyDepth * s * 0.86,
+      }, this.scene);
+      spine.parent = body;
+      spine.position = new Vector3(0, plan.bodyHeight * s * 0.5, 0);
+      spine.material = bodyMat;
+      addDetail(spine);
+    }
+
     for (const mesh of meshes) {
       mesh.isPickable = true;
       mesh.checkCollisions = false;

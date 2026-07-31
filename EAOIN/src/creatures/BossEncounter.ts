@@ -309,6 +309,41 @@ export class BossEncounter {
       this.parts.push(limb);
     }
 
+    // --- NEXT-GEN premium boss silhouette detail ---------------------------
+    // Static, higher-density geometry that makes the Earth Eater and every boss
+    // read as a menacing, sculpted creature instead of a cube stack. Parented
+    // to `head`/`core` so it rides the existing animation, tagged with the same
+    // `bossId`, and never referenced by phase/ability logic — behaviour and the
+    // damage/phase maths are untouched.
+    const jaw = MeshBuilder.CreateBox(`boss_${this.def.id}_jaw`, {
+      width: width * 0.42, height: height * 0.1, depth: depth * 0.4,
+    }, this.scene);
+    jaw.parent = head;
+    jaw.position = new Vector3(0, -height * 0.14, depth * 0.24);
+    jaw.material = accentMat;
+    this.parts.push(jaw);
+
+    for (const side of [-1, 1]) {
+      const brow = MeshBuilder.CreateBox(`boss_${this.def.id}_brow`, {
+        width: width * 0.16, height: height * 0.06, depth: depth * 0.14,
+      }, this.scene);
+      brow.parent = head;
+      brow.position = new Vector3(side * width * 0.14, height * 0.12, depth * 0.24);
+      brow.material = bodyMat;
+      this.parts.push(brow);
+    }
+
+    // Dorsal armour plates down the back — the Earth Eater's signature ridge.
+    for (const dz of [-0.22, 0, 0.22]) {
+      const plate = MeshBuilder.CreateBox(`boss_${this.def.id}_plate`, {
+        width: width * 0.24, height: height * 0.16, depth: depth * 0.14,
+      }, this.scene);
+      plate.parent = core;
+      plate.position = new Vector3(0, height * 0.34, depth * dz);
+      plate.material = accentMat;
+      this.parts.push(plate);
+    }
+
     for (const part of this.parts) {
       part.isPickable = true;
       part.checkCollisions = false;
