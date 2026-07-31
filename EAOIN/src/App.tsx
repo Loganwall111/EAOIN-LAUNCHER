@@ -23,6 +23,7 @@ import { loadSettings, saveSettings } from './settings/SettingsSave';
 import CinematicBoot from './ui/CinematicBoot';
 import SpawnAwakening from './ui/SpawnAwakening';
 import WorldLoadingScreen from './ui/WorldLoadingScreen';
+import WakeUpIntegration from '../client/src/ui/wakeup/WakeUpIntegration';
 import { worldTypeFromSeed, WorldTypeID } from './world/WorldTypes';
 import SignInScreen, { SignedInUser } from './ui/SignInScreen';
 import MarketplaceScreen from './ui/MarketplaceScreen';
@@ -54,6 +55,7 @@ export default function App() {
   const [objectivesVisible, setObjectivesVisible] = useState(true);
   /** Plays the waking-up cutscene once, on entering a world. */
   const [awakening, setAwakening] = useState(false);
+  const [nextGenWakeUp, setNextGenWakeUp] = useState(false);
   /** Shows the world-creation loading screen before the world appears. */
   const [worldLoading, setWorldLoading] = useState(false);
   const [worldLoadProgress, setWorldLoadProgress] = useState<WorldLoadProgress>({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
@@ -135,7 +137,8 @@ export default function App() {
     setPendingWorldType(worldTypeFromSeed(nextSeed));
     setWorldAttempt((attempt) => attempt + 1);
     setWorldLoading(true);
-    setAwakening(true);
+    setNextGenWakeUp(true);
+    setAwakening(false);
     setGameStarted(true);
   }, [worldSeed]);
 
@@ -144,6 +147,7 @@ export default function App() {
     setSettingsOpen(false);
     setWorldLoading(false);
     setAwakening(false);
+    setNextGenWakeUp(false);
     setGameStarted(false);
     setAppPhase('title');
   }, []);
@@ -502,7 +506,15 @@ export default function App() {
           onCancel={exitToMenu}
         />
       )}
-      {!worldLoading && awakening && (
+      {!worldLoading && nextGenWakeUp && (
+        <WakeUpIntegration
+          onWakeUpComplete={() => {
+            setNextGenWakeUp(false);
+            setAwakening(true);
+          }}
+        />
+      )}
+      {!worldLoading && !nextGenWakeUp && awakening && (
         <SpawnAwakening
           onComplete={() => setAwakening(false)}
           reducedMotion={settings.reducedMotion}
