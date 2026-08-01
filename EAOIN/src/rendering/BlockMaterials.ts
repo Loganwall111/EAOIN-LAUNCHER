@@ -221,9 +221,9 @@ function createBlockTexture(
     TEXTURE_SIZE,
     TEXTURE_SIZE,
     scene,
-    true,
-    false,
-    Texture.NEAREST_NEAREST_MIPLINEAR
+    false, // generateMipMaps — keep off to avoid WebGL generateMipmap errors
+    false, // invertY
+    Texture.NEAREST_SAMPLINGMODE // nearest-neighbor, no mipmaps (crisp voxel art)
   );
   texture.name = `tex_block_${id}_${variant}`;
   texture.wrapU = Texture.WRAP_ADDRESSMODE;

@@ -6,15 +6,15 @@
  */
 
 export const UI_ASSETS = {
-  menuPanorama: '/assets/ui/menu-panorama.jpg',
-  creatorBackdrop: '/assets/ui/creator-backdrop.jpg',
-  newsUpdate: '/assets/ui/news-update.jpg',
-  newsCivilizations: '/assets/ui/news-civilizations.jpg',
-  newsDimensions: '/assets/ui/news-dimensions.jpg',
-  newsSpace: '/assets/ui/news-space.jpg',
-  bgMultiplayer: '/assets/ui/bg-multiplayer.jpg',
-  bgMods: '/assets/ui/bg-mods.jpg',
-  bgOptions: '/assets/ui/bg-options.jpg',
+  menuPanorama: '/ui/menu-panorama.jpg',
+  creatorBackdrop: '/ui/creator-backdrop.jpg',
+  newsUpdate: '/ui/news-update.jpg',
+  newsCivilizations: '/ui/news-civilizations.jpg',
+  newsDimensions: '/ui/news-dimensions.jpg',
+  newsSpace: '/ui/news-space.jpg',
+  bgMultiplayer: '/ui/bg-multiplayer.jpg',
+  bgMods: '/ui/bg-mods.jpg',
+  bgOptions: '/ui/bg-options.jpg',
 } as const;
 
 export interface NewsEntry {

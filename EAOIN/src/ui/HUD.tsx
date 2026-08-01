@@ -663,8 +663,8 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
       )}
 
       {/* Biome ambience */}
-      <audio src="/assets/ambience/forest.mp3" loop />
-      <audio src="/assets/ambience/nether.mp3" loop />
+      <audio src="/ambience/forest.mp3" loop />
+      <audio src="/ambience/nether.mp3" loop />
 
       {/* ===================== MULTIPLAYER ===================== */}
       <div className="hud-buttons">

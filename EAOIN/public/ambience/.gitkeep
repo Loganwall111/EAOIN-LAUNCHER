@@ -1,0 +1,2 @@
+# Place atmospheric audio tracks here (e.g. forest.mp3, nether.mp3).
+# They are served from the root public path at /ambience/<file>.mp3.
