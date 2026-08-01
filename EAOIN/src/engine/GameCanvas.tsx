@@ -46,6 +46,7 @@ import {
   resolveCameraPenetrationY,
   shouldEnableAtmosphereParticles,
 } from './GameCanvasConfig';
+import { WeatherEffects } from '../effects/WeatherEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
@@ -501,6 +502,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const initialLoadedChunks = Math.min(renderer.getStats().loadedChunks, startupChunkTotal);
       reportLoadingProgress(55, `Meshed spawn chunks ${Math.min(initialLoadedChunks, initialChunkTotal)}/${initialChunkTotal}`, false, { loadedChunks: initialLoadedChunks, totalChunks: startupChunkTotal });
       const lighting = configureSceneLighting(scene, spawn);
+      // Storm lightning + meteors/comets that streak across the sky and crash.
+      const weatherEffects = new WeatherEffects(scene, lighting.sun, lighting.sky);
       const configureTerrainShadow = (mesh: Mesh): void => {
         const enabled = effectSettingsFor(effectTier).shadowsEnabled;
         if (enabled) lighting.shadowGenerator.addShadowCaster(mesh, false);
@@ -1370,6 +1373,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         tempWind.set(0.4 + 0.6 * Math.sin(windPhase), 0, 0.3 + 0.4 * Math.cos(windPhase * 1.3));
         physics.setWind(tempWind);
         physics.update(deltaSeconds);
+        // Storm lightning flashes + meteors/comets that streak and crash.
+        weatherEffects.update(deltaSeconds, atmosphere.getProfile().weather, camera.position, 0.55, 0.42);
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
         // Seamless dimension traversal: crossing a physical planet's
@@ -1498,6 +1503,26 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               }
             }
           }
+        }
+
+        // Swimming: when the player's body is immersed in water (fluid, not a
+        // solid), apply buoyancy so they float and can swim up with SPACE
+        // instead of sinking straight through the water column.
+        const inWaterBody = (() => {
+          const py = Math.floor(camera.position.y - PLAYER_EYE_HEIGHT / 2);
+          return terrain.getBlockAt(Math.floor(camera.position.x), py, Math.floor(camera.position.z)) === 5;
+        })();
+        if (inWaterBody && !flightEnabledRef.current) {
+          // Buoyancy keeps the player near the surface; SPACE swims upward.
+          if (pressedKeys.has('Space') || pressedKeys.has('ShiftLeft') || pressedKeys.has('ShiftRight')) {
+            velocityY = 4.2;
+            grounded = false;
+          } else {
+            // Float: gently rise toward the surface if sinking, else drift.
+            velocityY = Math.max(velocityY, -1.2);
+          }
+          wasFalling = false;
+          fallStartY = camera.position.y;
         }
 
         // Ground collision gate lock — a hard safety net on top of the
@@ -1806,6 +1831,9 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const creativeNow = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
         if (!creativeNow && !canConsumeBlock(inventoryRef.current, blockToPlace, 1)) { showActionMessage(`No ${getBlock(blockToPlace).name} left`); return; }
         terrain.setBlockAt(placeTarget.x, placeTarget.y, placeTarget.z, blockToPlace);
+        // Water is a fluid: a placed source flows downward and sideways into a
+        // bounded pool instead of sitting as a single frozen block.
+        if (blockToPlace === 5) flowWater(terrain, placeTarget.x, placeTarget.y, placeTarget.z);
         authorityRuntime.recordAction(); if (!creativeNow) publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
         onGameplayEvent('blocksPlaced'); audio.play('place', settingsRef.current); rebuildEditedBlock(placeTarget); saveWorldEdits();
         showActionMessage(`Placed ${getBlock(blockToPlace).name}`);
@@ -2047,7 +2075,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 
@@ -2282,4 +2310,55 @@ function hasNearbyBlock(terrain: { getBlockAt(x: number, y: number, z: number): 
 function wouldBlockPlayer(block: BlockCoordinate, playerPosition: Vector3): boolean {
   const center = new Vector3(block.x + 0.5, block.y + 0.5, block.z + 0.5);
   return Math.abs(center.x - playerPosition.x) < 0.72 && Math.abs(center.y - playerPosition.y) < 1.45 && Math.abs(center.z - playerPosition.z) < 0.72;
+}
+
+/** Max distance a water source spreads laterally (like Minecraft's 7). */
+const WATER_FLOW_RADIUS = 7;
+
+/**
+ * Make water behave like a fluid instead of a sitting block. When a water
+ * source is placed it flows downward first and then spreads laterally into
+ * neighbouring air blocks, up to a bounded radius, so a bucket pour produces a
+ * spreading pool rather than a single frozen cube. Bounded and synchronous so
+ * it never floods a whole world.
+ */
+function flowWater(
+  terrain: { getBlockAt(x: number, y: number, z: number): number; setBlockAt(x: number, y: number, z: number, b: number): boolean },
+  sx: number, sy: number, sz: number
+): void {
+  const WATER = 5;
+  if (terrain.getBlockAt(sx, sy, sz) !== 0) return;
+  terrain.setBlockAt(sx, sy, sz, WATER);
+
+  const stack: Array<{ x: number; y: number; z: number; dist: number }> = [{ x: sx, y: sy, z: sz, dist: 0 }];
+  const visited = new Set<string>([`${sx}:${sy}:${sz}`]);
+  let guard = 0;
+  while (stack.length > 0 && guard < 200) {
+    guard += 1;
+    const c = stack.shift()!;
+    if (c.dist >= WATER_FLOW_RADIUS) continue;
+
+    // Flow down first: water always falls to fill the space beneath.
+    const below = terrain.getBlockAt(c.x, c.y - 1, c.z);
+    if (below === 0) {
+      const key = `${c.x}:${c.y - 1}:${c.z}`;
+      if (!visited.has(key)) {
+        visited.add(key);
+        terrain.setBlockAt(c.x, c.y - 1, c.z, WATER);
+        stack.push({ x: c.x, y: c.y - 1, z: c.z, dist: 0 });
+      }
+      continue; // falling water does not spread sideways from the same level
+    }
+
+    // Otherwise spread sideways into air neighbours.
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = c.x + dx, nz = c.z + dz;
+      if (terrain.getBlockAt(nx, c.y, nz) !== 0) continue;
+      const key = `${nx}:${c.y}:${nz}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      terrain.setBlockAt(nx, c.y, nz, WATER);
+      stack.push({ x: nx, y: c.y, z: nz, dist: c.dist + 1 });
+    }
+  }
 }
