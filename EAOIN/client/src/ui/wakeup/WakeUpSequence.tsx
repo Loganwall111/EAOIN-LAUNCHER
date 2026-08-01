@@ -14,6 +14,9 @@ const DREAM_LINES = [
   "It’s the world we live in."
 ];
 
+/** Pre-rendered realistic narrator clip served from the site's public path. */
+const COSMIC_GIRL_AUDIO = `${import.meta.env.BASE_URL}audio/cosmic_girl.mp3`;
+
 export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
   const [phase, setPhase] = useState<'GALAXIES' | 'DREAM' | 'TITLE' | 'WAKE' | 'DONE'>('GALAXIES');
   const [dreamLineIndex, setDreamLineIndex] = useState(0);
@@ -31,50 +34,34 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
     return () => clearTimeout(galaxyTimer);
   }, [phase]);
 
-  // Dream lady narration (ethereal female voice)
+  // Cosmic Girl narration — a single realistic pre-rendered voice clip plays
+  // the whole monologue, and the on-screen line advances in time with it.
   useEffect(() => {
     if (phase !== 'DREAM') return;
+    setDreamLineIndex(0);
+
+    const audio = new Audio(COSMIC_GIRL_AUDIO);
+    audio.volume = 0.9;
+    const started = window.setTimeout(() => void audio.play().catch(() => {}), 400);
 
     let index = 0;
     setDreamLineIndex(0);
-
-    const speak = (text: string) => {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        // More natural, less robotic settings
-        utterance.rate = 0.91;
-        utterance.pitch = 1.03;
-        utterance.volume = 0.95;
-
-        const voices = window.speechSynthesis.getVoices();
-        // Prefer high-quality / neural female voices
-        const femaleVoice = voices.find(v =>
-          v.name.toLowerCase().includes('neural') ||
-          v.name.toLowerCase().includes('samantha') ||
-          v.name.toLowerCase().includes('karen') ||
-          v.name.toLowerCase().includes('zira') ||
-          v.name.toLowerCase().includes('female')
-        ) || voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('en'));
-
-        if (femaleVoice) utterance.voice = femaleVoice;
-
-        window.speechSynthesis.speak(utterance);
+    // Line cadence roughly matches the clip pacing (all seven lines, ~4s each
+    // over a ~26s clip). Falls back gracefully if the audio can't load.
+    const interval = window.setInterval(() => {
+      index += 1;
+      setDreamLineIndex(index);
+      if (index >= DREAM_LINES.length) {
+        window.clearInterval(interval);
+        window.setTimeout(() => setPhase('TITLE'), 1400);
       }
+    }, 3600);
+
+    return () => {
+      window.clearTimeout(started);
+      window.clearInterval(interval);
+      audio.pause();
     };
-
-    const interval = setInterval(() => {
-      if (index < DREAM_LINES.length) {
-        setDreamLineIndex(index);
-        speak(DREAM_LINES[index]);
-        index++;
-      } else {
-        clearInterval(interval);
-        setTimeout(() => setPhase('TITLE'), 1400);
-      }
-    }, 2150);
-
-    speak(DREAM_LINES[0]);
-    return () => clearInterval(interval);
   }, [phase]);
 
   // Game title reveal

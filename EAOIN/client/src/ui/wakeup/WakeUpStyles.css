@@ -111,7 +111,7 @@
   transform: translateX(-50%);
   font-size: 11px;
   letter-spacing: 3.5px;
-  color: #a070ff;
+  color: #4dd8ff;
   text-transform: uppercase;
 }
 
@@ -129,11 +129,11 @@
 .purple-glow-lady {
   width: 180px;
   height: 180px;
-  background: radial-gradient(circle, #c8aaff 10%, #7a4dff 40%, transparent 75%);
+  background: radial-gradient(circle, #7df9ff 8%, #2a7bff 42%, transparent 78%);
   border-radius: 50%;
-  box-shadow: 
-    0 0 120px #c8aaff,
-    0 0 220px #7a4dff;
+  box-shadow:
+    0 0 140px #4dd8ff,
+    0 0 260px #2a7bff;
   animation: ladyPulse 3.5s ease-in-out infinite;
   margin-bottom: 60px;
 }
@@ -144,8 +144,8 @@
   max-width: 780px;
   text-align: center;
   line-height: 1.35;
-  color: #e0d0ff;
-  text-shadow: 0 0 40px rgba(160, 110, 255, 0.6);
+  color: #dff6ff;
+  text-shadow: 0 0 40px rgba(90, 200, 255, 0.7);
   padding: 0 40px;
 }
 
@@ -153,7 +153,7 @@
   margin-top: 22px;
   font-size: 13px;
   letter-spacing: 4px;
-  color: #a070ff;
+  color: #4dd8ff;
   opacity: 0.75;
 }
 
@@ -187,7 +187,7 @@
   margin-top: 12px;
   font-size: 15px;
   letter-spacing: 8px;
-  color: #a070ff;
+  color: #4dd8ff;
   text-transform: uppercase;
 }
 
