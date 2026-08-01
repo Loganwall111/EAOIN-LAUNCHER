@@ -95,6 +95,8 @@ interface CreatureEntity {
   moving: boolean;
   /** Timestamp of this creature's last attack, for its cooldown. */
   lastAttackAt: number;
+  /** True for water-habitat creatures that swim rather than walk on land. */
+  aquatic: boolean;
 }
 
 const SPAWN_CELL_SIZE = 18;
@@ -399,8 +401,57 @@ export class CreatureManager {
       for (let cellZ = centerCellZ - radiusInCells; cellZ <= centerCellZ + radiusInCells; cellZ += 1) {
         if (this.creatures.size >= this.creatureCap) return;
         this.trySpawnCell(cellX, cellZ, playerPosition);
+        if (this.creatures.size >= this.creatureCap) return;
+        this.trySpawnAquaticCell(cellX, cellZ, playerPosition);
       }
     }
+  }
+
+  /**
+   * Spawn an aquatic creature in an ocean/water cell. The land spawner never
+   * placed water-habitat species (cod, shark, whale, squid, octopus, jellyfish,
+   * anglerfish, sea snakes, dolphins, turtles) because it requires a solid,
+   * non-water ground tile. This fills the sea with the full marine roster.
+   */
+  private trySpawnAquaticCell(cellX: number, cellZ: number, playerPosition: Vector3): void {
+    const id = `aq:${cellX}:${cellZ}`;
+    if (this.creatures.has(id)) return;
+    if (this.hashToUnit(`aq-spawn-gate:${id}`) < 0.5) return;
+
+    const worldX = cellX * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`aq-x:${id}`) * (SPAWN_CELL_SIZE - 4));
+    const worldZ = cellZ * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`aq-z:${id}`) * (SPAWN_CELL_SIZE - 4));
+    const biome = String(this.terrain.getBiomeAt(worldX, worldZ));
+    const isNight = this.timeOfDay < 6 || this.timeOfDay >= 19;
+    const candidates = speciesForBiome(biome, { habitat: 'water', isNight })
+      .filter((s) => s.habitat === 'water');
+    if (candidates.length === 0) return;
+
+    // Find an underwater column with real water volume to place the creature in.
+    const fx = Math.floor(worldX);
+    const fz = Math.floor(worldZ);
+    const surface = this.terrain.getSurfaceHeight(fx, fz);
+    if (surface < 1) return;
+    // Confirm this is a water column (surface block is water).
+    if (this.terrain.getBlockAt(fx, surface, fz) !== 5) return;
+    // Pick a depth a few blocks below the surface so the creature is submerged.
+    const depth = surface - (2 + Math.floor(this.hashToUnit(`aq-depth:${id}`) * 3));
+    if (depth < 1) return;
+    if (this.terrain.getBlockAt(fx, depth, fz) !== 5) return;
+
+    const species = pickSpecies(candidates, this.hashToUnit(`aq-species:${id}`));
+    if (!species) return;
+    if (Math.hypot(worldX - playerPosition.x, worldZ - playerPosition.z) < 9) return;
+
+    // Honour each species' depth range so abyssal creatures only appear deep.
+    if (species.depthRange) {
+      const depthBelowSurface = surface - depth;
+      const [minD, maxD] = species.depthRange;
+      if (depthBelowSurface < minD || depthBelowSurface > maxD) return;
+    }
+
+    const creature = this.createCreature(id, species, new Vector3(worldX, depth + 0.5, worldZ));
+    this.creatures.set(id, creature);
+    this.spawned += 1;
   }
 
   private trySpawnCell(cellX: number, cellZ: number, playerPosition: Vector3): void {
@@ -484,6 +535,7 @@ export class CreatureManager {
       walkPhase: 0,
       moving: false,
       lastAttackAt: 0,
+      aquatic: species.habitat === 'water',
     };
     this.chooseNewTarget(creature, performance.now());
     return creature;
@@ -760,6 +812,14 @@ export class CreatureManager {
       emissive.name = `creature_emissive_${name}`;
       material.emissiveTexture = emissive;
       material.emissiveColor = new Color3(0.5, 0.5, 0.7);
+    } else if (species.habitat === 'water') {
+      // Bioluminescence: water creatures glow faintly at depth, strongest for
+      // the deep/abyssal species (anglerfish, abyss_lantern, glowing_centipede,
+      // kraken, giant_octopus).
+      const accent = variant.palette.accent ?? variant.palette.body;
+      const c = Color3.FromHexString(accent);
+      const glow = 0.06 + (species.scale >= 2.4 ? 0.10 : 0.05);
+      material.emissiveColor = new Color3(c.r * glow, c.g * glow, c.b * glow);
     }
 
     this.materials.set(name, material);
@@ -830,6 +890,27 @@ export class CreatureManager {
 
     tempCreatureVecB.set(tempCreatureVecA.x, 0, tempCreatureVecA.z).normalize();
     const step = Math.min(horizontalDistance, creature.speed * deltaSeconds);
+
+    // Aquatic creatures swim through water instead of standing on terrain.
+    if (creature.aquatic) {
+      const nx = creature.root.position.x + tempCreatureVecB.x * step;
+      const nz = creature.root.position.z + tempCreatureVecB.z * step;
+      // Keep near the surface, bobbing gently, so they stay submerged but visible.
+      const fx = Math.floor(nx);
+      const fz = Math.floor(nz);
+      const waterSurface = this.terrain.getSurfaceHeight(fx, fz);
+      const swimY = waterSurface - 2.2 + Math.sin(now * 0.002 + creature.randomState) * 0.8;
+      creature.root.position.set(nx, Math.max(1, swimY), nz);
+      creature.root.rotation.y = approachAngle(
+        creature.root.rotation.y,
+        Math.atan2(tempCreatureVecB.x, tempCreatureVecB.z),
+        deltaSeconds * 6
+      );
+      creature.moving = true;
+      this.animateCreature(creature, now, deltaSeconds, step);
+      return;
+    }
+
     const safe = this.safeGroundPosition(
       creature.root.position.x + tempCreatureVecB.x * step,
       creature.root.position.z + tempCreatureVecB.z * step
@@ -914,6 +995,30 @@ export class CreatureManager {
   }
 
   private chooseNewTarget(creature: CreatureEntity, now: number): void {
+    // Aquatic creatures wander to nearby water columns rather than land.
+    if (creature.aquatic) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const angle = this.nextRandom(creature) * Math.PI * 2;
+        const distance = 5 + this.nextRandom(creature) * 12;
+        const wx = creature.root.position.x + Math.cos(angle) * distance;
+        const wz = creature.root.position.z + Math.sin(angle) * distance;
+        const fx = Math.floor(wx);
+        const fz = Math.floor(wz);
+        if (this.terrain.getBlockAt(fx, this.terrain.getSurfaceHeight(fx, fz), fz) === 5) {
+          creature.target.set(wx, creature.root.position.y, wz);
+          creature.nextDecisionAt = now + 2500 + this.nextRandom(creature) * 4500;
+          return;
+        }
+      }
+      creature.target.set(
+        creature.root.position.x + (this.nextRandom(creature) - 0.5) * 6,
+        creature.root.position.y,
+        creature.root.position.z + (this.nextRandom(creature) - 0.5) * 6
+      );
+      creature.nextDecisionAt = now + 1500;
+      return;
+    }
+
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const angle = this.nextRandom(creature) * Math.PI * 2;
       const distance = 4 + this.nextRandom(creature) * 10;

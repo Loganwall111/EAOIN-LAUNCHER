@@ -664,6 +664,30 @@ const EAOIN_NATIVES: SpeciesDefinition[] = [
     loot: [{ blockId: 102, amount: 2 }],
     description: 'Longer than your boat.',
   },
+  {
+    id: 'giant_octopus', name: 'Giant Octopus', emoji: '🐙', bodyPlan: 'marine', habitat: 'water', temperament: 'hostile',
+    palette: { body: '#7a2a4a', head: '#8a3a5a', limb: '#5a2038', accent: '#ffb0d0' },
+    scale: 3.2, health: 180, speed: 1.2, damage: 18,
+    biomes: ['deep_ocean', 'abyss', 'ocean'], weight: 1, depthRange: [24, 80],
+    loot: [{ blockId: 112, amount: 4 }],
+    description: 'A mountain of tentacles. It pulls ships down.',
+  },
+  {
+    id: 'glowing_centipede', name: 'Abyssal Centipede', emoji: '🐛', bodyPlan: 'serpent', habitat: 'water', temperament: 'hostile',
+    palette: { body: '#1a3a2e', head: '#264a3a', limb: '#122a20', accent: '#7aff6a' },
+    scale: 2.6, health: 140, speed: 1.5, damage: 15,
+    biomes: ['deep_ocean', 'abyss', 'trench'], weight: 1, depthRange: [40, 90],
+    loot: [{ blockId: 106, amount: 3 }],
+    description: 'Its segments glow with shifting bioluminescence as it coils on the trench floor.',
+  },
+  {
+    id: 'kraken', name: 'The Kraken', emoji: '🦑', bodyPlan: 'marine', habitat: 'water', temperament: 'hostile',
+    palette: { body: '#1a2a3a', head: '#2a3a4a', limb: '#101828', accent: '#6ae0ff' },
+    scale: 6.5, health: 420, speed: 0.9, damage: 28,
+    biomes: ['deep_ocean', 'abyss', 'trench', 'monument'], weight: 1, depthRange: [50, 100],
+    loot: [{ blockId: 12, amount: 6 }],
+    description: 'The leviathan of the deep. Its eye is a lantern of cold blue light.',
+  },
 ];
 
 export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS, ...EAOIN_NATIVES];

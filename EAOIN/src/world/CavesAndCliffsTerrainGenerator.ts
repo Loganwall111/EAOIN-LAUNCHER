@@ -211,6 +211,8 @@ const BLOCK = {
   MUD: 105,
   CLAY: 4,
   GRAVEL: 1,
+  CORAL: 102,
+  KELP: 304,
 } as const;
 
 const BEDROCK_MIX: BlockID[] = [12, 12, 12, 12, 3];
@@ -1404,6 +1406,13 @@ export class CavesAndCliffsTerrainGenerator {
       case 'deep_ocean':
       case 'frozen_ocean':
         return { top: BLOCK.GRAVEL, filler: BLOCK.GRAVEL, fillerDepth: 2 };
+      case 'warm_ocean':
+      case 'lukewarm_ocean':
+      case 'cold_ocean':
+      case 'coral_reef':
+      case 'coral_coast':
+      case 'coral_reef_biome':
+        return { top: BLOCK.SAND, filler: BLOCK.SAND, fillerDepth: 2 };
       case 'swamp':
       case 'mangrove_swamp':
       case 'mangrove_biome':
@@ -1516,6 +1525,38 @@ export class CavesAndCliffsTerrainGenerator {
           for (let y = surfaceY + 1; y <= seaLevel; y++) {
             if (chunk.getBlock(lx, y, lz) !== BLOCK.AIR) continue;
             chunk.setBlock(lx, y, lz, BLOCK.WATER);
+          }
+        }
+
+        // --- step 6: underwater flora (coral, kelp) ------------------------
+        // Coral reefs and warm oceans get coral growths on the floor; cold and
+        // lukewarm oceans get tall kelp. Deterministic, seeded per column.
+        const underwater = surfaceY < seaLevel;
+        if (underwater && surfaceY > 2) {
+          const biomeId = paint ? this.getBiomeAt(wx, wz).id : 'ocean';
+          const r = this.noise.hash(wx, 4, wz);
+          const isCoral = biomeId === 'coral_reef' || biomeId === 'coral_coast'
+            || biomeId === 'coral_reef_biome' || biomeId === 'warm_ocean'
+            || biomeId === 'ocean_world_biome';
+          const isKelp = biomeId === 'kelp_forest' || biomeId === 'cold_ocean'
+            || biomeId === 'lukewarm_ocean';
+          if (isCoral && r > 0.78) {
+            // A small coral clump growing up from the floor.
+            const clumpH = 1 + Math.floor(this.noise.hash(wx, 5, wz) * 2);
+            for (let dy = 1; dy <= clumpH; dy++) {
+              const yy = surfaceY + dy;
+              if (yy >= seaLevel) break;
+              if (chunk.getBlock(lx, yy, lz) !== BLOCK.WATER) break;
+              chunk.setBlock(lx, yy, lz, BLOCK.CORAL);
+            }
+          } else if (isKelp && r > 0.84) {
+            const kelpH = 3 + Math.floor(this.noise.hash(wx, 6, wz) * 4);
+            for (let dy = 1; dy <= kelpH; dy++) {
+              const yy = surfaceY + dy;
+              if (yy >= seaLevel) break;
+              if (chunk.getBlock(lx, yy, lz) !== BLOCK.WATER) break;
+              chunk.setBlock(lx, yy, lz, BLOCK.KELP);
+            }
           }
         }
       }
