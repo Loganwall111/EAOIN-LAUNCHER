@@ -90,6 +90,14 @@ export class AdvancedTerrainGenerator {
   getMountainHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getBiomeAt(x:number,z:number): any { return this.legacy ? this.legacy.getBiomeAt(x,z) : { id:'plains', name:'Plains' }; }
   setDeveloperTuning(tuning:{heightMultiplier:number; biomeMods:BiomeModificationFlags}):void { this.heightMultiplier = Number.isFinite(tuning.heightMultiplier) ? tuning.heightMultiplier : 1; void tuning.biomeMods; this.legacy?.setDeveloperTuning(tuning); }
-  getSpawnPoint(): SpawnPoint { const y=this.getSurfaceHeight(0,0)+1; return {x:0,y,z:0}; }
+  getSpawnPoint(): SpawnPoint {
+    // Spawn the player safely in broad daylight. The camera's Y is the *eye*,
+    // so spawning at surfaceHeight + 1 previously put the feet (eye − 1.62)
+    // 0.62 blocks *inside* the top grass layer, dropping the player through
+    // the chunk meshes into the underground. The +3.0 buffer guarantees the
+    // eye (and therefore the boots) starts clearly above the surface.
+    const surfaceHeight = this.getTerrainHeight(0, 0);
+    return { x: 0, y: surfaceHeight + 3.0, z: 0 };
+  }
 }
 export default AdvancedTerrainGenerator;

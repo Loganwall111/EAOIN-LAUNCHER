@@ -1544,6 +1544,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           }
         }
 
+        // Ground collision gate lock — a hard safety net on top of the
+        // per-block grounding snap above. It evaluates the eye against the
+        // real terrain surface and, when not flying, hard-clamps the boots to
+        // the top face of the grass/terrain layer and freezes downward
+        // velocity to 0. This is what stops the player from slipping through
+        // the ground into the subterranean void when a chunk-mesh hit-box
+        // mismatch leaves a gap in the collider set.
+        if (!flightEnabledRef.current) {
+          const currentFloor = terrain.getSurfaceHeight(camera.position.x, camera.position.z);
+          if (camera.position.y <= currentFloor + PLAYER_EYE_HEIGHT) {
+            camera.position.y = currentFloor + PLAYER_EYE_HEIGHT;
+            velocityY = 0;
+            wasFalling = false;
+            fallStartY = camera.position.y;
+            grounded = true;
+          }
+        }
+
         // Runs after every movement path (flight, falling, walking) so the
         // player's eye can never end up resting inside opaque, backface-
         // culled voxel geometry — see `resolveCameraPenetration` above for
