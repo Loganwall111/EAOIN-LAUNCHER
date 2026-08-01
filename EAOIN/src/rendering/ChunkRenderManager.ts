@@ -88,20 +88,26 @@ const FACE_OFFSETS: ReadonlyArray<readonly [number, number, number]> = [
 ];
 
 /**
- * Single visibility rule used by both meshers.
+ * Single visibility rule used by both meshers — the airtight Minecraft-style
+ * culling contract.
  *
  * - Air (including an unloaded chunk boundary) exposes the current face.
- * - A solid neighbour owns the shared boundary, so no internal face is emitted.
- * - Non-solid media only expose a boundary when the media differ.
+ * - A solid neighbour (grass/dirt/stone/sand, ids 1-4, or any `solid` block)
+ *   owns the shared boundary, so no internal face is ever emitted — inner
+ *   faces between adjacent solids are culled, which is what seals seams,
+ *   sides, bottoms and tops so no transparent gap can form between chunks.
+ * - Non-solid media only expose a boundary when the media differ (a water
+ *   surface against air, or a leaf against air), so fluids and plants still
+ *   render.
  *
  * The asymmetry at a solid/non-solid boundary is deliberate: the solid block
  * emits its opaque wall and the fluid/plant side does not emit a coplanar face.
  */
 export function shouldRenderVoxelFace(blockId: BlockID, neighborId: BlockID): boolean {
-  if (blockId === 0) return false;
-  if (neighborId === 0) return true;
-  if (getBlock(neighborId).solid) return false;
-  return blockId !== neighborId;
+  if (blockId === 0) return false;            // air never owns a face
+  if (neighborId === 0) return true;          // face toward open air / unloaded seam
+  if (getBlock(neighborId).solid) return false; // cull inner face against any solid
+  return blockId !== neighborId;              // differing non-solid media expose a face
 }
 
 /** Monotonic clock, falling back to Date.now in non-browser test environments. */

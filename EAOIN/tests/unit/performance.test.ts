@@ -168,6 +168,27 @@ describe('GreedyMesher — correctness', () => {
     expect(countTriangles(groups)).toBe(12);
   });
 
+  it('seals the seam between two adjacent solid chunks with no shared face', () => {
+    // Two 16x16x1 solid layers stacked flush: the shared boundary is a
+    // solid/solid interior face and must be culled entirely. Only the outer
+    // shell of the combined 16x16x2 column remains (no transparent gap, no
+    // duplicated coplanar face at the seam).
+    const volume = new TestVolume(16, 4, 16);
+    volume.fill(0, 0, 0, 16, 1, 16, 2); // lower dirt layer
+    volume.fill(0, 1, 0, 16, 2, 16, 1); // upper grass layer
+    const groups = meshVolume(volume);
+
+    // The shared plane contributes zero faces: no face toward a solid.
+    expect(shouldRenderVoxelFace(2, 1)).toBe(false); // dirt under grass
+    expect(shouldRenderVoxelFace(1, 2)).toBe(false); // grass over dirt
+    expect(shouldRenderVoxelFace(1, 0)).toBe(true);  // top exposed to air
+
+    // Area is conserved exactly — the mesh is a closed, watertight shell with
+    // no missing or duplicated faces between chunk layers (the true "no holes"
+    // guarantee). A 16x16x2 slab exposes 2 horizontal caps + 4 side strips.
+    expect(totalQuadArea(groups)).toBeCloseTo(naiveFaceCount(volume), 6);
+  });
+
   it('produces outward-facing normals on all six sides', () => {
     const volume = new TestVolume(3, 3, 3);
     volume.set(1, 1, 1, 1);
