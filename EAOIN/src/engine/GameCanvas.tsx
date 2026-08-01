@@ -1493,21 +1493,40 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         }
 
         // Ground collision gate lock — a hard safety net on top of the
-        // per-block grounding snap above. It evaluates the eye against the
-        // real terrain surface and, when not flying, hard-clamps the boots to
-        // the top face of the grass/terrain layer and freezes downward
-        // velocity to 0. This is what stops the player from slipping through
-        // the ground into the subterranean void when a chunk-mesh hit-box
-        // mismatch leaves a gap in the collider set.
+        // per-block grounding snap above. Instead of trusting the analytic
+        // `getSurfaceHeight()` estimate (which can disagree with the real
+        // voxels and make the player hover after stepping/jumping onto a
+        // lower block), it scans the actual solid voxel directly beneath the
+        // player's feet and lands the boots on that block's top face, then
+        // freezes downward velocity to 0.
         if (!flightEnabledRef.current) {
-          const currentFloor = terrain.getSurfaceHeight(camera.position.x, camera.position.z);
-          if (camera.position.y <= currentFloor + PLAYER_EYE_HEIGHT) {
-            camera.position.y = currentFloor + PLAYER_EYE_HEIGHT;
+          const feetY = camera.position.y - PLAYER_EYE_HEIGHT;
+          const px = Math.floor(camera.position.x);
+          const pz = Math.floor(camera.position.z);
+          let supportTop = -1;
+          for (let by = Math.floor(feetY + 0.5); by >= 0; by -= 1) {
+            const id = terrain.getBlockAt(px, by, pz);
+            if (id !== 0 && id !== 5) { supportTop = by + 1; break; }
+          }
+          // Only engage when there really is a solid block beneath the feet.
+          if (supportTop >= 0 && feetY <= supportTop) {
+            // Embedded or hovering right at the surface: snap boots onto it.
+            camera.position.y = supportTop + PLAYER_EYE_HEIGHT;
+            velocityY = 0;
+            wasFalling = false;
+            fallStartY = camera.position.y;
+            grounded = true;
+          } else if (supportTop >= 0 && feetY <= supportTop + 0.1) {
+            // A hair above the block top — settle onto it so the player never
+            // floats just off the surface.
+            camera.position.y = supportTop + PLAYER_EYE_HEIGHT;
             velocityY = 0;
             wasFalling = false;
             fallStartY = camera.position.y;
             grounded = true;
           }
+          // If the feet are clearly above the support (a real drop), leave
+          // gravity running so the player falls naturally onto the block.
         }
 
         // Runs after every movement path (flight, falling, walking) so the
