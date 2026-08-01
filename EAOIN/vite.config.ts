@@ -27,6 +27,9 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    headers: {
+      'Content-Security-Policy': "script-src 'self' 'unsafe-eval'; object-src 'self';"
+    },
     proxy: {
       '/api': {
         target: 'ws://localhost:8080',

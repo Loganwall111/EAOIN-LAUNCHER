@@ -37,15 +37,12 @@ export function rayTracingSettingsKey(settings: GameSettings): string {
 /**
  * Surface X-ray cutaway repair — pure resolution logic.
  *
- * Every block material sets `backFaceCulling = true` (correct: it halves
- * fragment work on ordinary terrain), but it means a camera whose eye point
- * ends up *inside* a solid voxel is looking at that block's culled interior,
- * which has no far face to stop the ray. The next thing the depth buffer
- * finds is whatever sits behind it — a cave, open air, or the next chunk —
- * and that is exactly the "look down and see straight through solid ground
- * into the caves below" report. The ground was never transparent; the camera
- * was standing inside it (a fast fall landing a frame late, a respawn placed
- * a hair too low, or a doorway that regenerated solid after an edit).
+ * Every block material sets `backFaceCulling = false`, so Babylon renders
+ * both the outside and inside of every voxel face. A camera whose eye point
+ * ends up *inside* a solid voxel (a fast fall landing a frame late, a
+ * respawn placed a hair too low, or a doorway that regenerated solid after
+ * an edit) is therefore always facing the block's own interior far face,
+ * which stops the ray — the ground can no longer read as see-through.
  *
  * This does not replace collision resolution — `moveWithCollisions` still
  * handles swept movement — it is a same-frame safety net for the camera

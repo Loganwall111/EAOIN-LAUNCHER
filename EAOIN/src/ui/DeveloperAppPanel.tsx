@@ -103,6 +103,8 @@ function DeveloperGate({ error }: { error: string | null }) {
         {error && <p className="dev-gate-error" role="alert">{error}</p>}
         <form onSubmit={submit}>
           <input
+            id="dev-unlock-code"
+            name="devUnlockCode"
             type="password"
             value={code}
             aria-label="Unlock code"

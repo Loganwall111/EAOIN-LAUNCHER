@@ -88,6 +88,8 @@ export default function SignInScreen({ onSignedIn, onSkip }: SignInScreenProps) 
             <label>
               <span>Player name (optional)</span>
               <input
+                id="signin-player-name"
+                name="playerName"
                 type="text"
                 value={customName}
                 onChange={(e) => setCustomName(e.target.value)}

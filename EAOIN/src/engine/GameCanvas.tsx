@@ -1029,19 +1029,13 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       /**
        * Surface X-ray cutaway repair.
        *
-       * Every material in `BlockMaterials` sets `backFaceCulling = true`, which
-       * is correct and necessary — without it every block would render both
-       * its outside and its inside faces, doubling overdraw for nothing a
-       * player standing outside the block would ever see. But it has one sharp
-       * edge: a camera whose eye point ends up *inside* a solid voxel (a fast
-       * fall landing a frame late, a teleport/respawn placed a hair too low,
-       * or standing dead-centre in a doorway that regenerated after a chunk
-       * edit) is now looking at that block's culled interior. The interior has
-       * no far face to stop the ray, so the next thing the depth buffer finds
-       * is whatever is behind it — a cave, open air, or the next chunk over.
-       * That reads exactly as "look down and see straight through solid
-       * ground into the caves below": the ground is not actually transparent,
-       * the camera is standing inside it.
+       * Every material in `BlockMaterials` sets `backFaceCulling = false`, so
+       * Babylon renders both the outside and inside of every voxel face. A
+       * camera whose eye point ends up *inside* a solid voxel (a fast fall
+       * landing a frame late, a teleport/respawn placed a hair too low, or
+       * standing dead-centre in a doorway that regenerated after a chunk edit)
+       * is always facing the block's own interior far face, which stops the
+       * ray — the ground no longer reads as see-through into the caves below.
        *
        * `moveWithCollisions` (used above for gravity and flight) resolves
        * *swept* collisions along a movement vector, but it does nothing for a
@@ -1049,7 +1043,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
        * to sweep against — which is exactly the stuck cases listed above. This
        * runs every frame, is O(1), and simply lifts the eye to just above the
        * nearest open block whenever the voxel actually containing the camera
-       * is solid, so the player is never inside opaque, culled geometry.
+       * is solid, so the player is never embedded inside opaque geometry.
        */
       const resolveCameraPenetration = (pos: Vector3): void => {
         const lifted = resolveCameraPenetrationY(
@@ -2230,8 +2224,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         )}
         {targetLabel && <div className="target-label">{targetLabel}</div>}
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
-        {commandOpen && <div className="command-console"><input value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
-        {chatOpen && <div className="chat-panel"><div className="chat-log">{chatMessages.slice(-10).map((m, i) => <div key={i} className={`chat-line ${m.system ? 'system' : ''}`}>{m.text}</div>)}</div><div className="chat-input-row"><input className="chat-input" value={chatText} autoFocus placeholder="Chat or /day /time 12 /summon sheep" onChange={e => setChatText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitChat(); if (e.key === 'Escape') setChatOpen(false); }} /><button className="chat-send" onClick={submitChat}>Send</button></div></div>}
+        {commandOpen && <div className="command-console"><input id="eaoin-command-input" name="eaoinCommand" value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
+        {chatOpen && <div className="chat-panel"><div className="chat-log">{chatMessages.slice(-10).map((m, i) => <div key={i} className={`chat-line ${m.system ? 'system' : ''}`}>{m.text}</div>)}</div><div className="chat-input-row"><input id="eaoin-chat-input" name="eaoinChat" className="chat-input" value={chatText} autoFocus placeholder="Chat or /day /time 12 /summon sheep" onChange={e => setChatText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitChat(); if (e.key === 'Escape') setChatOpen(false); }} /><button className="chat-send" onClick={submitChat}>Send</button></div></div>}
         <div className="world-action-rail">
           <button className={`world-action fly ${flightEnabled ? 'active' : ''}`} onClick={() => window.dispatchEvent(new Event('eaoin-toggle-flight'))}>FLY [F] {flightEnabled ? 'ON' : 'OFF'}</button>
           <button className="world-action" onClick={resetSavedWorld}>RESET</button>
