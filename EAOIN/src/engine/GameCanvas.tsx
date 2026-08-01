@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Texture, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { AmbienceEngine, ambienceForBiome } from '../audio/AmbienceEngine';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
@@ -519,6 +519,14 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       glow.intensity = settingsRef.current.postProcessEnabled || settingsRef.current.realisticLighting ? 0.22 : 0.08;
       const optionalPostEffectsEnabled = settingsRef.current.postProcessEnabled || settingsRef.current.qualityPreset === 'cinematic' || settingsRef.current.experimentalShaders;
       scene.environmentIntensity = 0.48;
+      // PBR reflections: point the scene environment at the premium sky
+      // panorama so blocks and water pick up real sky reflections. Safe to
+      // skip if the asset or backend rejects it.
+      try {
+        const envUrl = `${import.meta.env.BASE_URL}textures/sky/sky_panorama.png`;
+        scene.environmentTexture = new Texture(envUrl, scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
+        scene.environmentIntensity = settingsRef.current.realisticLighting ? 0.85 : 0.55;
+      } catch { /* reflections are optional */ }
       dimensionRuntime.applyCurrent();
       // 1.0 — wire in the new cinematic lighting, dynamic sky, portals, rifts, physics, command blocks.
       //

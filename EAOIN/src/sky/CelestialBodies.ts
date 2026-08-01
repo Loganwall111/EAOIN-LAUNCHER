@@ -44,6 +44,7 @@ import {
   MeshBuilder,
   Scene,
   StandardMaterial,
+  Texture,
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
@@ -154,6 +155,34 @@ export class CelestialBodies {
     mesh.doNotSyncBoundingInfo = true;
     mesh.metadata = { ...(mesh.metadata ?? {}), celestial: true };
     return mesh;
+  }
+
+  /**
+   * Premium surface texture for a named planet, loaded from the repo's
+   * `public/textures/planets` assets via `import.meta.env.BASE_URL` so it
+   * resolves under the GitHub Pages sub-folder. Falls back to null (and the
+   * caller keeps its procedural texture) when the asset is missing.
+   */
+  private planetPng(name: string): Texture | null {
+    const files: Record<string, string> = {
+      verdant: 'earth.png',
+      ember: 'mars.png',
+      ringed: 'saturn.png',
+      gasgiant: 'gasgiant.png',
+      iceworld: 'iceworld.png',
+      moon: 'moon.png',
+    };
+    const file = files[name];
+    if (!file) return null;
+    try {
+      const url = `${import.meta.env.BASE_URL}textures/planets/${file}`;
+      const tex = new Texture(url, this.scene, true, false, Texture.NEAREST_SAMPLINGMODE);
+      tex.wrapU = Texture.WRAP_ADDRESSMODE;
+      tex.wrapV = Texture.WRAP_ADDRESSMODE;
+      return tex;
+    } catch {
+      return null;
+    }
   }
 
   /** Procedural pixel texture used for planet surfaces and cloud bands. */
@@ -384,6 +413,36 @@ export class CelestialBodies {
         ring: false,
       },
       {
+        name: 'gasgiant',
+        size: 150,
+        base: '#8b6ab5',
+        accent: '#4a8a8a',
+        cloud: '#d8c8ff',
+        bands: 10,
+        orbitRadius: ORBIT_RADIUS * 0.78,
+        orbitSpeed: 0.0105,
+        orbitPhase: 2.2,
+        orbitTilt: -0.20,
+        spinSpeed: 0.18,
+        cloudSpinSpeed: 0.26,
+        ring: true,
+      },
+      {
+        name: 'iceworld',
+        size: 96,
+        base: '#a8d8f8',
+        accent: '#e8f4ff',
+        cloud: '#ffffff',
+        bands: 3,
+        orbitRadius: ORBIT_RADIUS * 1.05,
+        orbitSpeed: -0.008,
+        orbitPhase: 4.1,
+        orbitTilt: 0.55,
+        spinSpeed: 0.30,
+        cloudSpinSpeed: 0.20,
+        ring: false,
+      },
+      {
         name: 'ember',
         size: 104,
         base: '#b5563f',
@@ -409,7 +468,7 @@ export class CelestialBodies {
         `celestial_planet_${spec.name}_mat`,
         Color3.FromHexString(spec.base).scale(1.25)
       );
-      bodyMat.emissiveTexture = this.planetTexture(
+      bodyMat.emissiveTexture = this.planetPng(spec.name) ?? this.planetTexture(
         `celestial_planet_${spec.name}_tex`,
         spec.base,
         spec.accent,

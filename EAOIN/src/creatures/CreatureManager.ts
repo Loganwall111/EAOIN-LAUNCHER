@@ -743,7 +743,11 @@ export class CreatureManager {
     );
     texture.name = `creature_tex_${name}`;
     material.diffuseTexture = texture;
-    material.specularColor = new Color3(0.03, 0.03, 0.03);
+    // Give mob surfaces PBR-like depth instead of flat solid colour: a soft
+    // specular sheen with rough matte falloff so fur/hide reads textured.
+    material.specularColor = new Color3(0.22, 0.22, 0.22);
+    material.specularPower = 18;
+    material.roughness = 0.9;
     material.ambientColor = new Color3(1, 1, 1);
 
     // Head parts get an emissive eye mask so mobs' eyes glow at night.
