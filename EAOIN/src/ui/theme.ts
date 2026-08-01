@@ -3,18 +3,24 @@
  *
  * Kept separate from the components so the title screen, character creator and
  * HUD all draw from one palette / asset list.
+ *
+ * All asset URLs are built from `import.meta.env.BASE_URL`, which Vite sets to
+ * the live site's real path prefix (e.g. `/workspace-…/` on GitHub Pages).
+ * Hard-coded absolute or plain-relative paths bypass that prefix and 404 on a
+ * sub-folder deployment, so every reference below routes through BASE_URL.
  */
+const asset = (path: string): string => `${import.meta.env.BASE_URL}${path}`;
 
 export const UI_ASSETS = {
-  menuPanorama: './ui/menu-panorama.jpg',
-  creatorBackdrop: './ui/creator-backdrop.jpg',
-  newsUpdate: './ui/news-update.jpg',
-  newsCivilizations: './ui/news-civilizations.jpg',
-  newsDimensions: './ui/news-dimensions.jpg',
-  newsSpace: './ui/news-space.jpg',
-  bgMultiplayer: './ui/bg-multiplayer.jpg',
-  bgMods: './ui/bg-mods.jpg',
-  bgOptions: './ui/bg-options.jpg',
+  menuPanorama: asset('ui/menu-panorama.jpg'),
+  creatorBackdrop: asset('ui/creator-backdrop.jpg'),
+  newsUpdate: asset('ui/news-update.jpg'),
+  newsCivilizations: asset('ui/news-civilizations.jpg'),
+  newsDimensions: asset('ui/news-dimensions.jpg'),
+  newsSpace: asset('ui/news-space.jpg'),
+  bgMultiplayer: asset('ui/bg-multiplayer.jpg'),
+  bgMods: asset('ui/bg-mods.jpg'),
+  bgOptions: asset('ui/bg-options.jpg'),
 } as const;
 
 export interface NewsEntry {
