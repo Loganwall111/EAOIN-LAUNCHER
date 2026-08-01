@@ -1383,10 +1383,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         const planetApproaches = physicalPlanets.update(deltaSeconds, camera.position);
         for (const approach of planetApproaches) {
           const targetDimension = approach.planet.dimension;
+          const prevDim = chunkSource.getDimension();
           dimensionRuntime.setDimension(targetDimension);
           dimensionRuntime.triggerTransitionEffect(camera.position, true);
           atmosphere.setDimension(targetDimension);
           chunkSource.setDimension(targetDimension);
+          if (chunkSource.hasOwnTerrain(targetDimension) || chunkSource.hasOwnTerrain(prevDim)) {
+            renderer.clearAll();
+            invalidateRenderSnapshot(engine);
+            streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+            renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
+          }
           forceTerrainCoverage = true;
           showActionMessage(`Entering ${approach.planet.name}'s atmosphere — welcome to ${dimensionRuntime.getDefinition().name}`);
         }
@@ -1819,6 +1826,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             dimensionRuntime.setDimension('corrupted_lands');
             atmosphere.setDimension('corrupted_lands');
             chunkSource.setDimension('corrupted_lands');
+            renderer.clearAll();
+            invalidateRenderSnapshot(engine);
+            streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+            renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
+            forceTerrainCoverage = true;
             showActionMessage('Reality distortion detected. You have reached The Corrupted Lands.');
           }, 2000);
           return;
@@ -1938,10 +1950,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           // somewhere with no relation to the frame you built.
           const activePortal = portalSystem.findActivePortal(camera.position.x, camera.position.y, camera.position.z);
           if (activePortal) {
+            const prevDim = chunkSource.getDimension();
             dimensionRuntime.setDimension(activePortal.dimension);
             dimensionRuntime.triggerTransitionEffect(camera.position, true);
             atmosphere.setDimension(activePortal.dimension);
             chunkSource.setDimension(activePortal.dimension);
+            if (chunkSource.hasOwnTerrain(activePortal.dimension) || chunkSource.hasOwnTerrain(prevDim)) {
+              renderer.clearAll();
+              invalidateRenderSnapshot(engine);
+              streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+              renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
+            }
             forceTerrainCoverage = true;
             authorityRuntime.recordAction();
             audio.play('ui', settingsRef.current);
@@ -1949,7 +1968,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             publishRuntimeStatus();
             return;
           }
-          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
+          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const prevDim = chunkSource.getDimension(); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); chunkSource.setDimension(dim.id); if (chunkSource.hasOwnTerrain(dim.id) || chunkSource.hasOwnTerrain(prevDim)) { renderer.clearAll(); invalidateRenderSnapshot(engine); streamCenter = toChunkCoordinate(camera.position.x, camera.position.z); renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk); } authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
         }
         if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameModeRef.current === 'creative' || gameModeRef.current === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'c') { event.preventDefault(); showActionMessage(nextGenRuntime.startCredits()); publishRuntimeStatus(); return; }
@@ -2023,13 +2042,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
 
         // Dimensions with their own generator need the world rebuilt, not
         // merely re-lit. Entering or leaving one discards every loaded chunk.
-        const usesOwnGenerator = (id: string) => id === 'aether' || id === 'backrooms';
+        const usesOwnGenerator = (id: string) =>
+          chunkSource.hasOwnTerrain(id) || id === 'aether' || id === 'backrooms';
         if (usesOwnGenerator(dimensionId) || usesOwnGenerator(previousDimension)) {
           renderer.clearAll();
           invalidateRenderSnapshot(engine);
           // Drop the player onto solid ground in the destination.
           if (dimensionId === 'aether') camera.position.set(8, 96, 8);
           else if (dimensionId === 'backrooms') camera.position.set(3, 16, 3);
+          else camera.position.y = 64 + 1.62;
           streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
           renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,

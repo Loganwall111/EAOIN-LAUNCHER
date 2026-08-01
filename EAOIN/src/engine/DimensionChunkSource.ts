@@ -1,5 +1,6 @@
 import { Chunk } from '../world/Chunk';
 import { AetherTerrain, BackroomsTerrain } from '../dimensions/terrain/AetherBackroomsTerrain';
+import { DimensionTerrainGenerator, dimensionArchetype } from '../dimensions/terrain/DimensionTerrain';
 
 /** The part of either terrain generator needed by the chunk streamer. */
 export interface OverworldChunkGenerator {
@@ -18,6 +19,7 @@ export interface OverworldChunkGenerator {
 export class DimensionChunkSource {
   private readonly aether: AetherTerrain;
   private readonly backrooms: BackroomsTerrain;
+  private readonly dimensionTerrain = new Map<string, DimensionTerrainGenerator>();
   private activeDimension = 'overworld';
 
   constructor(
@@ -36,16 +38,42 @@ export class DimensionChunkSource {
     this.activeDimension = dimensionId;
   }
 
+  /** True when the dimension has genuinely distinct terrain from the overworld. */
+  hasOwnTerrain(dimensionId: string): boolean {
+    return dimensionArchetype(dimensionId) !== 'hills'
+      || dimensionId === 'aether'
+      || dimensionId === 'backrooms';
+  }
+
+  private terrainFor(dimensionId: string): DimensionTerrainGenerator | null {
+    if (dimensionId === 'overworld' || dimensionId === 'nature_dimension') return null;
+    const cached = this.dimensionTerrain.get(dimensionId);
+    if (cached) return cached;
+    const gen = new DimensionTerrainGenerator(dimensionId, this.seed);
+    this.dimensionTerrain.set(dimensionId, gen);
+    return gen;
+  }
+
   /** Bound callback so it can be passed directly to ChunkRenderManager. */
   readonly generateChunk = (cx: number, cz: number): Chunk => {
-    if (this.activeDimension !== 'aether' && this.activeDimension !== 'backrooms') {
-      return this.overworld.generateChunk(cx, cz);
+    const dim = this.activeDimension;
+
+    // The Aether and Backrooms use their bespoke generators.
+    if (dim === 'aether' || dim === 'backrooms') {
+      const chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
+      if (dim === 'aether') this.aether.generate(chunk);
+      else this.backrooms.generate(chunk);
+      return chunk;
     }
 
-    const chunk = new Chunk(cx, cz, `${this.seed}:${this.activeDimension}`, { generate: false });
+    // Every other dimension gets its own generated world.
+    const dimensionGen = this.terrainFor(dim);
+    if (dimensionGen) {
+      const chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
+      dimensionGen.generate(chunk);
+      return chunk;
+    }
 
-    if (this.activeDimension === 'aether') this.aether.generate(chunk);
-    else this.backrooms.generate(chunk);
-    return chunk;
+    return this.overworld.generateChunk(cx, cz);
   };
 }
