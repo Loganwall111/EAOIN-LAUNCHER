@@ -10,7 +10,7 @@
  * generator.  The game can expose that flag as an experimental world option.
  */
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
-import { BiomeModificationFlags, DEFAULT_BIOME_MODS } from '../dev/DeveloperTuning';
+import { BiomeModificationFlags } from '../dev/DeveloperTuning';
 import { CavesAndCliffsTerrainGenerator, WorldGenConfig as ExperimentalConfig } from './CavesAndCliffsTerrainGenerator';
 
 export interface SpawnPoint { x: number; y: number; z: number; }
@@ -25,7 +25,7 @@ export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
   flatGroundY: 64, experimentalCavesAndCliffs: false,
 };
 export const FLOATING_ISLANDS_CONFIG = { ...DEFAULT_OVERWORLD_CONFIG, floatingIslands: true };
-const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3;
+const GRASS = 1, DIRT = 2, STONE = 3;
 
 // Deterministic 2-D value noise with smooth interpolation (no vertical noise).
 function hash(seed: string, x: number, z: number): number {
@@ -45,7 +45,6 @@ export class AdvancedTerrainGenerator {
   public readonly config: WorldGenConfig;
   private readonly legacy?: CavesAndCliffsTerrainGenerator;
   private heightMultiplier = 1;
-  private mods: BiomeModificationFlags = { ...DEFAULT_BIOME_MODS };
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
     this.config = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
     if (this.config.experimentalCavesAndCliffs) this.legacy = new CavesAndCliffsTerrainGenerator(this.config);
@@ -90,7 +89,7 @@ export class AdvancedTerrainGenerator {
   getBaseHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getMountainHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getBiomeAt(x:number,z:number): any { return this.legacy ? this.legacy.getBiomeAt(x,z) : { id:'plains', name:'Plains' }; }
-  setDeveloperTuning(tuning:{heightMultiplier:number; biomeMods:BiomeModificationFlags}):void { this.heightMultiplier = Number.isFinite(tuning.heightMultiplier) ? tuning.heightMultiplier : 1; this.mods = { ...tuning.biomeMods }; this.legacy?.setDeveloperTuning(tuning); }
+  setDeveloperTuning(tuning:{heightMultiplier:number; biomeMods:BiomeModificationFlags}):void { this.heightMultiplier = Number.isFinite(tuning.heightMultiplier) ? tuning.heightMultiplier : 1; void tuning.biomeMods; this.legacy?.setDeveloperTuning(tuning); }
   getSpawnPoint(): SpawnPoint { const y=this.getSurfaceHeight(0,0)+1; return {x:0,y,z:0}; }
 }
 export default AdvancedTerrainGenerator;

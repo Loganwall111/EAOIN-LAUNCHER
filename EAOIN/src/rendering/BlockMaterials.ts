@@ -87,14 +87,6 @@ export function auditOpaqueTerrainSafety(materials: BlockMaterialMap): string[] 
   return violations;
 }
 
-function emissiveFor(id: BlockID): Color3 {
-  const block = getBlock(id);
-  if (!block.emissive || block.lightLevel <= 0) return new Color3(0, 0, 0);
-  const strength = Math.min(1, block.lightLevel / 15) * 0.55;
-  const base = Color3.FromHexString(block.color);
-  return new Color3(base.r * strength, base.g * strength, base.b * strength);
-}
-
 /** True when a block must use Babylon's opaque render queue. */
 function isOpaqueBlock(id: BlockID): boolean {
   return OPAQUE_GROUND_BLOCKS.has(id) || !getBlock(id).transparent;
