@@ -1,6 +1,6 @@
 import { GameSettings } from '../settings/GameSettings';
 
-export type AudioCue = 'mine' | 'place' | 'pickup' | 'craft' | 'hit' | 'creature_down' | 'error' | 'ui';
+export type AudioCue = 'mine' | 'place' | 'pickup' | 'craft' | 'hit' | 'creature_down' | 'error' | 'ui' | 'explosion';
 
 const CUE_FREQUENCIES: Record<AudioCue, [number, number]> = {
   mine: [150, 90],
@@ -11,6 +11,7 @@ const CUE_FREQUENCIES: Record<AudioCue, [number, number]> = {
   creature_down: [220, 330],
   error: [90, 70],
   ui: [360, 420],
+  explosion: [120, 40],
 };
 
 export class GameAudio {
@@ -76,9 +77,10 @@ export class GameAudio {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const now = context.currentTime;
-    const duration = cue === 'craft' || cue === 'creature_down' ? 0.18 : 0.11;
+    const duration = cue === 'craft' || cue === 'creature_down' ? 0.18
+      : cue === 'explosion' ? 0.55 : 0.11;
 
-    oscillator.type = cue === 'error' ? 'sawtooth' : 'square';
+    oscillator.type = cue === 'error' || cue === 'explosion' ? 'sawtooth' : 'square';
     oscillator.frequency.setValueAtTime(startFrequency, now);
     oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), now + duration);
 

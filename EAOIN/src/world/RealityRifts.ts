@@ -157,6 +157,28 @@ export class RealityRiftSystem {
     this.rifts = next;
   }
 
+  /**
+   * Rift suction — rifts exert a gravity pull on the player, dragging them
+   * toward the tear so they feel the void bleeding in. Returns a world-space
+   * acceleration that the caller adds to the player's motion. Stronger the
+   * closer you are and the bigger the rift.
+   */
+  pullOnPlayer(playerPos: Vector3, out: Vector3): Vector3 {
+    out.set(0, 0, 0);
+    for (const r of this.rifts) {
+      const to = r.mesh.position.subtract(playerPos);
+      const distSq = to.lengthSquared();
+      if (distSq < 1e-4) continue;
+      const dist = Math.sqrt(distSq);
+      // Only rifts within ~40 blocks exert meaningful pull.
+      if (dist > 40) continue;
+      const strength = (r.def.size * r.def.intensity * 3.2) / Math.max(6, dist * dist);
+      to.normalize();
+      out.addInPlace(to.scale(Math.min(0.9, strength)));
+    }
+    return out;
+  }
+
   dispose(): void {
     for (const r of this.rifts) r.dispose();
     this.rifts = [];

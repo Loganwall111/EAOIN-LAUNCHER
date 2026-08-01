@@ -47,6 +47,7 @@ import {
   shouldEnableAtmosphereParticles,
 } from './GameCanvasConfig';
 import { WeatherEffects } from '../effects/WeatherEffects';
+import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
@@ -1092,6 +1093,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const tempAvatarFeet = Vector3.Zero();
       const tempVerticalMove = Vector3.Zero();
       const tempWind = Vector3.Zero();
+      const tempRiftPull = Vector3.Zero();
       /**
        * 0 = open sky above the player, 1 = fully enclosed.
        *
@@ -1398,6 +1400,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           showActionMessage(`Entering ${approach.planet.name}'s atmosphere — welcome to ${dimensionRuntime.getDefinition().name}`);
         }
         realityRifts.update(deltaSeconds, camera.position, camera.position);
+        // Rift suction — a nearby reality tear drags the player toward it.
+        const riftPull = realityRifts.pullOnPlayer(camera.position, tempRiftPull);
+        if (riftPull.lengthSquared() > 1e-6) {
+          tempRiftPull.set(riftPull.x * deltaSeconds, riftPull.y * deltaSeconds, riftPull.z * deltaSeconds);
+          camera.position.addInPlace(tempRiftPull);
+        }
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
@@ -1848,6 +1856,31 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (blockToPlace === 5) flowWater(terrain, placeTarget.x, placeTarget.y, placeTarget.z);
         authorityRuntime.recordAction(); if (!creativeNow) publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
         onGameplayEvent('blocksPlaced'); audio.play('place', settingsRef.current); rebuildEditedBlock(placeTarget); saveWorldEdits();
+        // TNT: fuse briefly, then detonate with a real voxel blast + fire.
+        if (blockToPlace === 167) {
+          showActionMessage('TNT armed — stand back!');
+          const tx = placeTarget.x, ty = placeTarget.y, tz = placeTarget.z;
+          window.setTimeout(() => {
+            detonateTNT(scene, {
+              getBlock: (x, y, z) => terrain.getBlockAt(x, y, z),
+              setBlock: (x, y, z, block) => terrain.setBlockAt(x, y, z, block),
+              drop: (block, x, y, z) => itemDrops.spawnDrop(block as BlockID, new Vector3(x + 0.5, y + 0.5, z + 0.5), 1),
+              rebuild: (x, z) => renderer.rebuildForWorldBlock(x, z),
+              playCue: () => audio.play('explosion', settingsRef.current),
+              fireBlock: 303,
+            }, tx, ty, tz, TNT_BLAST_RADIUS);
+            // Screen shake if the blast is near the camera.
+            const d = Vector3.Distance(camera.position, new Vector3(tx, ty, tz));
+            if (d < 24) {
+              const amp = (1 - d / 24) * 0.12;
+              camera.position.x += (Math.random() - 0.5) * amp;
+              camera.position.z += (Math.random() - 0.5) * amp;
+            }
+            forceTerrainCoverage = true;
+            showActionMessage('BOOM!');
+          }, TNT_FUSE_SECONDS * 1000);
+          return;
+        }
         showActionMessage(`Placed ${getBlock(blockToPlace).name}`);
       };
       const handleBlockMouseDown = (event: MouseEvent): void => {
