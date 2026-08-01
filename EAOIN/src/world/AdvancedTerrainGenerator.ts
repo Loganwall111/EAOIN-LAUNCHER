@@ -84,6 +84,8 @@ export class AdvancedTerrainGenerator {
     return 1;
   }
   getTerrainHeight(x:number,z:number):number { return this.legacy ? this.legacy.getTerrainHeight(x,z) : this.height(x,z); }
+  /** World-space surface height query used by the engine's startup/render path. */
+  public getHeightAt(x: number, z: number): number { return this.getTerrainHeight(x, z); }
   getSurfaceHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getBaseHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getMountainHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
