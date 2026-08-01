@@ -585,3 +585,36 @@ function paintGenericMarkings(
 export function clearMobTextureCache(): void {
   CACHE.clear();
 }
+
+/**
+ * Build an RGBA emissive mask from a diffuse head texture: the eye texels
+ * (the darkest, high-saturation catchlight pixels) are lifted to a bright
+ * emissive colour and everything else is black. Applied as the head material's
+ * emissiveTexture, this makes mob eyes genuinely glow at night while the rest
+ * of the body stays unlit. Deterministic and pure.
+ */
+export function buildMobEmissiveMask(diffuse: Uint8Array, size = MOB_TEXTURE_SIZE): Uint8Array {
+  const mask = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const i = (y * size + x) * 4;
+      const r = diffuse[i];
+      const g = diffuse[i + 1];
+      const b = diffuse[i + 2];
+      // Eyes are drawn near-black (dark iris) with a bright catchlight. We
+      // key on the bright catchlight pixel plus the surrounding iris region.
+      const isBright = r > 200 && g > 200 && b > 200;
+      const isDarkIris = r < 60 && g < 60 && b < 60;
+      if (isBright || isDarkIris) {
+        const glow = isBright ? 1.0 : 0.55;
+        mask[i] = Math.round(255 * glow);
+        mask[i + 1] = Math.round(255 * glow);
+        mask[i + 2] = 255;
+        mask[i + 3] = 255;
+      } else {
+        mask[i] = 0; mask[i + 1] = 0; mask[i + 2] = 0; mask[i + 3] = 0;
+      }
+    }
+  }
+  return mask;
+}

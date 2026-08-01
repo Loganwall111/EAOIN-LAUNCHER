@@ -37,6 +37,7 @@ import {
 } from '@babylonjs/core';
 import { TerrainGenerator } from '../world/TerrainGenerator';
 import {
+  buildMobEmissiveMask,
   buildMobTextureFromPalette,
   CoatStyle,
   MOB_TEXTURE_SIZE,
@@ -744,6 +745,19 @@ export class CreatureManager {
     material.diffuseTexture = texture;
     material.specularColor = new Color3(0.03, 0.03, 0.03);
     material.ambientColor = new Color3(1, 1, 1);
+
+    // Head parts get an emissive eye mask so mobs' eyes glow at night.
+    if (part === 'head') {
+      const mask = buildMobEmissiveMask(texels);
+      const emissive = RawTexture.CreateRGBATexture(
+        mask, MOB_TEXTURE_SIZE, MOB_TEXTURE_SIZE, this.scene,
+        true, false, Texture.NEAREST_NEAREST_MIPLINEAR
+      );
+      emissive.name = `creature_emissive_${name}`;
+      material.emissiveTexture = emissive;
+      material.emissiveColor = new Color3(0.5, 0.5, 0.7);
+    }
+
     this.materials.set(name, material);
     return material;
   }

@@ -65,13 +65,13 @@ export function createDefaultSettings(): GameSettings {
     reducedMotion: false,
     rendererPreference: 'webgl',
     renderScale: 1,
-    qualityPreset: 'balanced',
+    qualityPreset: 'quality',
     fogEnabled: true,
-    postProcessEnabled: false,
+    postProcessEnabled: true,
     particlesEnabled: true,
     realisticLighting: true,
     experimentalVulkanMode: false,
-    experimentalShaders: false,
+    experimentalShaders: true,
     commandBlocksEnabled: true,
     multiplayerServersEnabled: true,
     texturePack: 'classic',
@@ -82,8 +82,9 @@ export function createDefaultSettings(): GameSettings {
     targetFps: 60,
     greedyMeshing: true,
     showPerformanceOverlay: false,
-    // Off by default: it is genuinely expensive, and the player should opt in.
-    rayTracingQuality: 'off',
+    // Enabled by default: contact shadows, reflections and AO restore the
+    // depth and lighting the watchdog-era defaults stripped out.
+    rayTracingQuality: 'high',
     rayTracedReflections: true,
     rayTracedShadows: true,
     rayTracedAO: true,
@@ -124,14 +125,13 @@ export function clampSettings(settings: GameSettings): GameSettings {
 }
 
 export function qualityRenderDistance(preset: QualityPreset): number {
-  // Chunk count grows with the square of radius: radius 16 is 1,089 chunks,
-  // not "twice" radius 8's 289. Those old defaults kept generation running
-  // for minutes and created thousands of draw calls. These are still generous
-  // browser distances (up to 272 blocks across on cinematic) but are playable.
-  if (preset === 'performance') return 3;
-  if (preset === 'quality') return 6;
-  if (preset === 'cinematic') return 8;
-  return 4;
+  // Chunk count grows with the square of radius. These generous browser
+  // distances let terrain render far into the distance so the world no longer
+  // looks like an empty void grid around the player.
+  if (preset === 'performance') return 6;
+  if (preset === 'quality') return 10;
+  if (preset === 'cinematic') return 14;
+  return 8;
 }
 
 export function qualityCreatureMultiplier(preset: QualityPreset): number {

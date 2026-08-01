@@ -441,14 +441,24 @@ function paintArchetype(
         }
         return;
       }
-      // Side: dirt body with a green crown and a ragged transition line.
+      // Side: Minecraft-style grass — a thin green turf strip along the top
+      // edge over a dirt body, with a slightly ragged boundary so it reads as
+      // grass hanging over a dirt bank rather than a solid green slab.
       const dirt = hexToRgb('#8a5a36');
       for (let y = 0; y < S; y += 1) {
         for (let x = 0; x < S; x += 1) {
-          const crown = 3 + Math.floor(noise2(x, 0, salt, 2.6) * 2.4);
-          const color = y <= crown ? base : dirt;
+          // Thin 1-2px turf: Minecraft grass sides are mostly dirt with just
+          // a sliver of green at the top. The old 3-5px crown made hillsides
+          // look like solid green walls.
+          const turf = 1 + Math.floor(noise2(x, 0, salt, 2.6) * 1.5);
+          const color = y <= turf ? base : dirt;
           const n = noise2(x, y, salt + 5, 2.8) - 0.5;
-          p.set(x, y, shade(color, n * 0.34));
+          // Add a couple of overhanging blades on the very top edge.
+          if (y === 0 && noise2(x, 0, salt + 9, 5) > 0.45) {
+            p.set(x, y, shade(base, 0.28));
+          } else {
+            p.set(x, y, shade(color, n * 0.34));
+          }
         }
       }
       return;

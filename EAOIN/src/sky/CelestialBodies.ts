@@ -96,6 +96,7 @@ export class CelestialBodies {
   godRays: Mesh[] = [];
   moon: Mesh | null = null;
   moonShadow: Mesh | null = null;
+  moonGlow: Mesh | null = null;
 
   ringedPlanet: TransformNode | null = null;
   blackHole: TransformNode | null = null;
@@ -245,6 +246,13 @@ export class CelestialBodies {
     shadow.material = this.emissiveMaterial('celestial_moon_shadow_mat', new Color3(0.01, 0.012, 0.03), 0.94);
     this.configure(shadow, this.root);
     this.moonShadow = shadow;
+
+    // A soft round glow behind the moon, mirroring the sun's corona so the
+    // moon reads with the same lunar glare at night.
+    const glow = MeshBuilder.CreateSphere('celestial_moon_glow', { diameter: MOON_SIZE * 3.2, segments: 12 }, this.scene);
+    glow.material = this.emissiveMaterial('celestial_moon_glow_mat', new Color3(0.55, 0.62, 0.8), 0.12);
+    this.configure(glow, this.root);
+    this.moonGlow = glow;
   }
 
   /* ------------------------------------------------------------------ */
@@ -578,6 +586,14 @@ export class CelestialBodies {
       this.moonShadow.rotation.copyFrom(this.moon.rotation);
       const sm = this.moonShadow.material as StandardMaterial;
       if (sm) sm.alpha = 0.94 * Math.min(1, nightFactor * 1.6);
+    }
+
+    // Track and fade the lunar glow in with the moon so it glares at night.
+    if (this.moonGlow) {
+      this.moonGlow.position.copyFrom(moonPos);
+      this.moonGlow.setEnabled(nightFactor > 0.01);
+      const gm = this.moonGlow.material as StandardMaterial;
+      if (gm) gm.alpha = 0.12 * Math.min(1, nightFactor * 1.6);
     }
   }
 

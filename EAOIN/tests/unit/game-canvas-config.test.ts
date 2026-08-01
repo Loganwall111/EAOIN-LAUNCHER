@@ -44,7 +44,9 @@ describe('GameCanvas runtime config helpers', () => {
   it('tracks every live ray-tracing toggle, not just quality', () => {
     const base = createDefaultSettings();
     const key = rayTracingSettingsKey(base);
-    expect(rayTracingSettingsKey({ ...base, rayTracingQuality: 'high' })).not.toBe(key);
+    // Default quality is now 'high'; changing it to a different level must
+    // still change the runtime key.
+    expect(rayTracingSettingsKey({ ...base, rayTracingQuality: 'ultra' })).not.toBe(key);
     expect(rayTracingSettingsKey({ ...base, rayTracedReflections: !base.rayTracedReflections })).not.toBe(key);
     expect(rayTracingSettingsKey({ ...base, rayTracedShadows: !base.rayTracedShadows })).not.toBe(key);
     expect(rayTracingSettingsKey({ ...base, rayTracedAO: !base.rayTracedAO })).not.toBe(key);
