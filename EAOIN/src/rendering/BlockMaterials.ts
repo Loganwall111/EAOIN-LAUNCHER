@@ -134,6 +134,7 @@ function createMaterial(
 ): StandardMaterial {
   const block = getBlock(id);
   const safeName = block.name.toLowerCase().replace(/\s+/g, '_');
+  const fallbackColor = Color3.FromHexString(block.color);
   const material = new StandardMaterial(`block_${safeName}_${variant}`, scene);
   const opaque = isOpaqueBlock(id);
   const texture = createBlockTexture(scene, id, variant, pack, opaque);
@@ -142,7 +143,7 @@ function createMaterial(
   material.ambientTexture = texture;
   material.diffuseColor = new Color3(1, 1, 1);
   material.ambientColor = new Color3(1, 1, 1);
-  material.emissiveColor = emissiveFor(id);
+  material.emissiveColor = fallbackColor;
   material.specularColor = new Color3(0.04, 0.04, 0.04);
   material.specularPower = 96;
   material.backFaceCulling = true;
@@ -154,6 +155,9 @@ function createMaterial(
   } else {
     configureCutoutMaterial(material, texture);
   }
+
+  material.disableLighting = true;
+  material.maxSimultaneousLights = 0;
 
   return material;
 }
