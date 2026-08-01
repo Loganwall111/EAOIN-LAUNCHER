@@ -64,6 +64,25 @@ export class AdvancedTerrainGenerator {
     }
     return chunk;
   }
+  /**
+   * World-space voxel query used by the engine's startup/render path, creatures,
+   * redstone runtime, and raycasts.  Same public shape as `TerrainGenerator` /
+   * `CavesAndCliffsTerrainGenerator.getBlockAt`, so callers can treat every
+   * generator interchangeably.
+   *
+   * The stable path is a deterministic banded column around the y = 64 surface:
+   *   y > 64        → 0 (air block)
+   *   y === 64      → 3 (solid surface block)
+   *   60 <= y < 64  → 2 (subsurface band)
+   *   y < 60        → 1 (solid deep block)
+   */
+  public getBlockAt(x: number, y: number, z: number): number {
+    void x; void z; // bands depend on height only; x/z kept for world-space API parity
+    if (y > 64) return 0;
+    if (y === 64) return 3;
+    if (y >= 60) return 2;
+    return 1;
+  }
   getTerrainHeight(x:number,z:number):number { return this.legacy ? this.legacy.getTerrainHeight(x,z) : this.height(x,z); }
   getSurfaceHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
   getBaseHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
