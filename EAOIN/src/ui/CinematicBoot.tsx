@@ -202,7 +202,8 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     return () => { for (const timer of timers) window.clearTimeout(timer); };
   }, [phase, reducedMotion]);
 
-  // Deep wise male narrator voice (AAA cinematic style)
+  // Deep wise male narrator voice (AAA cinematic style) — played from
+  // pre-rendered realistic audio instead of the browser's robotic speechSynthesis.
   useEffect(() => {
     if (phase !== 'NARRATION') return;
 
@@ -212,49 +213,43 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
       "Welcome to this realm.",
       "This world awaits."
     ];
+    const base = import.meta.env.BASE_URL;
 
     let currentIndex = 0;
+    let audioEl: HTMLAudioElement | null = null;
     setNarrationLine(narrationLines[0]);
 
-    const speak = (text: string) => {
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.86;
-        utterance.pitch = 0.88;
-        utterance.volume = 0.95;
-        
-        // Prefer deep male voices like David, James, Mark, etc.
-        const voices = window.speechSynthesis.getVoices();
-        const deepVoice = voices.find(v => 
-          v.name.toLowerCase().includes('david') ||
-          v.name.toLowerCase().includes('james') ||
-          v.name.toLowerCase().includes('mark') ||
-          v.name.toLowerCase().includes('george') ||
-          v.name.toLowerCase().includes('richard') ||
-          v.name.toLowerCase().includes('male') ||
-          v.name.toLowerCase().includes('deep')
-        );
-        if (deepVoice) utterance.voice = deepVoice;
-        
-        window.speechSynthesis.speak(utterance);
-      }
+    const playLine = (index: number) => {
+      audioEl?.pause();
+      audioEl = new Audio(`${base}audio/narration_${index + 1}.mp3`);
+      audioEl.volume = 0.95;
+      void audioEl.play().catch(() => {
+        // Fall back to the browser voice only if the audio can't load.
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(narrationLines[index]);
+          utterance.rate = 0.86; utterance.pitch = 0.88; utterance.volume = 0.95;
+          window.speechSynthesis.speak(utterance);
+        }
+      });
     };
+
+    playLine(0);
 
     const interval = setInterval(() => {
       currentIndex++;
       if (currentIndex < narrationLines.length) {
         setNarrationLine(narrationLines[currentIndex]);
-        speak(narrationLines[currentIndex]);
+        playLine(currentIndex);
       } else {
         clearInterval(interval);
         setTimeout(() => setPhase('LOGO'), 1200);
       }
-    }, 1950);
+    }, 2000);
 
-    // Speak first line immediately
-    speak(narrationLines[0]);
-
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      audioEl?.pause();
+    };
   }, [phase]);
 
   const motes = useMemo(

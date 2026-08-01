@@ -7,6 +7,7 @@
  * here is driven by GameCanvas' real loading reports instead of a fake timer.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { getWorldType, WorldTypeID } from '../world/WorldTypes';
 
 interface LoadingProgressSnapshot {
@@ -116,6 +117,18 @@ export default function WorldLoadingScreen({
     <div className="world-loading" role="status" aria-live="polite">
       {/* The world type's own palette, so the screen previews the destination. */}
       <div className="wl-scene" style={{ background: type.preview }} />
+      {/* Warp-tunnel galaxy backdrop: colourful dots streaming toward the
+          player like flying through a warp tunnel while the world boots. */}
+      <div className="wl-warp" aria-hidden="true">
+        {Array.from({ length: 60 }, (_, i) => (
+          <span key={i} className="wl-warp-dot" style={{
+            left: `${(i * 37) % 100}%`,
+            top: `${(i * 53 + 11) % 100}%`,
+            '--d': `${(i % 12) * 0.5}s`,
+            '--hue': `${(i * 47) % 360}`,
+          } as CSSProperties} />
+        ))}
+      </div>
       <div className="wl-dirt" aria-hidden="true" />
       <div className="wl-vignette" aria-hidden="true" />
 

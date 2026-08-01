@@ -124,7 +124,7 @@
 
 .wl-bar-fill {
   height: 100%;
-  background: linear-gradient(180deg, #8fe86a 0%, #5bc23a 48%, #3f8f26 100%);
+  background: linear-gradient(180deg, #c08aff 0%, #9b4dff 48%, #6b1fd0 100%);
   box-shadow: inset 0 2px 0 rgba(255,255,255,0.34), inset 0 -3px 0 rgba(0,0,0,0.3);
   transition: width 90ms linear;
 }
@@ -175,3 +175,32 @@
 
 .reduced-motion .wl-scene { animation: none; }
 .reduced-motion .wl-bar-fill { transition: none; }
+
+/* ------------------------------------------------------------------ *
+ * Warp-tunnel galaxy backdrop: colourful dots streaming toward the
+ * player like flying through a warp tunnel while the world boots.
+ * ------------------------------------------------------------------ */
+.wl-warp {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.wl-warp-dot {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: hsl(var(--hue, 260) 90% 70%);
+  box-shadow: 0 0 6px hsl(var(--hue, 260) 90% 70%);
+  opacity: 0;
+  animation: wl-warp-streak 4s linear infinite;
+  animation-delay: var(--d, 0s);
+}
+@keyframes wl-warp-streak {
+  0%   { transform: translate3d(0, 0, 0) scale(1);   opacity: 0; }
+  8%   { opacity: 0.95; }
+  70%  { opacity: 0.85; }
+  100% { transform: translate3d(calc(var(--mx, 60) * -1vw), calc(var(--my, 40) * -1vh), 0) scale(2.6); opacity: 0; }
+}
+.reduced-motion .wl-warp { display: none; }
