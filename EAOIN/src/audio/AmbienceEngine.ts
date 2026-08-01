@@ -271,6 +271,17 @@ export class AmbienceEngine {
     }
   }
 
+  /**
+   * Explicit user-gesture resume hook. Browsers keep the AudioContext
+   * suspended until the first pointer/key interaction; calling this from that
+   * gesture clears the autoplay security warning so the ambience bed starts
+   * singing immediately.
+   */
+  resume(): void {
+    const ctx = this.getContext();
+    if (ctx && ctx.state === 'suspended') void ctx.resume();
+  }
+
   /** Switch to a profile, crossfading from whatever is playing. */
   play(id: AmbienceProfileID): void {
     if (this.disposed) return;

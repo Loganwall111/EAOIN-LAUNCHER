@@ -149,7 +149,7 @@ const PLAYER_FOOTPRINT: ReadonlyArray<readonly [number, number]> = [
 /** Chunks meshed synchronously before the first frame is presented. */
 const INITIAL_CHUNK_RADIUS = 1;
 /** Chunks generated + meshed per ordinary streaming frame. */
-const CHUNKS_PER_FRAME = 1;
+const CHUNKS_PER_FRAME = 4;
 /**
  * Keep one fully meshed chunk ring beyond the advertised render distance.
  *
@@ -165,7 +165,7 @@ const CHUNK_PREFETCH_RADIUS = 1;
  * a short catch-up burst. Correct, visible terrain wins over a few temporary
  * frame-time spikes; the adaptive sampler excludes these known work frames.
  */
-const COVERAGE_RECOVERY_CHUNKS_PER_FRAME = 2;
+const COVERAGE_RECOVERY_CHUNKS_PER_FRAME = 8;
 /**
  * Wall-clock budget for ordinary chunk streaming, in ms.
  *
@@ -1507,13 +1507,24 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               const fallDist = fallStartY - camera.position.y;
               if (fallDist > 5.8) { const dmg = Math.round((fallDist - 5.8) * 5.2); const next = applyDamage(survivalStatsRef.current, dmg); survivalStatsRef.current = next; publishSurvivalStats(next); showActionMessage(`Fall damage -${dmg} HP from ${fallDist.toFixed(1)}m`); }
             }
-            wasFalling = false; fallStartY = camera.position.y; if (velocityY <= 0.2) velocityY = 0;
+            // Strict grounding snap-gate. The instant a floor collision is
+            // detected, downward velocity is forced to absolute 0 (never a
+            // residual fraction) and the eye is snapped a hair above the
+            // supporting block top. A tiny 0.01 epsilon stops the collider
+            // footprint from overlapping the chunk mesh bounds, which is what
+            // produced the rapid standing/walking camera shake.
+            velocityY = 0;
+            const groundFeet = camera.position.y - PLAYER_EYE_HEIGHT;
+            const supportBlockY = Math.floor(groundFeet - 0.06);
+            const supportBlockTop = supportBlockY + 1;
+            camera.position.y = supportBlockTop + PLAYER_EYE_HEIGHT + 0.01;
+            wasFalling = false; fallStartY = camera.position.y;
             if (jumpRequested) { velocityY = jumpVel; grounded = false; jumpRequested = false; audio.play('ui', settingsRef.current); showActionMessage(`Jump!`); }
           } else {
             if (!wasFalling) { wasFalling = true; fallStartY = lastCameraPosition.y; }
             velocityY += gravityStrength * deltaSeconds; if (velocityY < TERMINAL_VELOCITY) velocityY = TERMINAL_VELOCITY;
           }
-          if (Math.abs(velocityY) > 0.001) {
+          if (Math.abs(velocityY) > 0.001 && !grounded) {
             tempVerticalMove.set(0, velocityY * deltaSeconds, 0);
             (camera as any).moveWithCollisions?.(tempVerticalMove);
             if (!(camera as any).moveWithCollisions) {
@@ -1522,12 +1533,11 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
               const footId = terrain.getBlockAt(Math.floor(camera.position.x), supportY, Math.floor(camera.position.z));
               if (footId === 0 || footId === 5 || velocityY > 0) camera.position.y = nextY;
               else {
-                camera.position.y = supportY + 1 + PLAYER_EYE_HEIGHT;
+                camera.position.y = supportY + 1 + PLAYER_EYE_HEIGHT + 0.01;
                 velocityY = 0;
               }
             }
           }
-          if (isGroundedCheck(camera.position) && velocityY < 0) { velocityY = 0; grounded = true; }
         }
 
         // Runs after every movement path (flight, falling, walking) so the

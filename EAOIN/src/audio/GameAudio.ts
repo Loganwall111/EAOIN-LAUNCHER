@@ -55,6 +55,16 @@ export class GameAudio {
     playCue(); this.ambienceTimer = window.setInterval(playCue, 4200);
   }
 
+  /**
+   * Explicit user-gesture resume hook. Browsers block audio until the first
+   * pointer/key interaction; call this from that handler so the context is
+   * running before the boot jingle / menu music is scheduled.
+   */
+  resume(): void {
+    const context = this.getContext();
+    if (context && context.state === 'suspended') void context.resume();
+  }
+
   stopMusic(): void { if (this.musicTimer !== null) { window.clearInterval(this.musicTimer); this.musicTimer = null; } if (this.ambienceTimer !== null) { window.clearInterval(this.ambienceTimer); this.ambienceTimer = null; } }
 
   play(cue: AudioCue, settings: GameSettings): void {

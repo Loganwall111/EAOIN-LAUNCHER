@@ -68,6 +68,10 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
   const menuAmbience = useMemo(() => new AmbienceEngine(), []);
   useEffect(() => {
     const start = () => {
+      // Explicit resume on the first user gesture — clears the autoplay
+      // security warning and lets the boot jingle / menu music sing out.
+      menuAudio.resume();
+      menuAmbience.resume();
       menuAudio.startMusic({ muted: false, volume: 0.8 } as any, 'menu');
       menuAmbience.setVolume(0.5, false);
       menuAmbience.play('menu');
