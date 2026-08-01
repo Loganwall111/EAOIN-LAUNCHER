@@ -36,7 +36,6 @@ import {
   isDevTunableTerrain,
   worldClockRatePerSecond,
 } from '../dev/DeveloperTuning';
-import { BLACK_FRAME_LUMA_THRESHOLD, frameProbeIsVisible, probeRenderedFrameBrightness } from '../rendering/FrameVisibilityProbe';
 import { DimensionChunkSource } from './DimensionChunkSource';
 import { AdaptivePerformance, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
 import {
@@ -591,50 +590,6 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
        * tier changes can honour the "degraded" latch instead of re-arming the
        * very passes recovery just removed.
        * ------------------------------------------------------------------ */
-      let effectsDegradedForRecovery = false;
-      const degradePostEffectsForVisibility = (): void => {
-        if (effectsDegradedForRecovery) return;
-        effectsDegradedForRecovery = true;
-        try {
-          // Snapshot bundles are never armed by this backend, but if a WebGPU
-          // engine ever exposes one, switch it off rather than replaying a
-          // possibly-stale recording.
-          try {
-            const webgpu = engine as unknown as { snapshotRendering?: boolean };
-            if (webgpu.snapshotRendering) webgpu.snapshotRendering = false;
-          } catch { /* not a WebGPU engine */ }
-          invalidateRenderSnapshot(engine);
-
-          // 1. The post-processing pipeline: dispose detaches its whole chain
-          //    (HDR tone-map, bloom, FXAA, depth-of-field) from every camera.
-          pipeline?.dispose();
-          pipeline = null;
-          cinematicLighting.pipeline = null;
-
-          // 2. The glow layer goes away entirely. `glow.intensity = 0` used to
-          //    leave the effect layer installed, so it kept running its own
-          //    extra scene pass and its material overrides every frame.
-          glow.isEnabled = false;
-          glow.dispose();
-
-          // 3. The screen-space ray tracer: disposes its post process and the
-          //    depth map it owns. Disable the shared per-camera depth renderer
-          //    afterwards so no depth-map pass outlives its last consumer —
-          //    DepthRenderer ignores scene.postProcessesEnabled and would keep
-          //    drawing a full replacement-material pass forever.
-          rayTracer.dispose();
-          try { scene.disableDepthRenderer(camera); } catch { /* no depth renderer is fine */ }
-
-          // 4. The scene gate goes back ON: everything above was detached
-          //    explicitly, so there is nothing left to gate off. Leaving it
-          //    false is the hard-coded bypass that hid which pass was broken.
-          scene.postProcessesEnabled = true;
-        } catch (degradeError) {
-          // Recovery must never itself take the renderer down.
-          console.warn('[Render] Effect degrade partially failed; continuing on the forward path.', degradeError);
-        }
-      };
-
       // 2.0 — ONE atmosphere system owns the sky dome, celestial bodies,
       // clouds, stars, aurora, fog and biome weather particles. Nothing else in
       // the engine writes scene.clearColor / fogColor, which is what keeps the
@@ -1084,17 +1039,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             // whole scene per loaded chunk.
             renderer.forEachMesh(configureTerrainShadow);
           }
-          // Once the recovery path has torn the optional effect stack down,
-          // the tuner must never silently re-arm it — that degrade→re-enable
-          // ping-pong was the visible "fallback loop" during boot.
-          if (!effectsDegradedForRecovery) {
-            glow.intensity = fx.bloomEnabled ? 0.22 : 0.0;
-            glow.isEnabled = fx.bloomEnabled;
-            if (pipeline) {
-              pipeline.bloomEnabled = fx.bloomEnabled;
-              pipeline.depthOfFieldEnabled = fx.depthOfFieldEnabled;
-              pipeline.samples = fx.samples;
-            }
+          glow.intensity = fx.bloomEnabled ? 0.22 : 0.0;
+          glow.isEnabled = fx.bloomEnabled;
+          if (pipeline) {
+            pipeline.bloomEnabled = fx.bloomEnabled;
+            pipeline.depthOfFieldEnabled = fx.depthOfFieldEnabled;
+            pipeline.samples = fx.samples;
           }
           creatureManager.setPopulationCap(Math.round(26 * fx.creatureScale));
           atmosphere.setCloudDensityScale(fx.cloudScale);
@@ -1334,18 +1284,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // has stripped the effect stack, never re-arm it from a settings
         // signature change — that is how the old fallback "looped".
         rayTracer.update(deltaSeconds);
-        if (!effectsDegradedForRecovery) {
-          if (atmosphereFrame.sunDirection) rayTracer.setSunDirection(atmosphereFrame.sunDirection);
-          const currentRayTracingSignature = rayTracingSettingsKey(settingsRef.current);
-          if (currentRayTracingSignature !== lastRayTracingSignature) {
-            lastRayTracingSignature = currentRayTracingSignature;
-            rayTracer.configure({
-              quality: settingsRef.current.rayTracingQuality,
-              reflections: settingsRef.current.rayTracedReflections,
-              contactShadows: settingsRef.current.rayTracedShadows,
-              ambientOcclusion: settingsRef.current.rayTracedAO,
-            });
-          }
+        if (atmosphereFrame.sunDirection) rayTracer.setSunDirection(atmosphereFrame.sunDirection);
+        const currentRayTracingSignature = rayTracingSettingsKey(settingsRef.current);
+        if (currentRayTracingSignature !== lastRayTracingSignature) {
+          lastRayTracingSignature = currentRayTracingSignature;
+          rayTracer.configure({
+            quality: settingsRef.current.rayTracingQuality,
+            reflections: settingsRef.current.rayTracedReflections,
+            contactShadows: settingsRef.current.rayTracedShadows,
+            ambientOcclusion: settingsRef.current.rayTracedAO,
+          });
         }
 
         nextGenRuntime.update(deltaSeconds, camera.position, settingsRef.current);
@@ -2056,105 +2004,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // stable enough to record safely.
       enableSnapshotRenderingWhenReady(engine, scene, settingsRef.current);
 
-      /* ------------------------------------------------------------------ *
-       * Black-frame watchdog
-       *
-       * Defence in depth for the "HUD over a black world" class of bug. If the
-       * world has geometry loaded and the render loop is running, yet the
-       * presented frame is still essentially black several seconds in, then
-       * something is swallowing the draws.
-       *
-       * ## Why the old detector fired on healthy boots
-       *
-       * It read the canvas back buffer via `engine.readPixels()` from a
-       * setTimeout. With `preserveDrawingBuffer: false` (WebGL) that read is
-       * post-composite garbage, and on WebGPU `readPixels` resolves empty when
-       * no render pass is bound — both scan as pure black, so the watchdog
-       * disabled working effects on every boot. The probe below instead
-       * renders the real scene into a temporary render target (Babylon's
-       * supported screenshot path, valid on WebGL AND WebGPU) and reads THAT,
-       * so a healthy frame proves itself healthy and nothing is stripped.
-       * ------------------------------------------------------------------ */
-      let watchdogDone = false;
-      const blackFrameWatchdog = window.setTimeout(() => {
-        void (async () => {
-          if (watchdogDone || disposed) return;
-          try {
-            // Nothing meshed yet? Then black is legitimate, not a fault.
-            if (renderer.getStats().triangleCount <= 0) return;
-            // A canvas too small to judge is also not evidence.
-            if (engine.getRenderWidth() < 8 || engine.getRenderHeight() < 8) return;
-
-            // Probe 1: the frame as the player sees it, effects included.
-            const dressed = await probeRenderedFrameBrightness(engine, scene, camera);
-            if (disposed) return;
-            if (frameProbeIsVisible(dressed)) return; // healthy — change nothing
-
-            // Probe 2 (only when 1 read black): plain forward render, effects
-            // bypassed — tells us the post stack is the swallower before we
-            // tear anything down. Both probes null (= stalled loop) means
-            // "unknown", and unknown never justifies destructive recovery.
-            const plain = await probeRenderedFrameBrightness(engine, scene, camera, { bypassPostEffects: true });
-            if (disposed) return;
-            if (dressed === null && plain === null) return; // measurement failed — not evidence of a black frame
-            if (frameProbeIsVisible(plain)) {
-              console.warn(
-                `[Render] Frame is black despite loaded geometry (peak luma ${dressed?.brightestLuma ?? 'unreadable'} <= ${BLACK_FRAME_LUMA_THRESHOLD}) — the post-processing/glow stack is swallowing it; disabling those effects to restore visibility.`
-              );
-            } else {
-              console.warn(
-                `[Render] Frame is black despite loaded geometry${plain === null ? ' (effects-bypass probe inconclusive)' : ' with and without effects'} — degrading to the plain forward render as a best effort.`
-              );
-            }
-
-            watchdogDone = true;
-            degradePostEffectsForVisibility();
-            setActionMessage('Display recovered — heavy effects disabled so the world stays visible');
-          } catch {
-            /* The watchdog must never itself break the game. */
-          }
-        })();
-      }, 6000);
-
-      let recoveredFromRenderError = false;
-      let consecutiveRenderFailures = 0;
       engine.runRenderLoop(() => {
         try {
           scene.render();
-          consecutiveRenderFailures = 0;
         } catch (error) {
-          if (!recoveredFromRenderError) {
-            recoveredFromRenderError = true;
-            console.error('[Render] Scene render failed; disabling optional effects and retrying.', error);
-            degradePostEffectsForVisibility();
-            setActionMessage('Renderer recovered — optional effects disabled so the world stays visible');
-          }
-          try {
-            scene.render();
-            consecutiveRenderFailures = 0;
-          } catch (retryError) {
-            consecutiveRenderFailures += 1;
-            if (consecutiveRenderFailures >= 3) {
-              const detail = retryError instanceof Error ? retryError.message : String(retryError);
-              console.error('[Render] Scene failed repeatedly; stopping the broken render loop.', retryError);
-              engine.stopRenderLoop();
-              setInitializationError(`Rendering stopped: ${detail || 'unknown graphics error'}`);
-              reportLoadingProgress(
-                Math.max(76, lastLoadingReport.percent),
-                'Renderer stopped after repeated frame failures',
-                false,
-                undefined,
-                detail || 'Unknown graphics error'
-              );
-            }
-          }
+          console.error('[Render] Scene render failed.', error);
         }
       }); engine.resize();
       const initialStats = renderer.getStats(); console.log(`[Render] 3.2 ready: ${initialStats.loadedChunks} chunks, clouds moving, mountains & caves volumetric, 16 render, 20min day`);
       cleanupScene = () => {
-        watchdogDone = true;
         unsubscribeDevTuning();
-        window.clearTimeout(blackFrameWatchdog);
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
