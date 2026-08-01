@@ -11,18 +11,20 @@
  */
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { BiomeModificationFlags } from '../dev/DeveloperTuning';
+import { BlockID } from '../../shared/src/blocks/BlockRegistry';
+import { WorldBlockEdit } from './WorldSave';
 import { CavesAndCliffsTerrainGenerator, WorldGenConfig as ExperimentalConfig } from './CavesAndCliffsTerrainGenerator';
 
 export interface SpawnPoint { x: number; y: number; z: number; }
 export interface WorldGenConfig extends ExperimentalConfig { experimentalCavesAndCliffs: boolean; }
 export const DEFAULT_OVERWORLD_CONFIG: WorldGenConfig = {
-  seed: 'eaoin_seed_2026', seaLevel: 64, worldDepth: CHUNK_HEIGHT,
-  bedrockThickness: 1, continentScale: 0, detailScale: 0, mountainIntensity: 0,
-  erosionIterations: 0, caveScale: 0, floatingIslands: false, skyIslands: false,
-  undergroundRivers: false, undergroundOceans: false, ravines: false, sinkholes: false,
-  volcanoes: false, glaciers: false, biomeScale: 1, forcedBiome: null,
+  seed: 'eaoin_seed_2026', seaLevel: 32, worldDepth: CHUNK_HEIGHT,
+  bedrockThickness: 4, continentScale: 0.0012, detailScale: 0.018, mountainIntensity: 1.4,
+  erosionIterations: 1, caveScale: 2, floatingIslands: false, skyIslands: false,
+  undergroundRivers: true, undergroundOceans: true, ravines: true, sinkholes: true,
+  volcanoes: true, glaciers: true, biomeScale: 1, forcedBiome: null,
   farLandsThreshold: 0, subBedrockLayers: 0, inverted: false, caveWorld: false,
-  flatGroundY: 64, experimentalCavesAndCliffs: false,
+  flatGroundY: null, experimentalCavesAndCliffs: true,
 };
 export const FLOATING_ISLANDS_CONFIG = { ...DEFAULT_OVERWORLD_CONFIG, floatingIslands: true };
 const GRASS = 1, DIRT = 2, STONE = 3;
@@ -69,13 +71,13 @@ export class AdvancedTerrainGenerator {
    * `CavesAndCliffsTerrainGenerator.getBlockAt`, so callers can treat every
    * generator interchangeably.
    *
-   * The stable path is a deterministic banded column around the y = 64 surface:
-   *   y > 64        → 0 (air block)
-   *   y === 64      → 3 (solid surface block)
-   *   60 <= y < 64  → 2 (subsurface band)
-   *   y < 60        → 1 (solid deep block)
+   * With the full Minecraft-style generator enabled (`this.legacy`), every
+   * query delegates straight to it so the voxels the engine reads match the
+   * mesh that was generated. The simple banded fallback below is only used
+   * when the full generator is disabled.
    */
   public getBlockAt(x: number, y: number, z: number): number {
+    if (this.legacy) return this.legacy.getBlockAt(x, y, z);
     void x; void z; // bands depend on height only; x/z kept for world-space API parity
     if (y > 64) return 0;
     if (y === 64) return 3;
@@ -85,10 +87,17 @@ export class AdvancedTerrainGenerator {
   getTerrainHeight(x:number,z:number):number { return this.legacy ? this.legacy.getTerrainHeight(x,z) : this.height(x,z); }
   /** World-space surface height query used by the engine's startup/render path. */
   public getHeightAt(x: number, z: number): number { return this.getTerrainHeight(x, z); }
-  getSurfaceHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
-  getBaseHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
-  getMountainHeight(x:number,z:number):number { return this.getTerrainHeight(x,z); }
+  getSurfaceHeight(x:number,z:number):number { return this.legacy ? this.legacy.getSurfaceHeight(x,z) : this.getTerrainHeight(x,z); }
+  getBaseHeight(x:number,z:number):number { return this.legacy ? this.legacy.getBaseHeight(x,z) : this.getTerrainHeight(x,z); }
+  getMountainHeight(x:number,z:number):number { return this.legacy ? this.legacy.getMountainHeight(x,z) : this.getTerrainHeight(x,z); }
   getBiomeAt(x:number,z:number): any { return this.legacy ? this.legacy.getBiomeAt(x,z) : { id:'plains', name:'Plains' }; }
+  setBlockAt(x: number, y: number, z: number, block: BlockID): boolean {
+    if (this.legacy) return this.legacy.setBlockAt(x, y, z, block);
+    return false;
+  }
+  getEdits(): WorldBlockEdit[] { return this.legacy ? this.legacy.getEdits() : []; }
+  getEditCount(): number { return this.legacy ? this.legacy.getEditCount() : 0; }
+  invalidateGeneratedChunks(): void { if (this.legacy) this.legacy.invalidateGeneratedChunks(); }
   setDeveloperTuning(tuning:{heightMultiplier:number; biomeMods:BiomeModificationFlags}):void { this.heightMultiplier = Number.isFinite(tuning.heightMultiplier) ? tuning.heightMultiplier : 1; void tuning.biomeMods; this.legacy?.setDeveloperTuning(tuning); }
   getSpawnPoint(): SpawnPoint {
     // The camera's Y is the *eye*, and the player stands 1.62 blocks tall
