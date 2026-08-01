@@ -333,6 +333,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       scene.collisionsEnabled = true;
       scene.gravity = new Vector3(0, 0, 0);
       scene.fogEnabled = settingsRef.current.fogEnabled;
+      // Force the engine to match the canvas' full-viewport layout immediately
+      // after scene setup, so the framebuffer is not stuck at the tiny collapsed
+      // size before the first render.
+      engine.resize();
       reportLoadingProgress(12, 'Scene created');
 
       const saveManager = new WorldSaveManager(seed);
@@ -2200,8 +2204,15 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   };
 
   return (
-    <div className="game-screen">
-      <canvas ref={canvasRef} className="game-canvas" />
+    <div
+      className="game-screen"
+      style={{ width: "100vw", height: "100vh", position: "absolute", top: 0, left: 0, overflow: "hidden", zIndex: 0 }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="game-canvas"
+        style={{ width: "100% !important", height: "100% !important", display: "block", position: "absolute", top: 0, left: 0, outline: "none" }}
+      />
       {initializationError && (
         <div className="world-startup-error" role="alert">
           <strong>THE WORLD COULD NOT START</strong>
