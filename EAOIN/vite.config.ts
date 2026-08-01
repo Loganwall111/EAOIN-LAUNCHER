@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 
+// GitHub Pages serves project sites from a subpath (`/<repo>/`). Vite needs
+// `base` set to that subpath so the built assets resolve correctly there.
+// Local `npm run dev` and `vite build` keep the default `/`.
+const BASE_PATH = process.env.BASE_PATH || '/';
+
 export default defineConfig({
   root: '.',
+  base: BASE_PATH,
   build: {
     outDir: 'dist',
     emptyOutDir: true,
