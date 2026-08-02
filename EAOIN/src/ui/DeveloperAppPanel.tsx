@@ -123,7 +123,7 @@ export function DeveloperGate({ error }: { error: string | null }) {
 }
 
 /** The granted control surface. */
-function DeveloperControls({ tuning }: { tuning: DeveloperWorldTuning }) {
+export function DeveloperControls({ tuning }: { tuning: DeveloperWorldTuning }) {
   const daySeconds = effectiveDayLengthSeconds(tuning, DEV_PANEL_BASE_DAY_SECONDS);
   const activePreset = getLightingPreset(tuning.lightingPreset);
 

@@ -432,12 +432,20 @@ function paintArchetype(
         return;
       }
       if (face === 'top') {
-        mottle(0.38, 2.4);
-        // Scattered brighter blades so the top reads as grass from above.
-        for (let i = 0; i < 26; i += 1) {
+        // Clean Minecraft-style grass top: an even, slightly-mottled green
+        // field with sparse brighter blades. Gentle so it reads as one smooth
+        // surface rather than a noisy/glitched patchwork.
+        mottle(0.16, 3.4);
+        for (let i = 0; i < 18; i += 1) {
           const x = Math.floor(rand(i, 1, salt) * S);
           const y = Math.floor(rand(i, 2, salt) * S);
-          p.set(x, y, shade(base, 0.22));
+          p.set(x, y, shade(base, 0.20));
+        }
+        // A subtle darker speckle breaks up the field without looking glitchy.
+        for (let i = 0; i < 10; i += 1) {
+          const x = Math.floor(rand(i, 7, salt) * S);
+          const y = Math.floor(rand(i, 8, salt) * S);
+          p.set(x, y, shade(base, -0.12));
         }
         return;
       }

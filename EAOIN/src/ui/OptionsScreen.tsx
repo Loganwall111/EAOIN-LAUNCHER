@@ -8,8 +8,9 @@ import { useCallback, useState, useSyncExternalStore } from 'react';
 import { clampSettings, GameSettings, effectiveRenderDistance } from '../settings/GameSettings';
 import { UI_ASSETS } from './theme';
 import MenuScreen from './MenuScreen';
-import { DeveloperGate } from './DeveloperAppPanel';
+import { DeveloperControls, DeveloperGate } from './DeveloperAppPanel';
 import { developerAccess } from '../dev/DeveloperAccess';
+import { developerTuningStore } from '../dev/DeveloperTuning';
 
 export interface OptionsScreenProps {
   settings: GameSettings;
@@ -59,6 +60,10 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
   const devAccess = useSyncExternalStore(
     useCallback((listener) => developerAccess.subscribe(listener), []),
     useCallback(() => developerAccess.get(), [])
+  );
+  const devTuning = useSyncExternalStore(
+    useCallback((listener) => developerTuningStore.subscribe(listener), []),
+    useCallback(() => developerTuningStore.get(), [])
   );
   const openDevGate = () => {
     developerAccess.trigger(); // toggles panel if granted, else opens the lock gate
@@ -253,6 +258,11 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
               {devAccess.gateOpen && !devAccess.granted && (
                 <div className="dev-gate-inline">
                   <DeveloperGate error={devAccess.lastError} />
+                </div>
+              )}
+              {devAccess.granted && devAccess.panelOpen && (
+                <div className="dev-panel-inline">
+                  <DeveloperControls tuning={devTuning} />
                 </div>
               )}
             </div>

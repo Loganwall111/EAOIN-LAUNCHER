@@ -2832,3 +2832,67 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   .htp-recipe-list,
   .htp-portal-list { grid-template-columns: 1fr; }
 }
+
+/* --- Death screen --------------------------------------------------- */
+.death-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.death-red-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(120, 0, 0, 0.35) 0%, rgba(60, 0, 0, 0.75) 70%, rgba(20, 0, 0, 0.92) 100%);
+  animation: deathPulse 3s ease-in-out infinite;
+}
+@keyframes deathPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+.death-content {
+  position: relative;
+  text-align: center;
+  color: #ffd9d9;
+  text-shadow: 0 0 30px #ff2020, 0 0 60px #900000;
+  z-index: 41;
+}
+.death-title {
+  font-size: clamp(64px, 12vw, 120px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #ff3b3b;
+  margin-bottom: 8px;
+}
+.death-sub {
+  font-size: 18px;
+  letter-spacing: 3px;
+  opacity: 0.85;
+  margin-bottom: 40px;
+}
+.death-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+.death-actions .btn-primary, .death-actions .btn-secondary {
+  font-size: 18px;
+  padding: 12px 28px;
+}
+.ghost-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 10, 40, 0.85);
+  color: #d0b8ff;
+  border: 1px solid #7a4dff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  z-index: 30;
+  text-shadow: 0 0 12px #7a4dff;
+}

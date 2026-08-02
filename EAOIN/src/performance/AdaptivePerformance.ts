@@ -75,25 +75,25 @@ export interface PerformanceAdjustment {
 export const BUDGET_PRESETS: Record<string, PerformanceBudget> = {
   performance: {
     targetFps: 60,
-    minRenderScale: 0.5, maxRenderScale: 1.0,
+    minRenderScale: 0.9, maxRenderScale: 1.0,
     minRenderDistance: 6, maxRenderDistance: 12,
     minEffectTier: 'minimal', maxEffectTier: 'high',
   },
   balanced: {
     targetFps: 60,
-    minRenderScale: 0.62, maxRenderScale: 1.0,
+    minRenderScale: 0.92, maxRenderScale: 1.0,
     minRenderDistance: 10, maxRenderDistance: 16,
     minEffectTier: 'low', maxEffectTier: 'high',
   },
   quality: {
     targetFps: 50,
-    minRenderScale: 0.72, maxRenderScale: 1.0,
+    minRenderScale: 0.95, maxRenderScale: 1.0,
     minRenderDistance: 14, maxRenderDistance: 22,
     minEffectTier: 'medium', maxEffectTier: 'ultra',
   },
   cinematic: {
     targetFps: 40,
-    minRenderScale: 0.8, maxRenderScale: 1.0,
+    minRenderScale: 0.95, maxRenderScale: 1.0,
     minRenderDistance: 18, maxRenderDistance: 28,
     minEffectTier: 'high', maxEffectTier: 'ultra',
   },

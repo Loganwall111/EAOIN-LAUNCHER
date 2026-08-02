@@ -224,6 +224,10 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
   const [miningLabel, setMiningLabel] = useState('');
   const [targetLabel, setTargetLabel] = useState('');
   const [paused, setPaused] = useState(false);
+  /** True while the player is dead and the death screen is showing. */
+  const [dead, setDead] = useState(false);
+  /** Ghost mode: roam the world free of gravity/harm instead of respawning. */
+  const [ghostMode, setGhostMode] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   /**
    * Mirrors of the chat/command open flags for the window key handler.
@@ -244,6 +248,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
    * spawn a creature). This ref is the bridge between the two.
    */
   const commandEffectRef = useRef<((effect: CommandEffect) => string | void) | null>(null);
+  /** Called by the death screen to respawn or enter ghost mode. */
+  const deathActionRef = useRef<{ respawn: () => void; ghost: () => void }>({ respawn: () => {}, ghost: () => {} });
   /** Set by the scene; summons a boss by id. Used by `/boss` and the B key. */
   const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
   /** Live boss state, drives the on-screen boss health bar. */
@@ -982,6 +988,31 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       };
       const toggleFlightMode = (): void => setFlightMode(!flightEnabledRef.current);
       const handleFlightButton = (): void => toggleFlightMode();
+
+      // Death screen actions: respawn or roam as a ghost.
+      deathActionRef.current = {
+        respawn: () => {
+          setDead(false);
+          setGhostMode(false);
+          setPaused(false);
+          setFlightMode(false);
+          respawnPlayer('You died');
+          canvasRef.current?.requestPointerLock?.();
+        },
+        ghost: () => {
+          setDead(false);
+          setGhostMode(true);
+          setPaused(false);
+          setFlightMode(true);
+          flightEnabledRef.current = true;
+          // Ghosts are intangible: no fall damage, no thirst, no mob harm.
+          const fresh = createStarterSurvivalStats();
+          survivalStatsRef.current = { ...fresh, health: 999 };
+          publishSurvivalStats({ ...fresh, health: 999 });
+          canvasRef.current?.requestPointerLock?.();
+          showActionMessage('👻 Ghost mode — roam the world and haunt the living (F4 to respawn normally)');
+        },
+      };
       const isGroundedCheck = (pos: Vector3): boolean => {
         const feet = pos.y - PLAYER_EYE_HEIGHT;
         const supportY = Math.floor(feet - 0.06);
@@ -1624,9 +1655,16 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         // Health could previously reach zero and simply stay there: starving,
         // dehydrating or falling had no terminal consequence, so survival had
         // no stakes. One check here covers every damage source, since they all
-        // funnel into `survivalStatsRef` above.
-        if (nextSurvival.health <= 0 && !isCreativeMode(gameModeRef.current)) {
-          showActionMessage(respawnPlayer('You died'));
+        // funnel into `survivalStatsRef` above. On death the game shows a red
+        // death screen with "Respawn" or "Become Ghost" instead of instantly
+        // teleporting back to spawn.
+        if (nextSurvival.health <= 0 && !isCreativeMode(gameModeRef.current) && !ghostMode) {
+          if (!dead) {
+            setDead(true);
+            setPaused(true);
+            document.exitPointerLock?.();
+            showActionMessage('You died');
+          }
         }
         // Incremental world streaming. The target includes a one-chunk guard
         // ring beyond the selected render distance, so terrain that has real
@@ -2219,6 +2257,22 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         </div>
       )}
       <div className="game-hud">
+        {dead && !ghostMode && (
+          <div className="death-screen" role="alert" aria-live="assertive">
+            <div className="death-red-vignette" />
+            <div className="death-content">
+              <div className="death-title">YOU DIED</div>
+              <div className="death-sub">The world grows quiet around you…</div>
+              <div className="death-actions">
+                <button className="btn-primary" onClick={() => deathActionRef.current.respawn()}>Respawn</button>
+                <button className="btn-secondary" onClick={() => deathActionRef.current.ghost()}>Become Ghost</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {ghostMode && !dead && (
+          <div className="ghost-banner">👻 GHOST MODE — roam and haunt. Press F4 to respawn.</div>
+        )}
         {settings.showStats && <div className="render-stats-panel"><div>Renderer {renderStats.renderer.backend.toUpperCase()}</div><div>{renderStats.renderer.label}</div><div>Clouds: visible moving voxel • Fog 100-1000 {settings.fogEnabled ? 'on' : 'off'}</div><div>Render radius {qualityRenderDistance(settings.qualityPreset)} • MaxZ 1500</div><div>Day/Night 20min cycle • Terrain: regular Minecraft-like overworld</div><div>FPS {renderStats.fps}</div><div>Chunks {renderStats.loadedChunks} @ {renderStats.streamCenter}</div><div>Meshes {renderStats.meshCount}</div><div>Creatures {renderStats.creatures.count}/{renderStats.creatures.cap}</div><div>Drops {renderStats.drops}</div><div>Tris {renderStats.triangleCount.toLocaleString()}</div></div>}
         {bossState && bossState.alive && (
           <div className="boss-bar" role="status" aria-live="polite">
