@@ -1947,6 +1947,17 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           if (!attackCreature()) startMining();
         } else {
           viewModel.swing();
+          // Right-click on a redstone component toggles it instead of placing.
+          const target = pickTargetBlock();
+          if (target) {
+            const interact = logicRuntime.interactComponent(target.target.x, target.target.y, target.target.z);
+            if (interact) {
+              audio.play('ui', settingsRef.current);
+              showActionMessage(interact);
+              publishRuntimeStatus();
+              return;
+            }
+          }
           placeSelectedBlock();
         }
       };

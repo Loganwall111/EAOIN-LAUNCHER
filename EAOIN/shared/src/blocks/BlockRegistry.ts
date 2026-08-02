@@ -392,6 +392,8 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   302: { id: 302, name: 'The Omni Creator', shortName: 'OC', category: 'misc', solid: false, transparent: true, hardness: 100.0, lightLevel: 15, emissive: true, stackSize: 1, color: '#fff7c8', accentColor: '#7c2cff' },
   303: { id: 303, name: 'Fire', shortName: 'FI', category: 'decoration', solid: false, transparent: true, hardness: 0.0, lightLevel: 14, emissive: true, stackSize: 64, color: '#ff6a2a', accentColor: '#ffd166' },
   304: { id: 304, name: 'Kelp', shortName: 'KP', category: 'plant', solid: false, transparent: true, hardness: 0.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#3a9a3a', accentColor: '#1e6a1e' },
+  305: { id: 305, name: 'Ladder', shortName: 'LA', category: 'functional', solid: false, transparent: true, hardness: 0.4, lightLevel: 0, emissive: false, stackSize: 64, color: '#b07c4d', accentColor: '#6b4a2a' },
+  306: { id: 306, name: 'Redstone Torch', shortName: 'RT', category: 'redstone', solid: false, transparent: true, hardness: 0.0, lightLevel: 7, emissive: true, stackSize: 64, color: '#ff5a3a', accentColor: '#c83232' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */

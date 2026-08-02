@@ -44,6 +44,51 @@ export class LogicRuntime {
     return this.getStats();
   }
 
+  /**
+   * Interact with a redstone component placed in the world (lever/button).
+   * Toggling a lever flips the global redstone power line, which powers any
+   * redstone lamps connected by wire (block 13) within the scan radius.
+   * Returns a human-readable message.
+   */
+  interactComponent(worldX: number, worldY: number, worldZ: number): string | null {
+    const block = this.terrain.getBlockAt(worldX, worldY, worldZ);
+    if (block === 150) {
+      // Lever — toggles the signal.
+      this.toggle();
+      return this.active
+        ? 'Lever pulled — redstone powered'
+        : 'Lever released — redstone off';
+    }
+    if (block === 151) {
+      // Button — a momentary pulse (~1.2s).
+      const was = this.active;
+      this.active = true;
+      this.toggles += 1;
+      this.applyState();
+      window.setTimeout(() => {
+        if (!was) { this.active = false; this.applyState(); }
+      }, 1200);
+      return 'Button pressed — redstone pulsed';
+    }
+    if (block === 306) {
+      // Redstone torch — a constant power source; clicking toggles it.
+      this.toggle();
+      return this.active
+        ? 'Redstone torch lit — circuit powered'
+        : 'Redstone torch extinguished — circuit off';
+    }
+    return null;
+  }
+
+  /** Manually set the global signal state (used by the L key toggle). */
+  setActive(active: boolean): void {
+    if (this.active !== active) {
+      this.active = active;
+      this.toggles += 1;
+      this.applyState();
+    }
+  }
+
   update(deltaSeconds: number): void {
     const pulse = this.active ? 0.75 + Math.sin(performance.now() * 0.006) * 0.25 : 0;
     this.light.intensity = pulse;
