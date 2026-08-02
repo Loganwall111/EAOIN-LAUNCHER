@@ -49,6 +49,7 @@ import {
 } from './GameCanvasConfig';
 import { WeatherEffects } from '../effects/WeatherEffects';
 import { MoonEvents } from '../effects/MoonEvents';
+import { SpecialEvents } from '../events/SpecialEvents';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -516,6 +517,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       // Storm lightning + meteors/comets that streak across the sky and crash.
       const weatherEffects = new WeatherEffects(scene, lighting.sun, lighting.sky);
       const moonEvents = new MoonEvents();
+      const specialEvents = new SpecialEvents();
       const configureTerrainShadow = (mesh: Mesh): void => {
         const enabled = effectSettingsFor(effectTier).shadowsEnabled;
         if (enabled) lighting.shadowGenerator.addShadowCaster(mesh, false);
@@ -1428,6 +1430,34 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           if (streamFrame % 120 === 0) showActionMessage(`🌕 ${moonState.label}`);
         } else {
           creatureManager.setMoonEvent(1, false);
+        }
+        // --- Oris / Chorus + Psychedelics special events -------------------
+        specialEvents.update(deltaSeconds);
+        const specialState = specialEvents.getState();
+        if (specialState.id === 'oris_chorus' && specialState.strength > 0.01) {
+          // The world runs hot and reality tears open as Oris approaches.
+          scene.clearColor.r = Math.max(scene.clearColor.r, 0.28 * specialState.strength);
+          scene.clearColor.b = Math.max(scene.clearColor.b, 0.18 * specialState.strength);
+          if (streamFrame % 90 === 0) showActionMessage(`🪐 ${specialState.label} — heat rising`);
+          // Grow chorus blocks: spawn a cluster somewhere near the player.
+          const toGrow = specialEvents.consumeChorusGrowth();
+          if (toGrow > 0) {
+            for (let i = 0; i < toGrow; i++) {
+              const gx = Math.floor(camera.position.x + (Math.random() - 0.5) * 40);
+              const gz = Math.floor(camera.position.z + (Math.random() - 0.5) * 40);
+              const gy = terrain.getSurfaceHeight(gx, gz);
+              if (gy > 1 && gy < CHUNK_HEIGHT - 2) {
+                terrain.setBlockAt(gx, gy + 1, gz, 307);
+                renderer.rebuildForWorldBlock(gx, gz);
+                saveWorldEdits();
+              }
+            }
+            forceTerrainCoverage = true;
+            showActionMessage('🌺 Chorus blooms across the world!');
+          }
+        } else if (specialState.id === 'psychedelics' && specialState.strength > 0.01) {
+          // Psychedelic world tint + message.
+          if (streamFrame % 90 === 0) showActionMessage(`🌈 ${specialState.label}`);
         }
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
