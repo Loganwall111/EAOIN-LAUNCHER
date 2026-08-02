@@ -167,12 +167,14 @@ export default function App() {
     setGameplayCounters(createGameplayCounters());
     setRuntimeStatus(createDefaultRuntimeStatus());
     setCraftingMessage(saved ? 'Loaded saved player progress' : 'New player inventory ready');
-    // Loading screen first, then the awakening cutscene, then gameplay.
+    // Loading screen first, then the awakening cutscene (Cosmic Girl + eyes
+    // open) ONLY for a brand-new world. An existing world loads straight back
+    // to where you left off — no repeat wake-up every time you join.
     setWorldLoadProgress({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
     setPendingWorldType(worldTypeFromSeed(nextSeed));
     setWorldAttempt((attempt) => attempt + 1);
     setWorldLoading(true);
-    setNextGenWakeUp(true);
+    setNextGenWakeUp(!saved);
     setAwakening(false);
     setGameStarted(true);
   }, [worldSeed, launcherState.selectedId]);

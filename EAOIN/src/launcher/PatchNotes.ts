@@ -14,6 +14,21 @@ export interface PatchEntry {
 
 export const PATCHES: PatchEntry[] = [
   {
+    version: '2.0.0',
+    label: 'The Final Release',
+    title: 'Coloured Lighting, World\u2019s Edge, Rails & Minecarts',
+    date: '2026-08-02',
+    notes: [
+      '💡 Coloured lighting, light mixing, god rays and glass refraction.',
+      '⚡ Super Settings — the deep config layer under the regular Settings.',
+      '📺 Cameras, TV & Computer blocks that show a live view of the game.',
+      '🛋 Furniture, coloured lamps, torch variants and a movie theatre.',
+      '🌍 World\u2019s Edge — a survival world with an end, a 56-minute timer and a world-eating monster.',
+      '🚂 Railroad tracks & minecarts.',
+      '🕳 Stalactites, stalagmites and glowing coloured water pools in caves.',
+    ],
+  },
+  {
     version: '2.1.0',
     label: 'Next-Gen Update',
     title: 'The Launcher, Rift Dimension & More',

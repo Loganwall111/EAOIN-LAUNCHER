@@ -286,6 +286,19 @@ export class DimensionTerrainGenerator {
     } else if (r > 0.90) {
       this.setSafe(chunk, lx, base, lz, B.CRYSTAL);
       this.setSafe(chunk, lx, base + 1, lz, B.GLOWSTONE);
+    } else if (r > 0.86) {
+      // Stalagmite rising from the hill top.
+      const h = 2 + Math.floor(this.noise.hash(wx, 12, wz) * 2);
+      for (let y = base; y <= base + h; y++) chunk.setBlock(lx, y, lz, 334);
+    } else if (r > 0.82) {
+      // Stalactite hanging below the floating hill.
+      const h = 2 + Math.floor(this.noise.hash(wx, 12, wz) * 2);
+      for (let y = surfaceY - 1; y >= surfaceY - h; y--) this.setSafe(chunk, lx, y, lz, 333);
+    } else if (r > 0.78) {
+      // A glowing coloured water pool (purple/pink) on the hill.
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        this.setSafe(chunk, lx + dx, base, lz + dz, this.noise.hash(wx + dx, 13, wz + dz) > 0.5 ? 335 : 336);
+      }
     }
   }
 

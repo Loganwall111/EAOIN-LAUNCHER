@@ -237,18 +237,39 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
 
     let currentIndex = 0;
     let audioEl: HTMLAudioElement | null = null;
+    let cancelled = false;
+    let watchTimer: ReturnType<typeof setTimeout> | undefined;
     setNarrationLine(narrationLines[0]);
+
+    // Play one full clip, then advance to the next ONLY when it ends — never on
+    // a fixed timer. This fixes the narrator repeating/duplicating a word and
+    // cutting off mid-sentence (each clip now plays all the way through).
+    const advance = () => {
+      if (cancelled) return;
+      currentIndex++;
+      if (currentIndex < narrationLines.length) {
+        setNarrationLine(narrationLines[currentIndex]);
+        playLine(currentIndex);
+      } else {
+        setTimeout(() => setPhase('LOGO'), 1200);
+      }
+    };
 
     const playLine = (index: number) => {
       audioEl?.pause();
       audioEl = new Audio(`${base}audio/narration_${index + 1}.mp3`);
       audioEl.volume = 0.95;
+      audioEl.onended = advance;
       const fallback = () => {
-        // Fall back to the browser voice only if the audio can't load.
+        // Fall back to the browser voice only if the audio can't load, and
+        // still advance so the sequence never stalls.
         if ('speechSynthesis' in window) {
           const utterance = new SpeechSynthesisUtterance(narrationLines[index]);
           utterance.rate = 0.86; utterance.pitch = 0.88; utterance.volume = 0.95;
+          utterance.onend = advance;
           window.speechSynthesis.speak(utterance);
+        } else {
+          watchTimer = setTimeout(advance, 2400);
         }
       };
       // `play()` is a Promise in real browsers but can return `undefined` in
@@ -261,20 +282,11 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
 
     playLine(0);
 
-    const interval = setInterval(() => {
-      currentIndex++;
-      if (currentIndex < narrationLines.length) {
-        setNarrationLine(narrationLines[currentIndex]);
-        playLine(currentIndex);
-      } else {
-        clearInterval(interval);
-        setTimeout(() => setPhase('LOGO'), 1200);
-      }
-    }, 2000);
-
     return () => {
-      clearInterval(interval);
+      cancelled = true;
+      if (audioEl) audioEl.onended = null;
       audioEl?.pause();
+      if (watchTimer) clearTimeout(watchTimer);
     };
   }, [phase]);
 

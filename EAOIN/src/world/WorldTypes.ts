@@ -27,7 +27,8 @@ export type WorldTypeID =
   | 'water_world'
   | 'inverted'
   | 'large_biomes'
-  | 'single_biome';
+  | 'single_biome'
+  | 'worlds_edge';
 
 export interface WorldTypeDefinition {
   id: WorldTypeID;
@@ -68,6 +69,8 @@ export interface WorldTypeConfig {
   subBedrockLayers?: number;
   /** Invert the terrain so caves become mountains. */
   inverted?: boolean;
+  /** World's Edge — the world has an end guarded by a world-eating monster. */
+  worldsEdge?: boolean;
 }
 
 export const WORLD_TYPES: WorldTypeDefinition[] = [
@@ -183,6 +186,16 @@ export const WORLD_TYPES: WorldTypeDefinition[] = [
       'Pick a biome and the entire world becomes it. An endless desert, an unbroken mushroom field, a jungle with no edge.',
     preview: 'linear-gradient(180deg,#6fb0e6 0%,#a8d8f8 34%,#6cc24a 52%,#6cc24a 100%)',
     config: { forcedBiome: 'forest' },
+  },
+  {
+    id: 'worlds_edge',
+    name: "World's Edge",
+    description: 'The world has an end — cross it and the great monster devours you.',
+    detail:
+      'An exclusive survival world. Far beyond the last terrain lies the Edge. If you cross it, tentacles pull you down into a cutscene and the world-eating monster consumes you. It punches holes through reality, corrupts the land, and the entire world is on a 56-minute timer. Creative (via cheats) is the only way to survive it.',
+    preview: 'linear-gradient(90deg,#3a2a2a 0%,#5a3a3a 30%,#7a5a5a 60%,#2a2a3a 85%,#000 100%)',
+    config: { worldsEdge: true },
+    exotic: true,
   },
 ];
 

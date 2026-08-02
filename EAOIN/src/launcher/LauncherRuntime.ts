@@ -28,7 +28,7 @@ export interface GameBuild {
    * World type to use when this build is selected. Overrides the player's
    * normal selection so developer builds can ship a different world.
    */
-  worldType?: 'default' | 'flat' | 'skylands' | 'amplified' | 'far_lands';
+  worldType?: 'default' | 'flat' | 'skylands' | 'amplified' | 'far_lands' | 'worlds_edge';
   /** Developer builds unlock the in-game editor + AI chatbot. */
   devTools?: boolean;
   /** Experimental builds unlock features that are still being tuned. */
@@ -48,10 +48,11 @@ export const VERSIONS: GameBuild[] = [
   { id: 'v0.9.5', name: 'EAOIN 0.9.5', version: '0.9.5', channel: 'public', tagline: 'Caves & Cliffs wave one.', label: 'Alpha', worldType: 'default', released: '2025-06-14' },
   { id: 'v1.0.0', name: 'EAOIN 1.0.0', version: '1.0.0', channel: 'public', tagline: 'Release — the full sandbox.', label: 'Stable', worldType: 'default', isPublic: true, released: '2025-11-20' },
   { id: 'v1.1.0', name: 'EAOIN 1.1.0', version: '1.1.0', channel: 'public', tagline: 'Life Comes Apart — wildlife & economy.', label: 'Stable', worldType: 'default', released: '2026-02-10' },
-  { id: 'v2.0.0', name: 'EAOIN 2.0.0', version: '2.0.0', channel: 'public', tagline: 'Next-Generation Universe — current release.', label: 'Release', worldType: 'default', isPublic: true, isLatest: true, released: '2026-08-01' },
+  { id: 'v2.0.0', name: 'EAOIN 2.0.0', version: '2.0.0', channel: 'public', tagline: 'The Final Release — coloured lighting, World\u2019s Edge, rails & minecarts.', label: 'Release', worldType: 'default', isPublic: true, isLatest: true, released: '2026-08-01' },
   { id: 'beta-2.1.0', name: 'EAOIN 2.1.0 BETA', version: '2.1.0', channel: 'public', tagline: 'The Humorous & worldgen overhaul — not out yet.', label: 'Beta', worldType: 'skylands', isBeta: true, released: '2026-09-01' },
   { id: 'exp-caves-3', name: 'Experimental: Caves & Cliffs 3', version: 'exp-3.0', channel: 'experimental', tagline: 'Deeper caves, new ores, warden territory.', label: 'Experimental', worldType: 'amplified', experimental: true, released: '2026-08-15' },
   { id: 'exp-rifts', name: 'Experimental: Reality Rifts', version: 'exp-3.1', channel: 'experimental', tagline: 'Test the rift dimension & portal mechanic.', label: 'Experimental', worldType: 'skylands', experimental: true, released: '2026-08-20' },
+  { id: 'exp-worlds-edge', name: 'Experimental: World\u2019s Edge', version: 'exp-3.2', channel: 'experimental', tagline: 'Survive the end-of-world monster for 56 minutes.', label: 'Experimental', worldType: 'worlds_edge', experimental: true, released: '2026-08-30' },
   { id: 'dev-sandbox', name: 'Developer: Sandbox', version: 'dev-9.9', channel: 'developer', tagline: 'End-game editor + AI chatbot. New random blocks.', label: 'Developer', worldType: 'flat', devTools: true, released: '2026-08-22' },
   { id: 'dev-worldgen', name: 'Developer: Worldgen Lab', version: 'dev-9.10', channel: 'developer', tagline: 'Prototype cities & new biomes.', label: 'Developer', worldType: 'amplified', devTools: true, released: '2026-08-25' },
 ];

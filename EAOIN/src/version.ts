@@ -1,5 +1,5 @@
-export const GAME_VERSION = '1.1.0';
-export const RELEASE_NAME = 'The Final Journey — Official Public Release';
+export const GAME_VERSION = '2.0.0';
+export const RELEASE_NAME = 'The Final Release — Coloured Lighting & World\u2019s Edge';
 export const RELEASE_LABEL = `EAOIN ${GAME_VERSION} — ${RELEASE_NAME}`;
 export const RELEASE_TAGLINE = 'Official Public Release — Terrain Revamp • The Creator Endgame • 71 Memory Shards';
 export const RELEASE_FEATURES = [

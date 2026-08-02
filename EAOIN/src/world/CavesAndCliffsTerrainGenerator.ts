@@ -2216,6 +2216,13 @@ export class CavesAndCliffsTerrainGenerator {
 
     // A small movie theatre with a TV screen (Part 4) on one side.
     this.placeMovieTheatre(chunk, wx + 9, surface, wz - 2);
+
+    // A rail line running through the city with a powered rail every 4th block.
+    for (let r = -8; r <= 8; r++) {
+      this.setBlockIfInChunk(chunk, wx + r, surface + 1, wz + 6, r % 4 === 0 ? 331 : 330);
+    }
+    // A minecart parked on the rail.
+    this.setBlockIfInChunk(chunk, wx - 4, surface + 1, wz + 6, 332);
   }
 
   /** A mini cinema: a raised stage with a big TV screen and sofa seats. */

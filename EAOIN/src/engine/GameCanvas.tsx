@@ -55,6 +55,7 @@ import { AncientCityRift } from '../events/AncientCityRift';
 import { aiReply, npcPersona } from '../ai/AIAssistant';
 import { ScreenSystem } from '../effects/ScreenSystem';
 import { ColoredLighting } from '../effects/ColoredLighting';
+import { WorldsEdgeRuntime } from '../effects/WorldsEdgeRuntime';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -697,6 +698,9 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         lightMixing: superSettings?.lightMixing ?? true,
         godRays: superSettings?.godRays ?? 0.4,
       });
+      // World's Edge — the end-of-world monster (exclusive survival world type).
+      const worldsEdge = new WorldsEdgeRuntime();
+      worldsEdge.setActive(worldTypeFromSeed(seed) === 'worlds_edge');
 
       // Install UI publishers before wiring any subsystem callbacks. Startup
       // code should never be able to invoke a callback whose const is still in
@@ -1592,6 +1596,38 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           showActionMessage(`Entering ${approach.planet.name}'s atmosphere — welcome to ${dimensionRuntime.getDefinition().name}`);
         }
         realityRifts.update(deltaSeconds, camera.position, camera.position);
+        // World's Edge: the end-of-world monster timer & edge grab.
+        if (worldsEdge.isActive()) {
+          const edgeRes = worldsEdge.tick(
+            deltaSeconds,
+            Math.hypot(camera.position.x, camera.position.z),
+            gameModeRef.current === 'creative' || gameModeRef.current === 'incredible',
+            performance.now()
+          );
+          if (edgeRes?.message) showActionMessage(edgeRes.message);
+          if (edgeRes?.grabPlayer) {
+            // Tentacle grab: flash, pull down, die to the monster.
+            showActionMessage('🦑 The monster\u2019s tentacles drag you into the dark\u2026');
+            const next = applyDamage(survivalStatsRef.current, 9999);
+            survivalStatsRef.current = next; publishSurvivalStats(next);
+            setDead(true);
+          }
+          if (edgeRes?.corruptAt) {
+            // Corrupt the land: turn a nearby block column into corrupted stone.
+            const cx = edgeRes.corruptAt.x, cz = edgeRes.corruptAt.z;
+            const gy = terrain.getSurfaceHeight(cx, cz);
+            if (gy >= 1) {
+              terrain.setBlockAt(cx, gy, cz, 313);
+              renderer.rebuildForWorldBlock(cx, cz);
+            }
+          }
+          if (edgeRes?.worldConsumed) {
+            showActionMessage('💀 The world has been consumed. This run is over.');
+            const next = applyDamage(survivalStatsRef.current, 9999);
+            survivalStatsRef.current = next; publishSurvivalStats(next);
+            setDead(true);
+          }
+        }
         // Ancient-City rift portal: animate it, and step through to teleport to
         // the Rift Dimension.
         if (ancientCityRift.isActive()) {
@@ -2252,6 +2288,23 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             // Ancient-City rift puzzle: Note Blocks + Jukebox.
             const tx = target.target.x, ty = target.target.y, tz = target.target.z;
             const tb = terrain.getBlockAt(tx, ty, tz);
+            if (tb === 330 || tb === 331 || tb === 332) {
+              // Rail / Minecart: right-click a minecart on a rail to ride it
+              // forward along the track (a short fast ride).
+              viewModel.swing();
+              if (tb === 332) {
+                // Find the rail direction and boost the player along it.
+                const dirX = terrain.getBlockAt(tx + 1, ty, tz) === 330 || terrain.getBlockAt(tx + 1, ty, tz) === 331 ? 1 : -1;
+                const dirZ = terrain.getBlockAt(tx, ty, tz + 1) === 330 || terrain.getBlockAt(tx, ty, tz + 1) === 331 ? 1 : -1;
+                camera.position.x += dirX * 6;
+                camera.position.z += dirZ * 6;
+                showActionMessage('🚂 You hop in the minecart and zoom along the rail!');
+              } else {
+                showActionMessage('🚂 Place a Minecart on the rail, then click it to ride.');
+              }
+              audio.play('ui', settingsRef.current);
+              return;
+            }
             if (tb === 315) {
               // MCP Player Block — spawns an NPC that acts like a player type.
               viewModel.swing();

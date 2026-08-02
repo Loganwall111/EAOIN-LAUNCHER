@@ -417,6 +417,15 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   327: { id: 327, name: 'Computer', shortName: 'PC', category: 'functional', solid: true, transparent: false, hardness: 1.2, lightLevel: 8, emissive: true, stackSize: 64, color: '#3a3a44', accentColor: '#8ad0ff' },
   328: { id: 328, name: 'Shelf', shortName: 'SH', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#8a6a3a', accentColor: '#b08a4a' },
   329: { id: 329, name: 'Lamp (Fancy)', shortName: 'LF', category: 'decoration', solid: true, transparent: false, hardness: 0.5, lightLevel: 13, emissive: true, stackSize: 64, color: '#f0d878', accentColor: '#fff0c0' },
+  330: { id: 330, name: 'Rail', shortName: 'RA', category: 'functional', solid: false, transparent: true, hardness: 0.2, lightLevel: 0, emissive: false, stackSize: 64, color: '#9a9a9a', accentColor: '#c0c0c0' },
+  331: { id: 331, name: 'Powered Rail', shortName: 'PR', category: 'functional', solid: false, transparent: true, hardness: 0.2, lightLevel: 6, emissive: true, stackSize: 64, color: '#c0603a', accentColor: '#ffd060' },
+  332: { id: 332, name: 'Minecart', shortName: 'MC', category: 'functional', solid: false, transparent: true, hardness: 0.2, lightLevel: 0, emissive: false, stackSize: 1, color: '#b0b0b0', accentColor: '#e0e0e0' },
+  333: { id: 333, name: 'Stalactite', shortName: 'ST', category: 'nature', solid: true, transparent: false, hardness: 1.5, lightLevel: 0, emissive: false, stackSize: 64, color: '#a89070', accentColor: '#c8b090' },
+  334: { id: 334, name: 'Stalagmite', shortName: 'SM', category: 'nature', solid: true, transparent: false, hardness: 1.5, lightLevel: 0, emissive: false, stackSize: 64, color: '#a89070', accentColor: '#c8b090' },
+  335: { id: 335, name: 'Glow Water (Purple)', shortName: 'GP', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#c88aff', accentColor: '#e8d0ff' },
+  336: { id: 336, name: 'Glow Water (Pink)', shortName: 'GK', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#ff8ad0', accentColor: '#ffd0ec' },
+  337: { id: 337, name: 'Winter Water (Frozen)', shortName: 'WF', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#bfe8ff', accentColor: '#e0f6ff' },
+  338: { id: 338, name: 'Beach Water (Turquoise)', shortName: 'WB', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#6ad0c8', accentColor: '#c0f0ea' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */

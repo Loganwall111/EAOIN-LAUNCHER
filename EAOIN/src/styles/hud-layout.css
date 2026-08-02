@@ -130,14 +130,22 @@
   white-space: nowrap;
 }
 
-/* Status effects move below the objectives tracker rather than overlapping. */
+/* Status effects: moved up beside the minimap (top-right), shrunk small, so
+   they no longer cover the bottom-left game menus. */
 .eaoin-hud .hud-effects {
-  top: auto !important;
-  bottom: calc(var(--hud-bottom-reserve) + 96px) !important;
-  left: var(--hud-gutter) !important;
-  width: 176px !important;
+  top: var(--hud-gutter) !important;
+  right: 256px !important;
+  left: auto !important;
+  bottom: auto !important;
+  width: 132px !important;
+  max-height: 30vh !important;
+  overflow: auto;
   z-index: var(--hud-z-panel);
 }
+.eaoin-hud .hud-effects .effect-row { padding: 3px 4px; gap: 6px; }
+.eaoin-hud .hud-effects .fx-icon { font-size: 13px; }
+.eaoin-hud .hud-effects .fx-name { font-size: 10px; }
+.eaoin-hud .hud-effects .fx-time { font-size: 9px; }
 
 /* --------------------------------------------------------------------------
    TOP-CENTRE — compass and clock
@@ -235,10 +243,11 @@
 }
 
 .eaoin-hud .hud-quests {
-  /* Sits directly under the minimap, which is ~200px tall. */
-  top: 232px !important;
+  /* Sits clearly BELOW the minimap (which is ~200px + its footer). Kept far
+     enough down that it never overlaps the map. */
+  top: 252px !important;
   right: var(--hud-gutter) !important;
-  max-height: 26vh !important;
+  max-height: 24vh !important;
   overflow: auto;
   z-index: var(--hud-z-panel);
 }
