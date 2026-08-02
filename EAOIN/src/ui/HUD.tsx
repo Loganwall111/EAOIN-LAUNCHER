@@ -190,6 +190,50 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
     return () => window.removeEventListener('keydown', handler);
   }, [onToggleObjectives, onToggleSystems]);
 
+  /* ---- draggable in-game panels ----
+     Any open panel (.menu-panel / .inventory-panel / .settings-panel) can be
+     dragged around by its header so it never gets stuck underneath another
+     panel. A pointerdown on the header starts a drag; pointermove moves it. */
+  useEffect(() => {
+    let dragEl: HTMLElement | null = null;
+    let dx = 0;
+    let dy = 0;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      const header = t?.closest?.('.inventory-header') as HTMLElement | null;
+      const panel = header?.parentElement;
+      if (!panel) return;
+      if (!panel.classList.contains('menu-panel') && !panel.classList.contains('inventory-panel') && !panel.classList.contains('settings-panel')) return;
+      dragEl = panel;
+      const rect = panel.getBoundingClientRect();
+      dx = e.clientX - rect.left;
+      dy = e.clientY - rect.top;
+      panel.style.cursor = 'grabbing';
+      e.preventDefault();
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragEl) return;
+      dragEl.style.left = `${Math.max(0, e.clientX - dx)}px`;
+      dragEl.style.top = `${Math.max(0, e.clientY - dy)}px`;
+      dragEl.style.right = 'auto';
+      dragEl.style.bottom = 'auto';
+      dragEl.style.transform = 'none';
+      dragEl.style.margin = '0';
+    };
+    const onUp = () => {
+      if (dragEl) dragEl.style.cursor = '';
+      dragEl = null;
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
   useEffect(() => {
     if (!settings.multiplayerServersEnabled) setServerMenuOpen(false);
   }, [settings.multiplayerServersEnabled]);

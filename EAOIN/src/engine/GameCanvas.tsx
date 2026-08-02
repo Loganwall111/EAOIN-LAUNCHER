@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, Scene, StandardMaterial, Texture, UniversalCamera, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DefaultRenderingPipeline, GlowLayer, Mesh, MeshBuilder, RawTexture, Scene, StandardMaterial, Texture, UniversalCamera, Vector3 } from '@babylonjs/core';
 import { GameAudio } from '../audio/GameAudio';
 import { AmbienceEngine, ambienceForBiome } from '../audio/AmbienceEngine';
 import { SettlementRuntime } from '../civilization/SettlementRuntime';
@@ -133,6 +133,8 @@ interface GameCanvasProps {
   onOpenCharacter?: () => void;
   /** Quit to the launcher (instead of exiting the app). */
   onExitToLauncher?: () => void;
+  /** Character appearance, used to texture the third-person avatar. */
+  appearance?: import('../ui/theme').CharacterAppearance;
 }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
@@ -210,7 +212,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher, appearance }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -435,9 +437,23 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       camera.ellipsoidOffset = new Vector3(0, PLAYER_COLLIDER_OFFSET_Y, 0);
       camera.keysUp = [87, 38]; camera.keysDown = [83, 40]; camera.keysLeft = [65, 37]; camera.keysRight = [68, 39];
 
-      const skin = new StandardMaterial('player_skin', scene); skin.diffuseColor = new Color3(0.72, 0.43, 0.28);
-      const shirt = new StandardMaterial('player_shirt', scene); shirt.diffuseColor = new Color3(0.12, 0.42, 0.78);
-      const pants = new StandardMaterial('player_pants', scene); pants.diffuseColor = new Color3(0.20, 0.28, 0.50);
+      // Player appearance → textured third-person avatar. Build materials from
+      // the character's skin / hair / shirt / pants / cape colours, with a real
+      // face drawn on the head (not a flat box).
+      const app = appearance ?? { skinTone: '#c98d6a', hairColor: '#3a2a1a', shirtColor: '#2080d0', pantsColor: '#2f3640', cape: 'none' };
+      const personTex = buildPersonTexture(app);
+      const texFrom = (part: 'head' | 'body' | 'leg') => {
+        const data = personTex[part];
+        const t = RawTexture.CreateRGBATexture(data, 16, 16, scene, true, false, Texture.NEAREST_NEAREST_MIPLINEAR);
+        const m = new StandardMaterial(`player_${part}`, scene);
+        m.diffuseTexture = t;
+        m.specularColor = new Color3(0.2, 0.2, 0.2);
+        m.specularPower = 14;
+        return m;
+      };
+      const skin = texFrom('head');
+      const shirt = texFrom('body');
+      const pants = texFrom('leg');
       // First-person view model: a hinged arm that actually holds the selected
       // block or item. Replaces three stacked boxes that showed nothing in the
       // hand and slid around the screen instead of swinging.
@@ -461,9 +477,21 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const legB = MeshBuilder.CreateBox('avatar_leg_b', { width: 0.25, height: 0.85, depth: 0.28 }, scene);
       legB.parent = avatar; legB.position.set(0.18, 0.4, 0); legB.material = pants; legB.isPickable = false;
       const armA = MeshBuilder.CreateBox('avatar_arm_a', { width: 0.22, height: 0.82, depth: 0.25 }, scene);
-      armA.parent = avatar; armA.position.set(-0.48, 1.24, 0); armA.material = skin; armA.isPickable = false;
+      armA.parent = avatar; armA.position.set(-0.48, 1.24, 0); armA.material = shirt; armA.isPickable = false;
       const armB = MeshBuilder.CreateBox('avatar_arm_b', { width: 0.22, height: 0.82, depth: 0.25 }, scene);
-      armB.parent = avatar; armB.position.set(0.48, 1.24, 0); armB.material = skin; armB.isPickable = false;
+      armB.parent = avatar; armB.position.set(0.48, 1.24, 0); armB.material = shirt; armB.isPickable = false;
+      // Cape on the back (only if a cape style is equipped).
+      let capeMesh: Mesh | null = null;
+      if (app.cape && app.cape !== 'none') {
+        capeMesh = MeshBuilder.CreateBox('avatar_cape', { width: 0.62, height: 0.78, depth: 0.04 }, scene);
+        capeMesh.parent = avatar;
+        capeMesh.position.set(0, 1.15, -0.2);
+        const cm = new StandardMaterial('avatar_cape_mat', scene);
+        cm.diffuseColor = capeColor3(app.cape);
+        cm.emissiveColor = capeColor3(app.cape).scale(0.4);
+        capeMesh.material = cm;
+        capeMesh.isPickable = false;
+      }
       // Walking animation
       let walkPhase = 0;
       let thirdPerson = false;
@@ -1713,8 +1741,13 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           tempForward.normalize();
           tempAvatarFeet.copyFrom(tempForward).scaleInPlace(THIRD_PERSON_DISTANCE).addInPlace(camera.position);
           avatar.position.x = tempAvatarFeet.x;
-          avatar.position.y = camera.position.y - 1.62;
           avatar.position.z = tempAvatarFeet.z;
+          // Stand the avatar on the REAL terrain surface at its own feet so it
+          // never "falls off" over a drop or clips through a rise (the old code
+          // reused the camera's feet height, so the model floated/sank on
+          // uneven ground).
+          const avSurface = terrain.getSurfaceHeight(Math.floor(avatar.position.x), Math.floor(avatar.position.z));
+          avatar.position.y = (avSurface >= 1 ? avSurface + 1 : camera.position.y - 1.62);
           // Face the same direction as the camera so the player sees the back
           // of their character, like a Minecraft-style third-person chase view.
           avatar.rotation.y = camera.rotation.y;
@@ -2864,5 +2897,76 @@ function flowWater(
       terrain.setBlockAt(nx, c.y, nz, WATER);
       stack.push({ x: nx, y: c.y, z: nz, dist: c.dist + 1 });
     }
+  }
+}
+
+/* ===========================================================================
+   Third-person avatar texture helpers.
+   ========================================================================== */
+
+/** Parse a #rrggbb hex string into an RGB triplet 0..255. */
+function hexRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '');
+  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean.padEnd(6, '0');
+  return {
+    r: parseInt(full.slice(0, 2), 16),
+    g: parseInt(full.slice(2, 4), 16),
+    b: parseInt(full.slice(4, 6), 16),
+  };
+}
+
+/** Build 16x16 RGBA textures for the player head / body / legs. */
+function buildPersonTexture(app: {
+  skinTone: string; hairColor: string; shirtColor: string; pantsColor: string;
+}): { head: Uint8Array; body: Uint8Array; leg: Uint8Array } {
+  const size = 16;
+  const make = (fill: string) => {
+    const { r, g, b } = hexRgb(fill);
+    const buf = new Uint8Array(size * size * 4);
+    for (let i = 0; i < size * size; i++) {
+      buf[i * 4] = r; buf[i * 4 + 1] = g; buf[i * 4 + 2] = b; buf[i * 4 + 3] = 255;
+    }
+    return buf;
+  };
+  const setPx = (buf: Uint8Array, x: number, y: number, c: string) => {
+    const { r, g, b } = hexRgb(c);
+    const i = (y * size + x) * 4;
+    buf[i] = r; buf[i + 1] = g; buf[i + 2] = b; buf[i + 3] = 255;
+  };
+  const shade = (c: string, k: number) => {
+    const { r, g, b } = hexRgb(c);
+    return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
+  };
+
+  // Head: skin base + hair on top + eyes + mouth.
+  const head = make(app.skinTone);
+  const hr = hexRgb(app.hairColor);
+  for (let x = 1; x < 15; x++) for (let y = 0; y < 6; y++) {
+    const i = (y * size + x) * 4; head[i] = hr.r; head[i + 1] = hr.g; head[i + 2] = hr.b;
+  }
+  setPx(head, 5, 8, '#20242a'); setPx(head, 10, 8, '#20242a'); // eyes
+  setPx(head, 7, 12, '#8a5a3a'); setPx(head, 8, 12, '#8a5a3a'); // mouth
+
+  // Body: shirt colour with a darker side band and a collar.
+  const body = make(app.shirtColor);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 3; x++) setPx(body, x, y, shade(app.shirtColor, 0.7));
+  for (let x = 0; x < 16; x++) setPx(body, x, 3, shade(app.shirtColor, 1.2));
+
+  // Legs: pants colour.
+  const leg = make(app.pantsColor);
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 3; x++) setPx(leg, x, y, shade(app.pantsColor, 0.7));
+
+  return { head, body, leg };
+}
+
+/** Cape colour as a Babylon Color3 by style id. */
+function capeColor3(cape: string): Color3 {
+  switch (cape) {
+    case 'classic': return new Color3(0.3, 0.6, 0.5);
+    case 'cosmic': return new Color3(0.45, 0.32, 1);
+    case 'ember': return new Color3(1, 0.5, 0.25);
+    case 'galaxy': return new Color3(0.35, 0.3, 1);
+    case 'knight': return new Color3(0.4, 0.5, 0.6);
+    default: return new Color3(0.3, 0.3, 0.35);
   }
 }

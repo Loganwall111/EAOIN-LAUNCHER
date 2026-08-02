@@ -528,6 +528,7 @@ export default function App() {
           onGameModeChange={setGameMode}
           onOpenCharacter={() => { exitToMenu(); setAppPhase('creator'); }}
           onExitToLauncher={() => { exitToMenu(); setAppPhase('launcher'); }}
+          appearance={appearance}
         />
         <HudFrame
           appearance={appearance}

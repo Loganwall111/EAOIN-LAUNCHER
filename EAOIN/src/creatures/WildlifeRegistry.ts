@@ -782,6 +782,46 @@ const EAOIN_NATIVES: SpeciesDefinition[] = [
     loot: [{ blockId: 16, amount: 3 }],
     description: 'A great jellyfish that floats between the coloured hills of the Rift, trailing ribbons of light.',
   },
+  {
+    id: 'allay', name: 'Allay', emoji: '🧚', bodyPlan: 'bird', habitat: 'air', temperament: 'passive',
+    palette: { body: '#7fd0e0', head: '#9fe0f0', limb: '#5fb0c0', accent: '#cff0ff' },
+    scale: 0.45, health: 20, speed: 2.4, damage: 0,
+    biomes: ['woodland_mansion', 'forest', 'meadow', 'taiga'], weight: 2,
+    loot: [{ blockId: 16, amount: 1 }],
+    description: 'A tiny fae that loves music and collects dropped items for you.',
+  },
+  {
+    id: 'sniffer', name: 'Sniffer', emoji: '🦤', bodyPlan: 'quadruped', habitat: 'land', temperament: 'passive',
+    palette: { body: '#8a6a3a', head: '#9a7a4a', limb: '#6a4a2a', accent: '#c8a86a' },
+    scale: 1.1, health: 30, speed: 0.5, damage: 0,
+    biomes: ['plains', 'savanna', 'beach'], weight: 2,
+    loot: [{ blockId: 2, amount: 2 }],
+    description: 'A gentle ancient beast that sniffs out long-buried seeds.',
+  },
+  {
+    id: 'armadillo', name: 'Armadillo', emoji: '🦔', bodyPlan: 'quadruped', habitat: 'land', temperament: 'passive',
+    palette: { body: '#a8895a', head: '#c8a86a', limb: '#8a6a3a', accent: '#e0c090' },
+    scale: 0.6, health: 18, speed: 0.7, damage: 0,
+    biomes: ['savanna', 'badlands', 'desert'], weight: 4,
+    loot: [{ blockId: 3, amount: 1 }],
+    description: 'Rolls into a ball when startled. Its scutes are worth collecting.',
+  },
+  {
+    id: 'breeze', name: 'Breeze', emoji: '🌪️', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#cfe0ef', head: '#e0eef7', limb: '#9fb8cf', accent: '#ffffff' },
+    scale: 1.0, health: 60, speed: 2.0, damage: 10,
+    biomes: ['trial_chamber', 'monument', 'storm_dimension'], weight: 3, nocturnal: true,
+    loot: [{ blockId: 16, amount: 2 }],
+    description: 'A whirlwind of wind that leaps between blocks and fires gusts of wind.',
+  },
+  {
+    id: 'tadpole', name: 'Tadpole', emoji: '🫧', bodyPlan: 'fish', habitat: 'water', temperament: 'passive',
+    palette: { body: '#4a5a4a', head: '#5a6a5a', limb: '#3a4a3a', accent: '#8a9a8a' },
+    scale: 0.25, health: 6, speed: 0.8, damage: 0,
+    biomes: ['swamp', 'mangrove_swamp', 'pond'], weight: 6, depthRange: [1, 3],
+    loot: [],
+    description: 'A tiny wriggling tadpole that will one day become a frog.',
+  },
 ];
 
 export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS, ...EAOIN_NATIVES];

@@ -599,3 +599,45 @@
 .game-hud .command-console {
   bottom: calc(var(--hud-bottom-reserve) + 16px) !important;
 }
+
+/* --------------------------------------------------------------------------
+   Overlap / stacking fixes (BATCH 55)
+   -------------------------------------------------------------------------- */
+
+/* GameCanvas owns the real chat panel; hide the decorative HudFrame chat so
+   there is only ever ONE chat on screen (the double-chat overlap bug). */
+.eaoin-hud .hud-chat { display: none !important; }
+
+/* Give the always-visible frame panels clean, non-overlapping corners and
+   pointer-events so nothing covers the pause / escape buttons. */
+.eaoin-hud .hud-player { pointer-events: auto; }
+.eaoin-hud .hud-minimap { pointer-events: auto; }
+.eaoin-hud .hud-nav { pointer-events: auto; }
+
+/* Minimap and quests: keep them to the top-right but make sure the quests and
+   systems column never cover the map or the pause panel. */
+.eaoin-hud .hud-minimap {
+  top: var(--hud-gutter) !important;
+  right: var(--hud-gutter) !important;
+  max-width: 232px;
+  z-index: var(--hud-z-panel);
+}
+
+/* The pause panel must sit above EVERYTHING in-game and be fully clickable. */
+.pause-panel {
+  z-index: 1000 !important;
+  pointer-events: auto;
+}
+
+/* Make the in-game draggable HUD panels (inventory/settings/shaders/etc.)
+   look draggable with a grab cursor and no accidental overlap. */
+.game-hud .menu-panel,
+.game-hud .inventory-panel,
+.game-hud .settings-panel {
+  cursor: grab;
+}
+.game-hud .menu-panel:active,
+.game-hud .inventory-panel:active,
+.game-hud .settings-panel:active {
+  cursor: grabbing;
+}
