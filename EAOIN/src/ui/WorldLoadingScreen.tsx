@@ -121,30 +121,12 @@ export default function WorldLoadingScreen({
           This fully replaces the old flat CSS particle 'snowstorm'. */}
       <WarpTunnel3D progress={percent} ready={ready} />
 
-      {/* Minimal center readout so the warp is the star. */}
+      {/* Transparent overlay readout (no box) so the warp is the star. */}
       <div className="wl-content">
         <div className="wl-world-name">{worldName}</div>
         <div className="wl-world-type">{type.name}</div>
         <div className="wl-seed">Seed: {seed}</div>
         <div className="wl-stage">{stageLabel}</div>
-
-        {/* Purple loading bar pinned to the bottom of the screen. */}
-        <div className="wl-bar-block">
-          <div className="wl-bar-row">
-            <span className="wl-stage-small">{chunkDetail ?? 'Loading terrain'}</span>
-            <span className="wl-pct">{Math.round(percent)}%</span>
-          </div>
-          <div className="wl-bar-track" aria-label={`World loading ${Math.round(percent)} percent`}>
-            <div className="wl-bar-fill" style={{ width: `${percent}%` }} />
-            <div className="wl-bar-segments" aria-hidden="true">
-              {Array.from({ length: 20 }, (_, i) => <span key={i} />)}
-            </div>
-          </div>
-          <div className="wl-load-detail">
-            <span>Entering the cosmos…</span>
-            <span>{elapsedSeconds}s</span>
-          </div>
-        </div>
 
         {(loadingProgress?.error || timedOut) && (
           <div className="wl-startup-error" role="alert">
@@ -164,6 +146,24 @@ export default function WorldLoadingScreen({
         <div className="wl-tip">
           <span className="wl-tip-label">TIP</span>
           <span className="wl-tip-text">{TIPS[tipIndex]}</span>
+        </div>
+      </div>
+
+      {/* Purple loading bar pinned to the very bottom of the screen. */}
+      <div className="wl-bar-block">
+        <div className="wl-bar-row">
+          <span className="wl-stage-small">{chunkDetail ?? 'Loading terrain'}</span>
+          <span className="wl-pct">{Math.round(percent)}%</span>
+        </div>
+        <div className="wl-bar-track" aria-label={`World loading ${Math.round(percent)} percent`}>
+          <div className="wl-bar-fill" style={{ width: `${percent}%` }} />
+          <div className="wl-bar-segments" aria-hidden="true">
+            {Array.from({ length: 20 }, (_, i) => <span key={i} />)}
+          </div>
+        </div>
+        <div className="wl-load-detail">
+          <span>Entering the cosmos…</span>
+          <span>{elapsedSeconds}s</span>
         </div>
       </div>
     </div>

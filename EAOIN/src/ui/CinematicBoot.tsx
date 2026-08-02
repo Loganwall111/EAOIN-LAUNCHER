@@ -110,7 +110,12 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
   }, [onComplete]);
 
   const skip = useCallback(() => {
-    setPhase((current) => (current === 'READY' || current === 'DONE' ? current : 'READY'));
+    setPhase((current) => {
+      // The ONEBLOCKAWAY STUDIO card is the AAA title sequence — a stray click
+      // must not skip past it, or players never see the studio entrance.
+      if (current === 'STUDIO') return current;
+      return current === 'READY' || current === 'DONE' ? current : 'READY';
+    });
   }, []);
 
   /* ------------------------------ input ----------------------------------- */
@@ -369,6 +374,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
 
       {phase === 'STUDIO' && (
         <main className="cb-scene cb-studio-scene" aria-label="Onblockaway Studios">
+          <div className="cb-studio-burst" aria-hidden="true" />
           <div className="cb-studio-sigil" aria-hidden="true">
             <span className="cb-sigil-face cb-sigil-one" />
             <span className="cb-sigil-face cb-sigil-two" />
@@ -378,6 +384,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
             <span className="cb-eyebrow">An original production by</span>
             <h1 className="cb-studio-name">ONEBLOCKAWAY</h1>
             <div className="cb-studio-rule"><span>STUDIO</span></div>
+            <div className="cb-studio-tagline">PRESENTS</div>
           </div>
         </main>
       )}

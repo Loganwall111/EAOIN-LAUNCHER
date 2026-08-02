@@ -448,50 +448,77 @@
 
 .cb-studio-scene {
   align-content: center;
-  gap: clamp(28px, 5vh, 54px);
+  gap: clamp(22px, 4vh, 44px);
   animation: cbSceneBeat 3s ease both;
+  text-align: center;
+}
+
+/* Soft full-screen glow behind the studio card so it reads as a big moment. */
+.cb-studio-burst {
+  position: absolute;
+  inset: -25%;
+  background: radial-gradient(circle at 50% 40%, rgba(70, 60, 255, 0.30), rgba(160, 80, 255, 0.12) 40%, transparent 70%);
+  pointer-events: none;
+  animation: cbStudioBurst 3.2s ease-in-out infinite alternate;
+}
+@keyframes cbStudioBurst {
+  from { opacity: 0.5; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1.06); }
 }
 
 .cb-studio-sigil {
   position: relative;
-  width: clamp(92px, 10vw, 128px);
-  height: clamp(92px, 10vw, 128px);
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.5));
+  width: clamp(110px, 14vw, 180px);
+  height: clamp(110px, 14vw, 180px);
+  filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.6));
+  animation: cbSigilSpin 10s linear infinite;
 }
+@keyframes cbSigilSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .cb-sigil-face {
   position: absolute;
   width: 52%;
   height: 52%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(145deg, #44586b, #172431 72%);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: linear-gradient(145deg, #5a6a80, #1c2c3c 72%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .cb-sigil-one { left: 24%; top: 0; transform: rotate(45deg); }
-.cb-sigil-two { left: 0; bottom: 0; transform: rotate(45deg); background: linear-gradient(145deg, #2b7891, #123c4c); }
-.cb-sigil-three { right: 0; bottom: 0; transform: rotate(45deg); background: linear-gradient(145deg, #b17f22, #47300c); }
+.cb-sigil-two { left: 0; bottom: 0; transform: rotate(45deg); background: linear-gradient(145deg, #2f8aa8, #143c4c); }
+.cb-sigil-three { right: 0; bottom: 0; transform: rotate(45deg); background: linear-gradient(145deg, #c08a28, #4a320c); }
 
 .cb-studio-lockup { text-align: center; }
 
 .cb-studio-name {
-  margin: 12px 0 20px;
-  font: 800 clamp(34px, 7vw, 92px)/0.9 var(--ui-font, sans-serif);
-  letter-spacing: 0.18em;
-  text-indent: 0.18em;
+  margin: 12px 0 22px;
+  font: 900 clamp(58px, 15vw, 200px)/0.85 var(--ui-font, sans-serif);
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
   color: var(--cb-white);
-  text-shadow: 0 0 34px rgba(98, 216, 255, 0.17), 0 8px 24px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(180deg, #ffffff 0%, #eaf6ff 42%, #9fd4ff 60%, #5f7fff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 44px rgba(98, 216, 255, 0.35)) drop-shadow(0 12px 30px rgba(0, 0, 0, 0.65));
+  animation: cbStudioZoom 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes cbStudioZoom {
+  from { transform: scale(2.6); opacity: 0; filter: blur(20px) drop-shadow(0 0 44px rgba(98,216,255,0.4)); }
+  40%  { opacity: 1; }
+  to   { transform: scale(1); opacity: 1; filter: blur(0) drop-shadow(0 0 44px rgba(98,216,255,0.35)); }
 }
 
 .cb-studio-rule {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 17px;
-  color: rgba(198, 218, 234, 0.62);
-  font: 700 9px/1 var(--ui-font, sans-serif);
-  letter-spacing: 0.62em;
-  text-indent: 0.62em;
+  gap: 20px;
+  color: rgba(210, 228, 244, 0.85);
+  font: 800 13px/1 var(--ui-font, sans-serif);
+  letter-spacing: 0.66em;
+  text-indent: 0.66em;
+  text-transform: uppercase;
 }
 
 .cb-studio-rule::before,
@@ -499,10 +526,25 @@
   content: '';
   width: clamp(44px, 8vw, 110px);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(98, 216, 255, 0.48));
+  background: linear-gradient(90deg, transparent, rgba(98, 216, 255, 0.6));
 }
 
 .cb-studio-rule::after { transform: rotate(180deg); }
+
+/* Big "PRESENTS" stamp under the studio name. */
+.cb-studio-tagline {
+  margin-top: 22px;
+  font: 800 clamp(16px, 2.6vw, 30px)/1 var(--ui-font, sans-serif);
+  letter-spacing: 0.9em;
+  text-indent: 0.9em;
+  color: #cfe2ff;
+  text-shadow: 0 0 30px rgba(120, 160, 255, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6);
+  animation: cbTaglineIn 1.2s 0.5s ease both;
+}
+@keyframes cbTaglineIn {
+  from { opacity: 0; letter-spacing: 1.4em; }
+  to   { opacity: 1; letter-spacing: 0.9em; }
+}
 
 /* ---------------------------------------------------------------- credits */
 

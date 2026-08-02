@@ -122,7 +122,10 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       const r = TUBE_RADIUS * (0.3 + Math.random() * 0.55);
       const s = MeshBuilder.CreateSphere(`warp_star_${i}`, { diameter: 0.22, segments: 4 }, scene);
       const sm = new StandardMaterial(`warp_star_mat_${i}`, scene);
-      sm.emissiveColor = new Color3(1, 1, 1);
+      // Colour the hyperdrive stars so the tunnel is full of moving light, not
+      // just white specks.
+      const hue = Math.random() * 360;
+      sm.emissiveColor = Color3.FromHSV(hue, 0.65, 1);
       sm.diffuseColor = new Color3(1, 1, 1);
       s.material = sm;
       s.position.set(Math.cos(ang) * r, Math.sin(ang) * r, -Math.random() * TUBE_LENGTH);
@@ -163,6 +166,32 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       pl.range = 40;
       rimLights.push(pl);
     }
+
+    // Vortex ring: dozens of glowing motes that swirl around the tunnel while
+    // you fly, giving the wormhole a living, rotating core.
+    const vortex: Mesh[] = [];
+    const VORTEX_COUNT = 64;
+    for (let i = 0; i < VORTEX_COUNT; i++) {
+      const ang = (i / VORTEX_COUNT) * Math.PI * 2;
+      const r = TUBE_RADIUS * (0.35 + Math.random() * 0.45);
+      const v = MeshBuilder.CreateSphere(`warp_vortex_${i}`, { diameter: 0.16, segments: 4 }, scene);
+      const vm = new StandardMaterial(`warp_vortex_mat_${i}`, scene);
+      const hue = (i / VORTEX_COUNT) * 360;
+      const c = Color3.FromHSV(hue, 0.9, 1);
+      vm.emissiveColor = c;
+      vm.diffuseColor = c;
+      vm.specularColor = Color3.Black();
+      v.material = vm;
+      v.position.set(Math.cos(ang) * r, Math.sin(ang) * r, -Math.random() * TUBE_LENGTH);
+      v.isPickable = false;
+      vortex.push(v);
+    }
+
+    // A bright beacon light at the far end that swells as you arrive.
+    const beacon = new PointLight('warp_beacon', new Vector3(0, 0, TUNNEL_END + 22), scene);
+    beacon.diffuse = new Color3(0.55, 0.3, 1);
+    beacon.intensity = 0;
+    beacon.range = 220;
 
     // --- 5. Cosmic Entity (3D fresnel sphere) ----------------------------
     const entity = new TransformNode('warp_entity', scene);
@@ -229,6 +258,19 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       if (tubeMat.emissiveTexture) (tubeMat.emissiveTexture as DynamicTexture).vOffset = offset;
       if (innerMat.emissiveTexture) (innerMat.emissiveTexture as DynamicTexture).vOffset = -offset * 1.4;
 
+      // Hue-shift the tube walls so the wormhole breathes through colour.
+      const hueT = (performance.now() * 0.00004) % 1;
+      tubeMat.emissiveColor = Color3.FromHSV(hueT * 360, 0.85, 0.9);
+
+      // Spin the vortex ring around the tunnel's long axis.
+      for (const v of vortex) {
+        const r = Math.hypot(v.position.x, v.position.y);
+        if (r <= 0.001) continue;
+        const a = Math.atan2(v.position.y, v.position.x) + 0.02 * starSpeed;
+        v.position.x = Math.cos(a) * r;
+        v.position.y = Math.sin(a) * r;
+      }
+
       // Pulse the entity.
       if (entity.isEnabled()) {
         const t = performance.now() * 0.001;
@@ -243,6 +285,12 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       rimLights.forEach((pl, i) => {
         pl.intensity = 1.6 + Math.sin(performance.now() * 0.003 + i) * 1.2;
       });
+
+      // Beacon swells as we approach the end.
+      beacon.intensity = p >= 95 ? 60 + Math.sin(performance.now() * 0.01) * 20 : p * 0.2;
+
+      // Subtle camera roll for a disorienting warp feel.
+      camera.rotation.z = Math.sin(performance.now() * 0.0006) * 0.05;
 
       // Materialize the Cosmic Entity as we near the end.
       if (p >= 99 && !entity.isEnabled()) entity.setEnabled(true);

@@ -84,19 +84,28 @@
   background: radial-gradient(ellipse at 50% 45%, transparent 22%, rgba(0,0,0,0.88) 92%);
 }
 
+/* Transparent overlay — NO box. The warp tunnel fills the screen; this is just
+   the world name / type / stage readout floating over it. (An earlier version
+   painted a big dark-gray panel here, which hid the wormhole.) */
 .wl-content {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
   width: min(720px, 90vw);
   display: grid;
-  gap: 22px;
-  padding: 30px 34px;
-  background: rgba(8, 10, 14, 0.82);
-  border: 3px solid #2b3240;
-  border-top-color: #59636f;
-  border-left-color: #59636f;
-  border-radius: 4px;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.7);
+  gap: 10px;
+  text-align: center;
+  color: #fff;
+  z-index: 5;
+  background: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
+.wl-startup-error { pointer-events: auto; }
+.wl-tip { pointer-events: auto; }
 
 .wl-header { display: grid; gap: 9px; text-align: center; }
 
@@ -143,9 +152,9 @@
 .wl-bar-block {
   position: fixed;
   left: 50%;
-  bottom: 26px;
+  bottom: 12px;
   transform: translateX(-50%);
-  width: min(720px, 90vw);
+  width: min(760px, 92vw);
   display: grid;
   gap: 6px;
   z-index: 6;

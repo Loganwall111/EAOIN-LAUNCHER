@@ -251,14 +251,25 @@ describe('CinematicBoot', () => {
     expect(container.querySelector('.cb-studio-scene, .cinematic-studio')).not.toBeNull();
   });
 
-  it('skips straight to the ready card on the first key press', () => {
-    // 2.0: boot is pure presentation, so skipping jumps to "press any key"
-    // rather than to a fake loading stage.
+  it('protects the ONEBLOCKAWAY studio intro from being skipped on the first press', () => {
+    // 3.x: the studio title card is the AAA intro and plays FIRST, so a stray
+    // key/click must not skip past it. After it plays out, a press skips the
+    // remaining boot straight to "press any key".
+    vi.useFakeTimers();
     const { container } = render(<CinematicBoot onComplete={noop} />);
+
+    // Studio is the first card and can't be skipped away.
+    fireEvent.keyDown(window, { key: 'Enter' });
+    expect(container.querySelector('.cb-studio-scene, .cinematic-studio')).not.toBeNull();
+    expect(container.querySelector('.cb-ready')).toBeNull();
+
+    // Once the studio has played out, the next press jumps to the ready card.
+    act(() => { vi.advanceTimersByTime(4000); });
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(container.querySelector('.cb-ready')).not.toBeNull();
     expect(container.querySelectorAll('.cb-logo-mark')).toHaveLength(1);
     expect(container.querySelectorAll('[aria-label="EAOIN"]')).toHaveLength(1);
+    vi.useRealTimers();
   });
 
   it('never shows a loading bar during boot', () => {
