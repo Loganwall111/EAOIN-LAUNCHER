@@ -273,3 +273,56 @@
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.08); }
 }
+
+/* Cosmic Girl animated lips + hand */
+.cosmic-girl-wrap {
+  position: relative;
+  margin-bottom: 40px;
+}
+.cosmic-girl {
+  display: block;
+  margin: 0 auto;
+}
+.cosmic-lips {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, 0);
+  width: 34px;
+  height: 14px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 8px rgba(120, 220, 255, 0.9));
+}
+.cosmic-lips-inner {
+  display: block;
+  width: 26px;
+  height: 6px;
+  background: #0a2a3a;
+  border-radius: 50%;
+  animation: cosmic-lips-talk 0.38s ease-in-out infinite;
+}
+@keyframes cosmic-lips-talk {
+  0%, 100% { transform: scaleY(0.3); }
+  30% { transform: scaleY(1); }
+  55% { transform: scaleY(0.5); }
+  80% { transform: scaleY(1); }
+}
+.cosmic-hand {
+  position: absolute;
+  right: 6%;
+  bottom: 8%;
+  font-size: 30px;
+  color: #8ae0ff;
+  text-shadow: 0 0 16px #4dd8ff, 0 0 30px #2a7bff;
+  animation: cosmic-hand-wave 2.6s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+@keyframes cosmic-hand-wave {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  25% { transform: rotate(18deg) translateY(-4px); }
+  50% { transform: rotate(-6deg) translateY(0); }
+  75% { transform: rotate(10deg) translateY(-2px); }
+}

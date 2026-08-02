@@ -118,12 +118,20 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
       {/* Dream sequence with the neon-blue Cosmic Girl (real face, not a dot) */}
       {phase === 'DREAM' && (
         <div className="dream-sequence">
-          <img
-            className="cosmic-girl"
-            src={`${import.meta.env.BASE_URL}textures/cosmic_girl.png`}
-            alt="The Cosmic Girl"
-            draggable={false}
-          />
+          <div className="cosmic-girl-wrap">
+            <img
+              className="cosmic-girl"
+              src={`${import.meta.env.BASE_URL}textures/cosmic_girl.png`}
+              alt="The Cosmic Girl"
+              draggable={false}
+            />
+            {/* Animated mouth that opens/closes while she speaks (lipsync feel). */}
+            <div className="cosmic-lips" aria-hidden="true">
+              <span className="cosmic-lips-inner" />
+            </div>
+            {/* Animated raised hand / glow shimmer. */}
+            <div className="cosmic-hand" aria-hidden="true">✦</div>
+          </div>
           <div className="dream-text">
             {DREAM_LINES[dreamLineIndex]}
           </div>
