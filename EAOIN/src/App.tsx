@@ -464,6 +464,16 @@ export default function App() {
             onBack={() => setAppPhase('title')}
             onOpenSuperSettings={() => setSuperSettingsOpen(true)}
           />
+          {superSettingsOpen && (
+            <SuperSettingsPanel
+              settings={superSettings}
+              onChange={setSuperSettings}
+              onCapture={(mode) => window.dispatchEvent(new CustomEvent('eaoin-capture', { detail: { mode } }))}
+              onOpenModEditor={() => { setSuperSettingsOpen(false); setAppPhase('modeditor'); }}
+              onOpenWorldEditor={() => { setSuperSettingsOpen(false); setAppPhase('editor'); }}
+              onClose={() => setSuperSettingsOpen(false)}
+            />
+          )}
         </div>
       );
     }
@@ -586,6 +596,7 @@ export default function App() {
           onSettingsChange={setSettings}
           onSelectBlock={setSelectedBlock}
           onTravelToDimension={travelToDimension}
+          onOpenSuperSettings={() => setSuperSettingsOpen(true)}
         />
       </Suspense>
       {superSettingsOpen && !worldLoading && (

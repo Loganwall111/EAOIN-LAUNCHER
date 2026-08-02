@@ -33,6 +33,8 @@ interface HUDProps {
   onCraftRecipe: (recipe: RecipeID) => void; onCloseInventory: () => void; onCloseSettings: () => void;
   onSettingsChange: (s: GameSettings) => void;
   onSelectBlock: (block: BlockID) => void;
+  /** Open the deep "Super Settings" panel from the in-game settings menu. */
+  onOpenSuperSettings?: () => void;
 }
 
 /* --------------------- Block icon --------------------- */
@@ -83,7 +85,7 @@ function BlockSlot({ id, count, selected, onClick, onDoubleClick, showKey, size 
 }
 
 /* --------------------- Main HUD --------------------- */
-export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onSelectBlock, onTravelToDimension }: HUDProps) {
+export default function HUD({ gameMode, selectedBlock, toolInventory, inventory, inventoryOpen, settingsOpen, settings, runtimeStatus, objectives, objectivesVisible, systemsVisible, onToggleObjectives, onToggleSystems, craftingMessage, onCraftRecipe, onCloseInventory, onCloseSettings, onSettingsChange, onSelectBlock, onTravelToDimension, onOpenSuperSettings }: HUDProps) {
   const updateSettings = (patch: Partial<GameSettings>) => onSettingsChange(clampSettings({ ...settings, ...patch }));
   const [craftMode, setCraftMode] = useState<2 | 3>(2);
   const [craftGrid, setCraftGrid] = useState<(BlockID | null)[]>([null, null, null, null]);
@@ -667,6 +669,7 @@ export default function HUD({ gameMode, selectedBlock, toolInventory, inventory,
               <p>EAOIN {GAME_VERSION} • {RELEASE_TAGLINE}</p>
             </div>
             <button onClick={onCloseSettings}>Close</button>
+            {onOpenSuperSettings && <button onClick={onOpenSuperSettings} title="Super Settings">⚡ Super</button>}
           </div>
           <div style={{ background: 'rgba(0,0,0,0.4)', padding: 10, border: '2px solid #5dd6ff', borderRadius: 4, margin: '8px 0' }}>
             <h3 style={{ color: '#5dd6ff', fontSize: 12, marginBottom: 6 }}>✨ {RELEASE_LABEL}</h3>
