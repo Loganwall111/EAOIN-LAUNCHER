@@ -12,8 +12,6 @@ import MenuScreen from './MenuScreen';
 export interface MultiplayerScreenProps {
   onBack: () => void;
   onJoin: (server: ServerEntry) => void;
-  /** Open HorizonOS (the in-game virtual desktop). */
-  onHorizonOS?: () => void;
 }
 
 type Tab = 'servers' | 'friends' | 'guilds';
@@ -32,7 +30,7 @@ function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export default function MultiplayerScreen({ onBack, onJoin, onHorizonOS }: MultiplayerScreenProps) {
+export default function MultiplayerScreen({ onBack, onJoin }: MultiplayerScreenProps) {
   const [tab, setTab] = useState<Tab>('servers');
   const [region, setRegion] = useState<(typeof REGIONS)[number]>('ALL');
   const [query, setQuery] = useState('');
@@ -65,7 +63,6 @@ export default function MultiplayerScreen({ onBack, onJoin, onHorizonOS }: Multi
               </button>
             ))}
           </div>
-          <button className="seg" onClick={() => onHorizonOS?.()}>🖥️ HorizonOS</button>
         </div>
       }
     >

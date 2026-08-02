@@ -22,6 +22,8 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
   const [dreamLineIndex, setDreamLineIndex] = useState(0);
   const [showTitle, setShowTitle] = useState(false);
   const [wakeProgress, setWakeProgress] = useState(0);
+  /** Real audio-driven mouth openness (0 = closed … 1 = wide) from the analyser. */
+  const [mouth, setMouth] = useState(0);
 
   // Galaxy rush + neuron loading cinematic
   useEffect(() => {
@@ -35,14 +37,45 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
   }, [phase]);
 
   // Cosmic Girl narration — a single realistic pre-rendered voice clip plays
-  // the whole monologue, and the on-screen line advances in time with it.
+  // the whole monologue, and the on-screen line advances in time with it. The
+  // mouth is driven by the *real* audio: an AnalyserNode reads the amplitude
+  // of the clip and opens the lips in sync with her voice (no fake CSS timer).
   useEffect(() => {
     if (phase !== 'DREAM') return;
     setDreamLineIndex(0);
+    setMouth(0);
 
     const audio = new Audio(COSMIC_GIRL_AUDIO);
     audio.volume = 0.9;
     const started = window.setTimeout(() => void audio.play().catch(() => {}), 400);
+
+    // ---- Real lipsync: route the clip through an AnalyserNode ----
+    let ctx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let raf = 0;
+    try {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      ctx = new AC();
+      const source = ctx.createMediaElementSource(audio);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(data);
+        // Average the voice band (skip the very lowest rumble) for an open/close value.
+        const end = Math.floor(data.length * 0.55);
+        let sum = 0;
+        for (let i = 4; i < end; i += 1) sum += data[i];
+        const avg = sum / (end - 4);
+        setMouth(Math.min(1, avg / 70));
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    } catch { /* audio analysis unavailable — mouth stays closed */ }
 
     let index = 0;
     setDreamLineIndex(0);
@@ -60,7 +93,9 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
     return () => {
       window.clearTimeout(started);
       window.clearInterval(interval);
+      cancelAnimationFrame(raf);
       audio.pause();
+      void ctx?.close();
     };
   }, [phase]);
 
@@ -125,9 +160,12 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
               alt="The Cosmic Girl"
               draggable={false}
             />
-            {/* Animated mouth that opens/closes while she speaks (lipsync feel). */}
+            {/* Real audio-driven lipsync — the mouth follows her actual voice. */}
             <div className="cosmic-lips" aria-hidden="true">
-              <span className="cosmic-lips-inner" />
+              <span
+                className="cosmic-lips-inner"
+                style={{ transform: `scaleY(${0.25 + mouth * 1.15})` }}
+              />
             </div>
             {/* Animated raised hand / glow shimmer. */}
             <div className="cosmic-hand" aria-hidden="true">✦</div>

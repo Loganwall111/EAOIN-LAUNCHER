@@ -264,6 +264,12 @@
   background: linear-gradient(180deg, #4d5a68 0%, #303945 52%, #202730 100%);
 }
 
+.menu-btn.is-horizonos {
+  background: linear-gradient(180deg, #3a5f8f 0%, #2a4a70 52%, #1c3350 100%);
+  border-left: 3px solid #62d8ff;
+}
+.menu-btn.is-horizonos:hover { border-left-color: #a9ecff; }
+
 /* --- News feed (left) ----------------------------------------------------- */
 
 .title-news {

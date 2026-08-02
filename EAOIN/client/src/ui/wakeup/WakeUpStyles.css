@@ -302,13 +302,10 @@
   height: 6px;
   background: #0a2a3a;
   border-radius: 50%;
-  animation: cosmic-lips-talk 0.38s ease-in-out infinite;
-}
-@keyframes cosmic-lips-talk {
-  0%, 100% { transform: scaleY(0.3); }
-  30% { transform: scaleY(1); }
-  55% { transform: scaleY(0.5); }
-  80% { transform: scaleY(1); }
+  transform-origin: center;
+  /* scaleY is driven in real time by the voice clip's AnalyserNode (see
+     WakeUpSequence). Keeping a transition smooths analyser jitter. */
+  transition: transform 50ms linear;
 }
 .cosmic-hand {
   position: absolute;

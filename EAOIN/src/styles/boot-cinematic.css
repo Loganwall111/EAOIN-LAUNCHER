@@ -963,3 +963,87 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Distortion warp that streaks into the main menu after "Press any key".
+   -------------------------------------------------------------------------- */
+.cb-warp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  background: #000;
+  animation: cb-warp-in 1.05s cubic-bezier(0.7, 0, 0.2, 1) forwards;
+}
+.cb-warp-tunnel {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 50% 50%, #ffffff 0%, #bfd9ff 6%, #6f9dff 16%, #2a4a9a 34%, #0a1530 58%, #000 78%);
+  animation: cb-warp-tunnel 1.05s linear forwards;
+}
+.cb-warp-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid #9fd4ff;
+  transform: translate(-50%, -50%);
+  animation: cb-warp-ring 1.05s ease-out forwards;
+  box-shadow: 0 0 24px rgba(159, 212, 255, 0.8);
+}
+.cb-warp-ring-2 { animation-delay: 0.06s; }
+.cb-warp-ring-3 { animation-delay: 0.12s; }
+.cb-warp-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.95), transparent 55%);
+  animation: cb-warp-flash 0.55s ease-out forwards;
+}
+.cb-warp-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #fff;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  font: 800 clamp(20px, 4vw, 46px)/1.25 var(--ui-font, sans-serif);
+  text-shadow: 0 0 30px #6f9dff, 0 0 80px #2a4a9a;
+  animation: cb-warp-text 1.05s ease-in forwards;
+  white-space: nowrap;
+}
+.cb-warp-text span {
+  display: block;
+  font: 700 11px/1 var(--ui-font, sans-serif);
+  letter-spacing: 0.6em;
+  text-indent: 0.6em;
+  color: #bcd8ff;
+  margin-bottom: 8px;
+}
+@keyframes cb-warp-in {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes cb-warp-tunnel {
+  0% { transform: scale(3.4) rotate(0deg); filter: blur(18px) contrast(1.6); }
+  100% { transform: scale(0.2) rotate(360deg); filter: blur(0) contrast(1); }
+}
+@keyframes cb-warp-ring {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(22); opacity: 0; }
+}
+@keyframes cb-warp-flash {
+  0% { opacity: 0; }
+  35% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes cb-warp-text {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(-14deg); filter: blur(14px); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0); filter: blur(0); }
+}

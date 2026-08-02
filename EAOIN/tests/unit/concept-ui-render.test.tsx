@@ -24,6 +24,7 @@ function renderTitle(overrides: Partial<Parameters<typeof TitleScreen>[0]> = {})
       onSignIn={noop}
       onSingleplayer={noop}
       onMultiplayer={noop}
+      onHorizonOS={noop}
       onMods={noop}
       onMarketplace={noop}
       onEditorMode={noop}
@@ -48,7 +49,7 @@ describe('TitleScreen', () => {
     expect(container.textContent).toContain('Triple A Sandbox Experience');
 
     const menu = within(container.querySelector('.title-menu') as HTMLElement);
-    for (const label of ['Singleplayer', 'Multiplayer', 'Mods', 'Options', 'Quit Game']) {
+    for (const label of ['Singleplayer', 'Multiplayer', 'HorizonOS', 'Mods', 'Options', 'Quit Game']) {
       expect(menu.getByRole('button', { name: new RegExp(label, 'i') })).toBeTruthy();
     }
   });

@@ -23,6 +23,8 @@ export interface TitleScreenProps {
   onSignIn: () => void;
   onSingleplayer: () => void;
   onMultiplayer: () => void;
+  /** Launch HorizonOS — the in-game virtual desktop / OS. */
+  onHorizonOS: () => void;
   onMods: () => void;
   onMarketplace: () => void;
   onEditorMode: () => void;
@@ -39,7 +41,7 @@ export interface TitleScreenProps {
 }
 
 export default function TitleScreen({
-  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onMods,
+  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
@@ -128,6 +130,9 @@ export default function TitleScreen({
         </button>
         <button className="menu-btn is-primary" onClick={onMultiplayer}>
           Multiplayer<span className="btn-icon">🧑</span>
+        </button>
+        <button className="menu-btn is-horizonos" onClick={onHorizonOS}>
+          HorizonOS<span className="btn-icon">🖥️</span>
         </button>
         <button className="menu-btn" onClick={onMods}>
           Mods<span className="btn-icon">🟢</span>

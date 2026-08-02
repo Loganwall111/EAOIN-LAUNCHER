@@ -322,6 +322,7 @@ export default function App() {
             onSignIn={() => setAppPhase('signin')}
             onSingleplayer={() => setAppPhase('worlds')}
             onMultiplayer={() => setAppPhase('multiplayer')}
+            onHorizonOS={() => setAppPhase('horizonos')}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}
             onEditorMode={() => setAppPhase('editor')}
@@ -364,7 +365,6 @@ export default function App() {
           <MultiplayerScreen
             onBack={() => setAppPhase('title')}
             onJoin={(server) => { setSelectedServer(server); setAppPhase('serverlobby'); }}
-            onHorizonOS={() => setAppPhase('horizonos')}
           />
         </div>
       );
@@ -376,7 +376,7 @@ export default function App() {
     }
     if (appPhase === 'horizonos') {
       return (
-        <HorizonOS onExit={() => setAppPhase('multiplayer')} />
+        <HorizonOS onExit={() => setAppPhase('title')} />
       );
     }
     if (appPhase === 'mods') {

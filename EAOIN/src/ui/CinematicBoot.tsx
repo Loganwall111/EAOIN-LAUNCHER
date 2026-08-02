@@ -92,21 +92,24 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
   const [skipHintVisible, setSkipHintVisible] = useState(false);
   const [creditIndex, setCreditIndex] = useState(0);
   const [narrationLine, setNarrationLine] = useState('');
+  /** True while the distortion warp plays before dropping into the main menu. */
+  const [warping, setWarping] = useState(false);
   const completedRef = useRef(false);
 
   const finish = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
-    setPhase('DONE');
-    onComplete();
+    // Distortion warp that streaks into the main menu, then hand off.
+    setWarping(true);
+    window.setTimeout(() => {
+      setPhase('DONE');
+      onComplete();
+    }, 1050);
   }, [onComplete]);
 
   const skip = useCallback(() => {
-    setPhase((current) => {
-      if (current === 'READY' || current === 'DONE') { finish(); return 'DONE'; }
-      return 'READY';
-    });
-  }, [finish]);
+    setPhase((current) => (current === 'READY' || current === 'DONE' ? current : 'READY'));
+  }, []);
 
   /* ------------------------------ input ----------------------------------- */
 
@@ -308,7 +311,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
 
       {phase !== 'WARNING' && (
         <div className="cb-status-rail" aria-hidden="true">
-          <span>ONBLOCKAWAY STUDIOS</span>
+          <span>ONEBLOCKAWAY STUDIO</span>
           <span className="cb-status-diamond">◆</span>
           <span>ALPHA ACCESS BUILD</span>
         </div>
@@ -365,8 +368,8 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
           </div>
           <div className="cb-studio-lockup">
             <span className="cb-eyebrow">An original production by</span>
-            <h1 className="cb-studio-name">ONBLOCKAWAY</h1>
-            <div className="cb-studio-rule"><span>STUDIOS</span></div>
+            <h1 className="cb-studio-name">ONEBLOCKAWAY</h1>
+            <div className="cb-studio-rule"><span>STUDIO</span></div>
           </div>
         </main>
       )}
@@ -484,6 +487,17 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
       )}
 
       {skipHint}
+
+      {warping && (
+        <div className="cb-warp-overlay" aria-hidden="true">
+          <div className="cb-warp-tunnel" />
+          <div className="cb-warp-ring cb-warp-ring-1" />
+          <div className="cb-warp-ring cb-warp-ring-2" />
+          <div className="cb-warp-ring cb-warp-ring-3" />
+          <div className="cb-warp-flash" />
+          <div className="cb-warp-text"><span>ENTERING THE</span>HORIZON</div>
+        </div>
+      )}
     </div>
   );
 }

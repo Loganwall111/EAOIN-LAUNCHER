@@ -86,6 +86,9 @@ const B = {
   SNOW: 221 as BlockID,      // Packed Ice (used as snow-white surface)
   PURPUR: 42 as BlockID,
   COMET_ICE: 214 as BlockID,
+  PLANKS: 57 as BlockID,       // oak planks — The Humorous uses them for its joke-houses
+  KELP: 304 as BlockID,        // playful foliage
+  SHARD: 308 as BlockID,       // Chorus shard — glowing comedic bauble
 };
 
 export function dimensionArchetype(dimensionId: string): DimensionArchetype {
@@ -200,20 +203,10 @@ export class DimensionTerrainGenerator {
               chunk.setBlock(lx, y, lz, id);
             }
           }
-          // The Humorous: floating isle landmarks — crystal spires and glowing
-          // particle-garden clusters rising from the isle tops.
-          if (this.archetype === 'void' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 10) {
-            const r = this.noise.hash(wx, 9, wz);
-            if (r > 0.985) {
-              const h = 5 + Math.floor(this.noise.hash(wx, 10, wz) * 4);
-              for (let y = surfaceClamped + 1; y <= surfaceClamped + h; y++) {
-                chunk.setBlock(lx, y, lz, B.CRYSTAL);
-              }
-              chunk.setBlock(lx, surfaceClamped + h + 1, lz, B.GLOWSTONE);
-            } else if (r > 0.93) {
-              chunk.setBlock(lx, surfaceClamped + 1, lz, B.CRYSTAL);
-              chunk.setBlock(lx, surfaceClamped + 2, lz, B.GLOWSTONE);
-            }
+          // The Humorous: floating isle landmarks — crystal spires, punchline
+          // arches, laugh-houses, jesting-frog ponds and glow clusters.
+          if (this.archetype === 'void' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12) {
+            this.placeHumorousStructures(chunk, lx, surfaceClamped, lz, wx, wz);
           }
           continue;
         }
@@ -235,6 +228,61 @@ export class DimensionTerrainGenerator {
         // Surface decor scattered deterministically.
         this.decorate(chunk, lx, surfaceClamped, lz, wx, wz);
       }
+    }
+  }
+
+  /** Set a block only if it lands inside this chunk (bounds-safe for wide structures). */
+  private setSafe(chunk: Chunk, lx: number, y: number, lz: number, id: BlockID): void {
+    if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && y >= 0 && y < CHUNK_HEIGHT) {
+      chunk.setBlock(lx, y, lz, id);
+    }
+  }
+
+  /**
+   * Deeper The Humorous: a varied set of comedic structures on the floating
+   * isles — crystal spires, punchline arches, laugh-houses, jest-frog ponds
+   * and glowing particle gardens.
+   */
+  private placeHumorousStructures(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
+    const r = this.noise.hash(wx, 9, wz);
+    const g = this.noise.hash(wx, 10, wz);
+    const base = surfaceY + 1;
+
+    if (r > 0.992) {
+      // Crystal spire crowned with a glowing Shard + light.
+      const h = 5 + Math.floor(g * 4);
+      for (let y = base; y <= base + h; y++) chunk.setBlock(lx, y, lz, B.CRYSTAL);
+      this.setSafe(chunk, lx, base + h + 1, lz, B.SHARD);
+      this.setSafe(chunk, lx, base + h + 2, lz, B.GLOWSTONE);
+    } else if (r > 0.975) {
+      // Punchline arch: two pillars, a plank beam overhead, a joke bauble hung.
+      const h = 3 + Math.floor(g * 2);
+      for (let y = base; y <= base + h; y++) chunk.setBlock(lx, y, lz, B.CRYSTAL);
+      for (let dx = -3; dx <= 3; dx++) this.setSafe(chunk, lx + dx, base + h + 1, lz, B.PLANKS);
+      chunk.setBlock(lx, base + h, lz, B.SHARD);
+    } else if (r > 0.955) {
+      // Laugh-house: a small plank cabin with a crystal roof and a glow lamp.
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+        const wall = Math.max(Math.abs(dx), Math.abs(dz)) === 2;
+        this.setSafe(chunk, lx + dx, base, lz + dz, wall ? B.PLANKS : B.AIR);
+        if (wall) this.setSafe(chunk, lx + dx, base + 1, lz + dz, B.PLANKS);
+      }
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+        this.setSafe(chunk, lx + dx, base + 2, lz + dz, B.CRYSTAL);
+      }
+      this.setSafe(chunk, lx, base + 3, lz, B.GLOWSTONE);
+    } else if (r > 0.93) {
+      // Jest-frog pond: a shallow bowl of water with a glowing Shard lily.
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        this.setSafe(chunk, lx + dx, base, lz + dz, B.WATER);
+      }
+      this.setSafe(chunk, lx, base, lz, B.SHARD);
+      if (g > 0.5) this.setSafe(chunk, lx + 2, base + 1, lz, B.KELP);
+    } else if (r > 0.9) {
+      // Glow cluster / particle garden.
+      chunk.setBlock(lx, base, lz, B.GLOWSTONE);
+      this.setSafe(chunk, lx + 1, base + 1, lz, B.CRYSTAL);
+      this.setSafe(chunk, lx - 1, base + 1, lz, B.SHARD);
     }
   }
 

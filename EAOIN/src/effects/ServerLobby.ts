@@ -1,10 +1,10 @@
 /**
  * ServerLobby — prebuilt, block-built lobbies for each server type.
  *
- * Joining a server drops you into a real voxel lobby built from blocks (not a
- * flat empty world): a spawn plaza, themed buildings made of concrete/wood/
- * stone, paths, lampposts, and a perimeter. Each server type gets its own
- * palette and silhouette:
+ * Joining a server drops you into a real voxel city (not a flat empty world).
+ * Each 16×16 chunk is one self-contained city block with a central plaza,
+ * radiating roads, varied themed buildings, lampposts, decorative foliage and
+ * a perimeter wall — so the whole render radius forms a dense, walkable city.
  *
  *   survival   → wooden town hall, farm, stone walls
  *   creative   → big flat build plots with scaffolding
@@ -44,55 +44,87 @@ function paletteFor(t: ServerType): LobbyPalette {
   return PALETTES[t] ?? PALETTES.survival;
 }
 
-/** Height of a building at a plaza-relative cell, or 0 for open ground. */
-function buildingHeight(t: ServerType, gx: number, gz: number, salt: number): number {
-  // Central plaza stays open; buildings ring it.
-  const dist = Math.max(Math.abs(gx), Math.abs(gz));
-  if (dist <= 1) return 0; // plaza
-  if (dist > 6) return 0;  // perimeter ground
-  const n = new AdvancedNoise(`${t}:${salt}`);
-  const roll = n.hash(gx, gz, 0);
-  if (roll < 0.35) return 0; // paths / gaps
-  if (t === 'creative') return 2; // low build platforms
-  if (t === 'mmo') return 5 + Math.floor(roll * 3);
-  if (t === 'roleplay') return 4;
-  if (t === 'skyblock') return 2; // low isle hubs
+/** Chunk-local building height at a city-block cell (0 = open ground / road). */
+function buildingHeight(t: ServerType, noise: AdvancedNoise, lx: number, lz: number): number {
+  const distC = Math.max(Math.abs(lx - 8), Math.abs(lz - 8)); // from block centre
+  if (distC <= 2) return 0;   // plaza + fountain
+  if (lx === 8 || lz === 8) return 0; // cross roads through the centre
+  const roll = noise.hash(lx, lz, 0);
+  if (roll < 0.18) return 0; // small gaps / courtyards
+  if (t === 'creative') return 2 + (roll > 0.6 ? 1 : 0);
+  if (t === 'mmo') return 4 + Math.floor(roll * 4);
+  if (t === 'roleplay') return 3 + Math.floor(roll * 2);
+  if (t === 'skyblock') return 2;
+  if (t === 'modded') return 3 + Math.floor(roll * 3);
+  if (t === 'minigames' || t === 'minigame_pvp') return 3 + Math.floor(roll * 2);
   return 3 + Math.floor(roll * 2);
 }
 
 /**
- * Fill a chunk with the block-built lobby around the lobby origin (origin chunk
- * is 0,0). The lobby is a ~13×13 block plaza with buildings and a perimeter.
+ * Fill a chunk with a block-built city block. The lobby repeats a street grid
+ * across every chunk so the full render radius is a dense, populated city.
  */
 export function generateServerLobby(chunk: Chunk, serverType: ServerType, seed: string): void {
   const pal = paletteFor(serverType);
-  const originX = chunk.x * CHUNK_SIZE;
-  const originZ = chunk.z * CHUNK_SIZE;
+  const noise = new AdvancedNoise(`${serverType}:${seed}:${chunk.x}:${chunk.z}`);
+  const t = serverType;
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-      const wx = originX + lx;
-      const wz = originZ + lz;
-      const gx = Math.floor((wx - 0) / 1) % 13;
-      const gz = Math.floor((wz - 0) / 1) % 13;
-      // Build a flat ground plane at y=60.
+      // Flat ground plane at y=60.
       chunk.setBlock(lx, 60, lz, pal.plaza);
       chunk.setBlock(lx, 59, lz, 2); // dirt under
       chunk.setBlock(lx, 58, lz, 3); // stone under
 
-      const h = buildingHeight(serverType, gx, gz, seed.length);
-      if (h <= 0) {
-        // Path ring around the plaza.
-        if (gx === -4 || gx === 4 || gz === -4 || gz === 4) chunk.setBlock(lx, 60, lz, pal.path);
+      // Perimeter wall around the whole city block (outermost ring).
+      const edge = Math.min(lx, lz, CHUNK_SIZE - 1 - lx, CHUNK_SIZE - 1 - lz);
+      if (edge === 0) {
+        chunk.setBlock(lx, 61, lz, pal.wall);
+        chunk.setBlock(lx, 62, lz, pal.wall);
+        if (lx % 4 === 0 && lz % 4 === 0) chunk.setBlock(lx, 63, lz, pal.glow); // wall torches
         continue;
       }
-      // Building body.
-      for (let dy = 1; dy <= h; dy++) {
-        const isWall = gx === -h || gx === h || gz === -h || gz === h || dy === h;
-        chunk.setBlock(lx, 60 + dy, lz, isWall && dy === h ? pal.roof : pal.wall);
+
+      const h = buildingHeight(t, noise, lx, lz);
+      const distC = Math.max(Math.abs(lx - 8), Math.abs(lz - 8));
+
+      if (h <= 0) {
+        // Central fountain.
+        if (distC <= 1) {
+          chunk.setBlock(lx, 61, lz, pal.accent);
+          if (lx === 8 && lz === 8) chunk.setBlock(lx, 62, lz, pal.glow);
+          continue;
+        }
+        // Roads get a darker path surface + lampposts.
+        if (lx === 8 || lz === 8) {
+          chunk.setBlock(lx, 60, lz, pal.path);
+          if (lx === 8 && lz % 4 === 2) {
+            chunk.setBlock(lx, 61, lz, pal.wall);
+            chunk.setBlock(lx, 62, lz, pal.glow);
+          }
+          if (lz === 8 && lx % 4 === 2) {
+            chunk.setBlock(lx, 61, lz, pal.wall);
+            chunk.setBlock(lx, 62, lz, pal.glow);
+          }
+          continue;
+        }
+        // Open plaza / courtyards get the odd decoration.
+        if (noise.hash(lx, lz, 7) > 0.82) chunk.setBlock(lx, 61, lz, pal.accent);
+        continue;
       }
-      // A glowing accent lamp on the roof.
-      if (gx === 0 && gz === 0) chunk.setBlock(lx, 61 + h, lz, pal.glow);
+
+      // ---- Building body with walls, windows and a glowing roof lamp ----
+      const half = Math.floor(h / 2);
+      for (let dy = 1; dy <= h; dy++) {
+        const onEdge = lx === 8 || lz === 8 || Math.abs(lx - 8) === distC || Math.abs(lz - 8) === distC;
+        const isRoof = dy === h;
+        let block = pal.wall;
+        if (isRoof) block = pal.roof;
+        else if (onEdge && dy === Math.max(1, half)) block = pal.accent; // window band
+        chunk.setBlock(lx, 60 + dy, lz, block);
+      }
+      // Roof lamp / antenna.
+      if ((lx + lz) % 5 === 0) chunk.setBlock(lx, 61 + h, lz, pal.glow);
     }
   }
 }
@@ -104,8 +136,8 @@ export function lobbySpawnY(): number {
 
 /**
  * A chunk-source callback that routes every chunk through the block-built lobby
- * for the given server type. It ignores world coordinates beyond the lobby
- * footprint and repeats the plaza grid so the whole render radius is solid.
+ * for the given server type. It tiles the street grid across the whole render
+ * radius so the city stays solid and dense in every direction.
  */
 export function lobbyChunkSource(serverType: ServerType, seed: string) {
   return (cx: number, cz: number): Chunk => {

@@ -286,6 +286,8 @@ describe('CinematicBoot', () => {
     expect(container.querySelector('.cb-logo-mark')).toBe(originalWordmark);
     fireEvent.keyDown(window, { key: 'Enter' });
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    // Pressing any key triggers the distortion warp into the main menu, which
+    // resolves to a single onComplete call after the warp plays out.
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 5000 });
   }, 10000);
 });
