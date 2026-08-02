@@ -533,6 +533,7 @@ export default function App() {
           inventory={inventory}
           selectedBlock={selectedBlock}
           selectedTool={selectedTool}
+          gameMode={gameMode}
           onSelectBlock={setSelectedBlock}
           position={telemetry.position}
           yaw={telemetry.yaw}

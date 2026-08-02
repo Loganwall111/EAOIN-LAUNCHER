@@ -2023,7 +2023,8 @@ export class CavesAndCliffsTerrainGenerator {
         || this.featureAnchor(wx, wz, 340, 'ruin-fragment')
         || this.featureAnchor(wx, wz, 96, 'geode')
         || this.featureAnchor(wx, wz, 120, 'fossil')
-        || this.featureAnchor(wx, wz, 700, 'village');
+        || this.featureAnchor(wx, wz, 700, 'village')
+        || this.featureAnchor(wx, wz, 5200, 'city');
       if (!needsSurface && !(this.config.volcanoes && this.featureAnchor(wx, wz, 900, 'volcano'))) return;
 
       const surface = this.findSkyExposedSurface(chunk, lx, lz);
@@ -2043,6 +2044,12 @@ export class CavesAndCliffsTerrainGenerator {
       if (this.featureAnchor(wx, wz, 700, 'village')) {
         if (isNaturalGround(chunk.getBlock(lx, surface, lz))) {
           this.placeVillage(chunk, wx, surface, wz);
+        }
+      }
+      if (this.featureAnchor(wx, wz, 5200, 'city')) {
+        // Cities are rare and land on flat, grassy ground — never in lakes.
+        if (isNaturalGround(chunk.getBlock(lx, surface, lz)) && chunk.getBlock(lx, surface, lz) === BLOCK.GRASS) {
+          this.placeCity(chunk, wx, surface, wz);
         }
       }
 
@@ -2136,6 +2143,69 @@ export class CavesAndCliffsTerrainGenerator {
     // A well at the centre.
     for (let dy = 1; dy <= 2; dy++) this.setBlockIfInChunk(chunk, wx, surface + dy, wz, BLOCK.COBBLESTONE);
     this.setBlockIfInChunk(chunk, wx, surface + 3, wz, BLOCK.WATER);
+  }
+
+  /**
+   * A single city building: a taller block-built tower with concrete/stone
+   * walls, glass windows, a flat roof and a glowing roof beacon. Real voxels,
+   * so it meshes and can be edited like anything else.
+   */
+  private placeCityBuilding(chunk: Chunk, wx: number, surface: number, wz: number, w: number, d: number, h: number): void {
+    const wall = BLOCK.STONE_BRICKS;
+    for (let dx = 0; dx < w; dx++) {
+      for (let dz = 0; dz < d; dz++) {
+        const onEdge = dx === 0 || dx === w - 1 || dz === 0 || dz === d - 1;
+        for (let y = 1; y <= h; y++) {
+          if (!onEdge && y < h) continue; // hollow
+          const isRoof = y === h;
+          const isWindow = onEdge && y % 3 === 0 && y < h;
+          const block = isRoof ? BLOCK.STONE_BRICKS : isWindow ? 64 /* Glass */ : wall;
+          this.setBlockIfInChunk(chunk, wx + dx, surface + y, wz + dz, block);
+        }
+      }
+    }
+    // A roof beacon lamp on top.
+    this.setBlockIfInChunk(chunk, wx + Math.floor(w / 2), surface + h + 1, wz + Math.floor(d / 2), BLOCK.GLOWSTONE);
+  }
+
+  /**
+   * A rare, large block-built city: a grid of suburban streets lined with
+   * houses and a handful of taller city towers. Cities only spawn on flat,
+   * grassy land far from spawn, so they read as special finds rather than
+   * spawning all over the place.
+   */
+  private placeCity(chunk: Chunk, wx: number, surface: number, wz: number): void {
+    const ext = 14;
+    // Streets of gravel through the city grid.
+    for (let x = -ext; x <= ext; x++) {
+      for (let y = 0; y < ext * 2; y++) {
+        // Two cross streets meeting in the middle.
+        this.setBlockIfInChunk(chunk, wx + x, surface + 1, wz - ext + y, y % 7 === 0 ? BLOCK.GRAVEL : BLOCK.GRAVEL);
+        if (x % 7 === 0) this.setBlockIfInChunk(chunk, wx - ext + y, surface + 1, wz + x, BLOCK.GRAVEL);
+      }
+    }
+    // Suburban houses in the blocks between the streets (rare, quiet).
+    const houseOffsets: Array<[number, number]> = [];
+    for (let i = 0; i < 14; i++) {
+      houseOffsets.push([-ext + 2 + (i % 6) * 4, -ext + 2 + Math.floor(i / 6) * 4]);
+    }
+    for (const [hx, hz] of houseOffsets) {
+      if (Math.hypot(hx, hz) > ext) continue;
+      this.placeVillageHouse(chunk, wx + hx, surface, wz + hz, hx < 0 ? 'x' : 'z');
+    }
+    // A few taller towers around the centre.
+    const towers: Array<[number, number, number, number, number]> = [
+      [-6, -6, 5, 5, 7], [6, -6, 5, 5, 8], [-6, 6, 6, 5, 6], [6, 6, 5, 6, 9], [0, 0, 7, 7, 10],
+    ];
+    for (const [tx, tz, tw, td, th] of towers) {
+      this.placeCityBuilding(chunk, wx + tx, surface, wz + tz, tw, td, th);
+    }
+    // A central square with a fountain.
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+      this.setBlockIfInChunk(chunk, wx + dx, surface + 1, wz + dz, BLOCK.STONE_BRICKS);
+    }
+    this.setBlockIfInChunk(chunk, wx, surface + 2, wz, BLOCK.WATER);
+    this.setBlockIfInChunk(chunk, wx, surface + 1, wz, BLOCK.WATER);
   }
 
   private placeVolcano(chunk: Chunk, wx: number, wz: number): void {

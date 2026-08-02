@@ -27,6 +27,8 @@ export interface HudFrameProps {
   inventory: InventoryStacks;
   selectedBlock: BlockID;
   selectedTool: ToolID;
+  /** Game mode — creative/experimental hide the survival vitals. */
+  gameMode?: string;
   onSelectBlock: (id: BlockID) => void;
   position: { x: number; y: number; z: number };
   /** Camera yaw in radians, used to drive the compass strip. */
@@ -88,9 +90,12 @@ function PipRow({ icon, value, max, count = 10 }: { icon: string; value: number;
 export default function HudFrame({
   appearance, survivalStats, inventory, selectedBlock, selectedTool, onSelectBlock,
   position, yaw, timeOfDay, day, biome, runtimeStatus, objectives, toast,
-  flightEnabled = false, onAbility,
+  flightEnabled = false, onAbility, gameMode,
   onOpenInventory, onOpenGuide, onOpenFriends, onOpenSettings, onOpenQuests,
 }: HudFrameProps) {
+  // Creative/experimental/spectator-style modes don't track survival vitals:
+  // hide health/hunger/hydration so the HUD matches (and you can't "die").
+  const creative = gameMode === 'creative' || gameMode === 'experimental';
   const [chatChannel, setChatChannel] = useState<ChatChannel>('GLOBAL');
   const [chatDraft, setChatDraft] = useState('');
   const [chatLog, setChatLog] = useState<ChatEntry[]>(DEMO_CHAT);
@@ -161,8 +166,10 @@ export default function HudFrame({
         <AvatarPortrait appearance={appearance} size={46} />
         <div>
           <div className="hud-player-name">{appearance.name}</div>
-          <div className="hud-bar hp"><i style={{ width: `${survivalStats.health}%` }} /><b>{Math.round(survivalStats.health)} / 100</b></div>
-          <div className="hud-bar stam"><i style={{ width: `${survivalStats.stamina}%` }} /><b>{Math.round(survivalStats.stamina)} / 100</b></div>
+          {!creative && <>
+            <div className="hud-bar hp"><i style={{ width: `${survivalStats.health}%` }} /><b>{Math.round(survivalStats.health)} / 100</b></div>
+            <div className="hud-bar stam"><i style={{ width: `${survivalStats.stamina}%` }} /><b>{Math.round(survivalStats.stamina)} / 100</b></div>
+          </>}
           <span className="hud-level-chip">LVL {Math.max(1, Math.floor((runtimeStatus.authorityTicks ?? 0) / 60) + 1)}</span>
         </div>
       </div>
@@ -262,20 +269,22 @@ export default function HudFrame({
 
       {/* -------------------------- vitals + hotbar (bottom) ---------------------- */}
       <div className="hud-bottom">
-        <div className="vitals-icons">
-          <PipRow icon="🛡️" value={survivalStats.stamina} max={100} />
-        </div>
-        <div className="vitals-icons">
-          <PipRow icon="❤️" value={survivalStats.health} max={100} />
-          <span className="lvl">{Math.max(1, Math.floor((runtimeStatus.authorityTicks ?? 0) / 60) + 1)}</span>
-          <PipRow icon="🍗" value={survivalStats.food} max={100} />
-        </div>
-        <div className="hud-bar xp" style={{ width: 470, height: 10 }}><i style={{ width: `${xpPercent}%` }} /></div>
-        <div className="vitals-bars">
-          <div className="hud-bar stam"><i style={{ width: `${survivalStats.stamina}%` }} /><b>{Math.round(survivalStats.stamina)}/100</b></div>
-          <div className="hud-bar xp"><i style={{ width: `${xpPercent}%` }} /><b>{xpPercent}%</b></div>
-          <div className="hud-bar food"><i style={{ width: `${survivalStats.food}%` }} /><b>{Math.round(survivalStats.food)}/100</b></div>
-        </div>
+        {!creative && <>
+          <div className="vitals-icons">
+            <PipRow icon="🛡️" value={survivalStats.stamina} max={100} />
+          </div>
+          <div className="vitals-icons">
+            <PipRow icon="❤️" value={survivalStats.health} max={100} />
+            <span className="lvl">{Math.max(1, Math.floor((runtimeStatus.authorityTicks ?? 0) / 60) + 1)}</span>
+            <PipRow icon="🍗" value={survivalStats.food} max={100} />
+          </div>
+          <div className="hud-bar xp" style={{ width: 470, height: 10 }}><i style={{ width: `${xpPercent}%` }} /></div>
+          <div className="vitals-bars">
+            <div className="hud-bar stam"><i style={{ width: `${survivalStats.stamina}%` }} /><b>{Math.round(survivalStats.stamina)}/100</b></div>
+            <div className="hud-bar xp"><i style={{ width: `${xpPercent}%` }} /><b>{xpPercent}%</b></div>
+            <div className="hud-bar food"><i style={{ width: `${survivalStats.food}%` }} /><b>{Math.round(survivalStats.food)}/100</b></div>
+          </div>
+        </>}
         <div className="hotbar-strip hud-interactive">
           {HOTBAR_BLOCKS.map((blockId, index) => {
             const count = getStackCount(inventory, blockId);

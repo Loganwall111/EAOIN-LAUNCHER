@@ -755,6 +755,24 @@ const EAOIN_NATIVES: SpeciesDefinition[] = [
     loot: [{ blockId: 12, amount: 6 }],
     description: 'The leviathan of the deep. Its eye is a lantern of cold blue light.',
   },
+  {
+    id: 'warden', name: 'The Warden', emoji: '👁️', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#0e2438', head: '#16344e', limb: '#09182a', accent: '#5fd0ff' },
+    scale: 1.8, health: 400, speed: 1.9, damage: 30,
+    // The deep-dark guardian: lives where sculk grows (caves & the ancient city).
+    biomes: ['deep_dark', 'cave', 'ancient_city', 'sculk'], weight: 1, nocturnal: true,
+    loot: [{ blockId: 12, amount: 4 }],
+    description: 'It cannot see. It does not need to. The ancient city is its body.',
+  },
+  {
+    id: 'sulphur_cube', name: 'Sulphur Cube', emoji: '🟨', bodyPlan: 'quadruped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#c8c22a', head: '#e0d940', limb: '#a8a220', accent: '#fff780' },
+    scale: 0.8, health: 26, speed: 1.2, damage: 9,
+    // Found in the sulphur biome — the newest hostile cube.
+    biomes: ['sulphur', 'crystal'], weight: 6,
+    loot: [{ blockId: 226, amount: 2 }],
+    description: 'A cube of living brimstone. It sizzles and bursts into foul gas.',
+  },
 ];
 
 export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS, ...EAOIN_NATIVES];

@@ -173,6 +173,7 @@ const biomes: BiomeDefinition[] = [
   { id: 'sinkhole', name: 'Sinkhole', emoji: '🕳', category: 'cave', temperature: 'temperate', humidity: 'normal', description: 'A surface sinkhole.', exclusiveBlocks: ['gravel', 'dirt'], exclusiveMobs: [], structures: [], hazards: ['fall'] },
   { id: 'floating_island', name: 'Floating Island', emoji: '☁', category: 'sky', temperature: 'temperate', humidity: 'normal', description: 'An island in the sky.', exclusiveBlocks: ['grass', 'dirt'], exclusiveMobs: ['bird'], structures: ['island_hut'], hazards: ['fall'] },
   { id: 'canyon_underground', name: 'Underground Canyon', emoji: '🪨', category: 'cave', temperature: 'temperate', humidity: 'normal', description: 'A canyon underground.', exclusiveBlocks: ['red_sand'], exclusiveMobs: [], structures: [], hazards: ['fall'] },
+  { id: 'sulphur', name: 'Sulphur Fields', emoji: '🟨', category: 'volcanic', temperature: 'hot', humidity: 'arid', description: 'Cracked brimstone flats that sizzle and reek of foul gas.', exclusiveBlocks: ['sulphur_block', 'sulphur_ore'], exclusiveMobs: ['sulphur_cube'], structures: ['sulphur_geyser'], hazards: ['toxic', 'fire'] },
 ];
 
 export const ALL_BIOMES: BiomeDefinition[] = biomes;
