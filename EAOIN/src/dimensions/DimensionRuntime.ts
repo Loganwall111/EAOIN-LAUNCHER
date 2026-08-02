@@ -49,7 +49,8 @@ export type RuntimeDimensionID =
   | 'cosmic_void'
   | 'aether'
   | 'backrooms'
-  | 'corrupted_lands';
+  | 'corrupted_lands'
+  | 'rift_dimension';
 
 export interface RuntimeDimensionDefinition {
   id: RuntimeDimensionID;
@@ -666,6 +667,25 @@ const DIMENSIONS: RuntimeDimensionDefinition[] = [
     hazards: ['Falling into the void', 'Jelly sting', 'Gravity flux'],
     lore: 'The Humorous is what the void laughs like. Endless islands drift, and the jellyfish that eat the light watch you back.',
     message: 'Entered The Humorous — floating isles under a cosmic jelly',
+  },
+  {
+    id: 'rift_dimension',
+    name: 'The Rift Dimension',
+    emoji: '🌀',
+    description: 'A reality-torn dreamscape reached through a blue, rippling rift portal. Floating hills of orange, red, blue and pink, giant sky jellyfish, and drifting platforms.',
+    sky: new Color4(0.10, 0.04, 0.18, 1),
+    fog: new Color3(0.20, 0.10, 0.34),
+    gravity: new Vector3(0, -0.30, 0),
+    tint: new Color3(0.9, 0.4, 1.0),
+    weather: 'Coloured aurora, pixelated rift sparks',
+    music: 'Rippling, otherworldly ambient',
+    exclusiveBlocks: ['rift_stone', 'jelly_crystal', 'glitch_block'],
+    exclusiveMobs: ['Rift Jellyfish', 'Echo Spectre', 'Sulphur Cube'],
+    boss: 'The Rift Tyrant',
+    structures: ['Floating Platform', 'Hue Spire', 'Ancient City Portal'],
+    hazards: ['Falling into the void', 'Jelly sting', 'Gravity flux'],
+    lore: 'When a reality rift forms it spits you out somewhere else entirely — a pocket dimension where the hills are made of colour and great jellyfish drift overhead.',
+    message: 'Torn through reality — entered The Rift Dimension',
   },
 ];
 

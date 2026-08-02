@@ -773,6 +773,15 @@ const EAOIN_NATIVES: SpeciesDefinition[] = [
     loot: [{ blockId: 226, amount: 2 }],
     description: 'A cube of living brimstone. It sizzles and bursts into foul gas.',
   },
+  {
+    id: 'rift_jellyfish', name: 'Rift Jellyfish', emoji: '🪼', bodyPlan: 'marine', habitat: 'air', temperament: 'neutral',
+    palette: { body: '#ff8a5a', head: '#ffb26a', limb: '#e05a3a', accent: '#ffd8ff' },
+    scale: 2.6, health: 80, speed: 1.0, damage: 10,
+    // Drifts across the rift dimension's coloured sky.
+    biomes: ['rift_dimension', 'void', 'dream_realm'], weight: 7, nocturnal: false,
+    loot: [{ blockId: 16, amount: 3 }],
+    description: 'A great jellyfish that floats between the coloured hills of the Rift, trailing ribbons of light.',
+  },
 ];
 
 export const ALL_SPECIES: SpeciesDefinition[] = [...LAND, ...OCEAN, ...BIRDS, ...EAOIN_NATIVES];

@@ -51,6 +51,7 @@ import {
 import { WeatherEffects } from '../effects/WeatherEffects';
 import { MoonEvents } from '../effects/MoonEvents';
 import { SpecialEvents } from '../events/SpecialEvents';
+import { AncientCityRift } from '../events/AncientCityRift';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -644,6 +645,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       portalSystem.spawnForDimension('nether', new Vector3(spawn.x + 18, spawn.y - 1, spawn.z + 12));
       portalSystem.spawnForDimension('crystal_realm', new Vector3(spawn.x - 22, spawn.y - 1, spawn.z + 18));
       const realityRifts = new RealityRiftSystem(scene);
+      // Ancient-City reality-rift portal (note-block ritual → rift dimension).
+      const ancientCityRift = new AncientCityRift();
 
       // Install UI publishers before wiring any subsystem callbacks. Startup
       // code should never be able to invoke a callback whose const is still in
@@ -1523,6 +1526,32 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           showActionMessage(`Entering ${approach.planet.name}'s atmosphere — welcome to ${dimensionRuntime.getDefinition().name}`);
         }
         realityRifts.update(deltaSeconds, camera.position, camera.position);
+        // Ancient-City rift portal: animate it, and step through to teleport to
+        // the Rift Dimension.
+        if (ancientCityRift.isActive()) {
+          ancientCityRift.tick(deltaSeconds);
+          if (ancientCityRift.consumeStep(camera.position.x, camera.position.y, camera.position.z)
+            && chunkSource.getDimension() !== 'rift_dimension') {
+            const targetDim: RuntimeDimensionID = 'rift_dimension';
+            const prevDim = chunkSource.getDimension();
+            dimensionRuntime.setDimension(targetDim);
+            dimensionRuntime.triggerTransitionEffect(camera.position, true);
+            atmosphere.setDimension(targetDim);
+            chunkSource.setDimension(targetDim);
+            if (chunkSource.hasOwnTerrain(targetDim) || chunkSource.hasOwnTerrain(prevDim)) {
+              renderer.clearAll();
+              invalidateRenderSnapshot(engine);
+              const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
+              camera.position.y = sy >= 1 ? sy + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
+              streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+              renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
+            }
+            forceTerrainCoverage = true;
+            ancientCityRift.clear();
+            showActionMessage('🌀 Torn through reality — entered The Rift Dimension');
+            publishRuntimeStatus();
+          }
+        }
         // Rift suction — a nearby reality tear drags the player toward it.
         const riftPull = realityRifts.pullOnPlayer(camera.position, tempRiftPull);
         if (riftPull.lengthSquared() > 1e-6) {
@@ -2139,7 +2168,20 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           // Right-click on a redstone component toggles it instead of placing.
           const target = pickTargetBlock();
           if (target) {
-            const interact = logicRuntime.interactComponent(target.target.x, target.target.y, target.target.z);
+            // Ancient-City rift puzzle: Note Blocks + Jukebox.
+            const tx = target.target.x, ty = target.target.y, tz = target.target.z;
+            const tb = terrain.getBlockAt(tx, ty, tz);
+            if (tb === 309 || tb === 310) {
+              viewModel.swing();
+              const msg = tb === 309
+                ? ancientCityRift.onNoteBlock(tx, ty, tz, performance.now())
+                : ancientCityRift.onJukebox(tx, ty, tz, performance.now());
+              audio.play('ui', settingsRef.current);
+              showActionMessage(msg);
+              if (ancientCityRift.isActive()) ancientCityRift.ensureMesh(scene);
+              return;
+            }
+            const interact = logicRuntime.interactComponent(tx, ty, tz);
             if (interact) {
               audio.play('ui', settingsRef.current);
               showActionMessage(interact);

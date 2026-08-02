@@ -34,7 +34,7 @@ import { AdvancedNoise } from '../../world/AdvancedNoise';
 export type DimensionArchetype =
   | 'hills' | 'nether' | 'end' | 'space' | 'frozen' | 'volcanic'
   | 'crystal' | 'ocean' | 'forest' | 'mushroom' | 'storm' | 'toxic'
-  | 'machine' | 'dark' | 'void' | 'corrupt';
+  | 'machine' | 'dark' | 'void' | 'corrupt' | 'rift';
 
 export interface DimensionTerrainStyle {
   /** Air just above the surface; the sea/void fill baseline. */
@@ -108,8 +108,9 @@ export function dimensionArchetype(dimensionId: string): DimensionArchetype {
     case 'machine_dimension': return 'machine';
     case 'shadow_realm': case 'spirit_realm': case 'undead_realm': case 'chaos_dimension':
       return 'dark';
-    case 'cosmic_void': case 'astral_plane': case 'dream_realm': case 'humorous': return 'void';
+    case 'cosmic_void': case 'astral_plane': case 'dream_realm': case 'humorous': case 'rift_dimension': return 'void';
     case 'corrupted_lands': case 'ancient_civilization': return 'corrupt';
+    case 'rift_dimension': return 'rift';
     default: return 'hills';
   }
 }
@@ -131,6 +132,7 @@ function styleFor(archetype: DimensionArchetype): DimensionTerrainStyle {
     case 'machine': return { seaLevel: 40, amplitude: 4, body: B.DEEPSLATE, surface: B.DEEPSLATE, subsurface: B.BLACKSTONE, fillBlock: B.AIR, fill: false, decor: B.GLOWSTONE };
     case 'dark': return { seaLevel: 56, amplitude: 26, body: B.BLACKSTONE, surface: B.SOUL_SOIL, subsurface: B.DEEPSLATE, fillBlock: B.AIR, fill: false, decor: B.OBSIDIAN };
     case 'void': return { seaLevel: 48, amplitude: 8, body: B.OBSIDIAN, surface: B.PURPUR, subsurface: B.BLACKSTONE, fillBlock: B.AIR, fill: false, decor: B.CRYSTAL };
+    case 'rift': return { seaLevel: 46, amplitude: 12, body: B.OBSIDIAN, surface: B.CRYSTAL, subsurface: B.PURPUR, fillBlock: B.AIR, fill: false, decor: B.CRYSTAL };
     case 'corrupt': return { seaLevel: 58, amplitude: 28, body: B.BLACKSTONE, surface: B.OBSIDIAN, subsurface: B.DEEPSLATE, fillBlock: B.LAVA, fill: true, decor: B.CRYSTAL };
     default: return { seaLevel: 64, amplitude: 14, body: B.STONE, surface: B.GRASS, subsurface: B.DIRT, fillBlock: B.WATER, fill: true, decor: B.OAK_LOG };
   }
@@ -176,6 +178,14 @@ export class DimensionTerrainGenerator {
             surface = n > 0.68 ? Math.floor(s.seaLevel + (n - 0.5) * s.amplitude * 2) : -1;
             break;
           }
+          case 'rift': {
+            // Colourful floating hills: dense, wavy islands of varying hues.
+            const n = this.noise.fbm2D(wx, wz, 4, 2.0, 0.5, 19);
+            surface = n > 0.55
+              ? Math.floor(s.seaLevel + (n - 0.55) * 26 + this.noise.hash(wx, 3, wz) * 8)
+              : -1;
+            break;
+          }
           case 'machine': {
             // Flat metallic platforms with occasional towers.
             const n = this.noise.fbm2D(wx, wz, 3, 2.0, 0.5, 13);
@@ -192,14 +202,22 @@ export class DimensionTerrainGenerator {
         const surfaceClamped = Math.max(1, Math.min(CHUNK_HEIGHT - 1, surface));
 
         // Fill the column.
-        if (this.archetype === 'end' || this.archetype === 'void') {
+        if (this.archetype === 'end' || this.archetype === 'void' || this.archetype === 'rift') {
           // Detached islands: only fill a shell around the surface point.
+          // In the rift dimension, the surface colour varies by column so the
+          // hills read as orange / red / blue / pink drifting islands.
           const islandRadius = 3 + Math.floor(this.noise.hash(wx, 5, wz) * 3);
+          // Rift dimension: each island top gets a distinct hue (orange, red,
+          // blue, pink, teal) so the floating hills look like the MC-Dungeons
+          // rift world of coloured landmasses.
+          const riftSurface = this.archetype === 'rift'
+            ? this.riftSurfaceBlock(wx, wz)
+            : s.surface;
           for (let y = surfaceClamped - islandRadius; y <= surfaceClamped + islandRadius; y++) {
             if (y < 0 || y >= CHUNK_HEIGHT) continue;
             const d = Math.abs(y - surfaceClamped);
             if (d <= islandRadius) {
-              const id = d === 0 ? s.surface : (d <= 1 ? s.subsurface : s.body);
+              const id = d === 0 ? riftSurface : (d <= 1 ? s.subsurface : s.body);
               chunk.setBlock(lx, y, lz, id);
             }
           }
@@ -207,6 +225,10 @@ export class DimensionTerrainGenerator {
           // arches, laugh-houses, jesting-frog ponds and glow clusters.
           if (this.archetype === 'void' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12) {
             this.placeHumorousStructures(chunk, lx, surfaceClamped, lz, wx, wz);
+          }
+          // The Rift Dimension: glowing hue-spires on the coloured hills.
+          if (this.archetype === 'rift' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12) {
+            this.placeRiftStructures(chunk, lx, surfaceClamped, lz, wx, wz);
           }
           continue;
         }
@@ -243,6 +265,30 @@ export class DimensionTerrainGenerator {
    * isles — crystal spires, punchline arches, laugh-houses, jest-frog ponds
    * and glowing particle gardens.
    */
+  /** Pick a colourful block id for a rift island's top, by column hash. */
+  private riftSurfaceBlock(wx: number, wz: number): BlockID {
+    const hue = this.noise.hash(wx, 3, wz);
+    if (hue < 0.2) return 39 as BlockID;   // red/orange sandstone
+    if (hue < 0.4) return 40 as BlockID;   // teal prismarine
+    if (hue < 0.6) return 42 as BlockID;   // purple purpur
+    if (hue < 0.8) return 221 as BlockID;  // pale blue ice
+    return 16 as BlockID;                  // cyan crystal
+  }
+
+  /** Rift-dimension landmarks: glowing hue-spires on the floating hills. */
+  private placeRiftStructures(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
+    const r = this.noise.hash(wx, 11, wz);
+    const base = surfaceY + 1;
+    if (r > 0.96) {
+      const h = 3 + Math.floor(this.noise.hash(wx, 12, wz) * 4);
+      for (let y = base; y <= base + h; y++) chunk.setBlock(lx, y, lz, B.CRYSTAL);
+      this.setSafe(chunk, lx, base + h + 1, lz, B.GLOWSTONE);
+    } else if (r > 0.90) {
+      this.setSafe(chunk, lx, base, lz, B.CRYSTAL);
+      this.setSafe(chunk, lx, base + 1, lz, B.GLOWSTONE);
+    }
+  }
+
   private placeHumorousStructures(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
     const r = this.noise.hash(wx, 9, wz);
     const g = this.noise.hash(wx, 10, wz);

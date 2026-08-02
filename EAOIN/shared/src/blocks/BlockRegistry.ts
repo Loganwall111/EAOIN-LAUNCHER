@@ -396,6 +396,12 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   306: { id: 306, name: 'Redstone Torch', shortName: 'RT', category: 'redstone', solid: false, transparent: true, hardness: 0.0, lightLevel: 7, emissive: true, stackSize: 64, color: '#ff5a3a', accentColor: '#c83232' },
   307: { id: 307, name: 'Chorus', shortName: 'CH', category: 'decoration', solid: false, transparent: true, hardness: 0.3, lightLevel: 13, emissive: true, stackSize: 64, color: '#a879ff', accentColor: '#4de0ff' },
   308: { id: 308, name: 'Shard', shortName: 'SH', category: 'misc', solid: false, transparent: true, hardness: 100.0, lightLevel: 12, emissive: true, stackSize: 1, color: '#5dd6ff', accentColor: '#ffffff' },
+  309: { id: 309, name: 'Note Block', shortName: 'NB', category: 'functional', solid: true, transparent: false, hardness: 0.8, lightLevel: 0, emissive: false, stackSize: 64, color: '#7a4d3a', accentColor: '#e0c070' },
+  310: { id: 310, name: 'Jukebox', shortName: 'JB', category: 'functional', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#6b3a1a', accentColor: '#c8962a' },
+  311: { id: 311, name: 'Sulphur Block', shortName: 'SB', category: 'building', solid: true, transparent: false, hardness: 0.8, lightLevel: 0, emissive: false, stackSize: 64, color: '#c8c22a', accentColor: '#8a8420' },
+  312: { id: 312, name: 'Sulphur Ore', shortName: 'SO', category: 'ore', solid: true, transparent: false, hardness: 2.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#a8a220', accentColor: '#c8c22a' },
+  313: { id: 313, name: 'Rift Stone', shortName: 'RS', category: 'building', solid: true, transparent: false, hardness: 2.4, lightLevel: 0, emissive: false, stackSize: 64, color: '#3a2a5a', accentColor: '#7c4dff' },
+  314: { id: 314, name: 'Sculk', shortName: 'SC', category: 'nature', solid: true, transparent: false, hardness: 0.6, lightLevel: 0, emissive: false, stackSize: 64, color: '#0e2438', accentColor: '#5fd0ff' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */
