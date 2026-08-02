@@ -27,8 +27,11 @@ import { loadSettings, saveSettings } from './settings/SettingsSave';
 import CinematicBoot from './ui/CinematicBoot';
 import SpawnAwakening from './ui/SpawnAwakening';
 import WorldLoadingScreen from './ui/WorldLoadingScreen';
+import LauncherBoot from './ui/LauncherBoot';
+import LauncherScreen from './ui/LauncherScreen';
+import { launcherDefaults, LauncherState, getBuild } from './launcher/LauncherRuntime';
 import WakeUpIntegration from '../client/src/ui/wakeup/WakeUpIntegration';
-import { worldTypeFromSeed, WorldTypeID } from './world/WorldTypes';
+import { seedForWorldType, worldTypeFromSeed, WorldTypeID } from './world/WorldTypes';
 import SignInScreen, { SignedInUser } from './ui/SignInScreen';
 import MarketplaceScreen from './ui/MarketplaceScreen';
 import EditorScreen from './ui/EditorScreen';
@@ -69,12 +72,19 @@ export default function App() {
   const [pendingWorldType, setPendingWorldType] = useState<WorldTypeID>('default');
   const [systemsVisible, setSystemsVisible] = useState(false);
 
-  /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
-  // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
-  // forced before you could reach the menu. Boot now runs first and hands off
-  // to the title screen; sign-in is reached only by pressing the button there.
-  const [appPhase, setAppPhase] = useState<AppPhase>('boot');
+  /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
+  // The app now opens on the launcher (version/build selector), then the
+  // cinematic boot, then the title screen. Sign-in is reached from the menu.
+  const [appPhase, setAppPhase] = useState<AppPhase>('launcherboot');
+  /** Launcher state (version/build selection, updates). */
+  const [launcherState, setLauncherState] = useState<LauncherState>(() => {
+    try {
+      const raw = localStorage.getItem('eaoin_launcher');
+      if (raw) return { ...launcherDefaults(), ...(JSON.parse(raw) as Partial<LauncherState>) };
+    } catch { /* first run */ }
+    return launcherDefaults();
+  });
   const [signedInUser, setSignedInUser] = useState<SignedInUser | null>(null);
 
   const [appearance, setAppearance] = useState<CharacterAppearance>(() => {
@@ -120,8 +130,14 @@ export default function App() {
   );
 
   const startGame = useCallback((seed?: string, mode: GameMode = 'survival') => {
-    const nextSeed = seed || worldSeed;
-    if (seed) setWorldSeed(seed);
+    // The launcher's selected build may override the world type (e.g. a
+    // developer/experimental build ships its own world). Tag the seed so the
+    // terrain generator uses that build's world type unless the player picked
+    // a specific seed of their own.
+    const build = getBuild(launcherState.selectedId);
+    const effectiveSeed = (seed && seed.trim()) || (build?.worldType ? seedForWorldType(worldSeed, build.worldType) : worldSeed);
+    const nextSeed = effectiveSeed || worldSeed;
+    if (nextSeed && nextSeed !== worldSeed) setWorldSeed(nextSeed);
     setGameMode(mode);
     if (mode === 'experimental') {
       setSettings((current) => ({ ...current, experimentalVulkanMode: true, rendererPreference: 'webgpu', commandBlocksEnabled: true, experimentalShaders: true, particlesEnabled: true }));
@@ -153,7 +169,7 @@ export default function App() {
     setNextGenWakeUp(true);
     setAwakening(false);
     setGameStarted(true);
-  }, [worldSeed]);
+  }, [worldSeed, launcherState.selectedId]);
 
   const exitToMenu = useCallback(() => {
     setInventoryOpen(false);
@@ -289,6 +305,35 @@ export default function App() {
   }, []);
 
   const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
+
+  // Persist launcher selection.
+  useEffect(() => {
+    try { localStorage.setItem('eaoin_launcher', JSON.stringify(launcherState)); } catch { /* storage disabled */ }
+  }, [launcherState]);
+
+  // ===== LAUNCHER BOOT PHASE =====
+  if (appPhase === 'launcherboot' && !gameStarted) {
+    return (
+      <div className={shellClass}>
+        <LauncherBoot onComplete={() => setAppPhase('launcher')} />
+      </div>
+    );
+  }
+
+  // ===== LAUNCHER PHASE =====
+  if (appPhase === 'launcher' && !gameStarted) {
+    return (
+      <div className={shellClass}>
+        <LauncherScreen
+          state={launcherState}
+          onSelect={(id) => setLauncherState((s) => ({ ...s, selectedId: id }))}
+          onLaunch={() => {}}
+          onInstalled={(id) => setLauncherState((s) => ({ ...s, installedId: id, selectedId: id }))}
+          onBoot={() => setAppPhase('boot')}
+        />
+      </div>
+    );
+  }
 
   // ===== SIGN-IN PHASE =====
   if (appPhase === 'signin' && !gameStarted) {

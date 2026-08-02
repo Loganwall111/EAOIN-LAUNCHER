@@ -15,6 +15,13 @@ describe('Guide button wiring', () => {
     vi.useFakeTimers();
     const { container } = render(<App />);
 
+    // Fast-forward past the launcher boot and click Play to reach the boot.
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await act(async () => {
+      const play = document.querySelector('.launcher-play') as HTMLButtonElement | null;
+      play?.click();
+    });
+
     // Fast-forward through the whole cinematic boot sequence to the title.
     for (let step = 0; step < 80; step += 1) {
       await act(async () => { vi.advanceTimersByTime(500); });

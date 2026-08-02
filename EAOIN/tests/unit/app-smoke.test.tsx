@@ -23,14 +23,19 @@ function isEnvironmentNoise(entry: unknown): boolean {
 }
 
 describe('App smoke', () => {
-  it('mounts and runs the full boot sequence without a React error', async () => {
+  it('mounts and runs the launcher + full boot sequence without a React error', async () => {
     const errors: unknown[] = [];
     const spy = vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args); });
     vi.useFakeTimers();
 
     render(<App />);
-    // The boot sequence (warning → engine → studio → credits → introducing →
-    // one persistent logo/ready scene) runs on timers totalling ~22s.
+    // Launcher boot (2.6s) → launcher appears → click Play → cinematic boot
+    // (~22s) → title menu.
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    await act(async () => {
+      const play = document.querySelector('.launcher-play') as HTMLButtonElement | null;
+      play?.click();
+    });
     await act(async () => { vi.advanceTimersByTime(45_000); });
 
     vi.useRealTimers();
@@ -40,11 +45,19 @@ describe('App smoke', () => {
     expect(real, JSON.stringify(real).slice(0, 900)).toHaveLength(0);
   });
 
-  it('renders the boot sequence and then hands off to the menu', async () => {
+  it('renders the launcher, then the boot sequence, then hands off to the menu', async () => {
     vi.useFakeTimers();
     const { container } = render(<App />);
 
-    // The very first card is the health & safety warning.
+    // The launcher (version/build selector) appears after its boot sequence.
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(container.querySelector('.launcher-screen')).toBeTruthy();
+
+    // Click Play to advance to the cinematic boot.
+    await act(async () => {
+      const play = document.querySelector('.launcher-play') as HTMLButtonElement | null;
+      play?.click();
+    });
     expect(container.querySelector('.cinematic-boot')).toBeTruthy();
 
     // The credits phase must actually appear — it is the piece that makes the

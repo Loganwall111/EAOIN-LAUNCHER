@@ -7,6 +7,7 @@ import './styles/concept-overhaul.css';
 import './styles/startup-error.css';
 import './styles/developer-app-panel.css';
 import './styles/horizonos.css';
+import './styles/launcher.css';
 // Loaded LAST: hud-layout.css owns the final position of every in-game panel
 // and resolves the overlaps between the older HUD stylesheets.
 import './styles/hud-layout.css';
