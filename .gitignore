@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Tests / coverage
+coverage/
+.vite/
+.cache/
+*.local
+.env
+.env.*
+!.env.example
+
+# Internal design docs (not part of the public release)
+uploads/
+FIX_SUMMARY_*.md
+BATCH_*_COMPLETE.md
+EAOIN/docs/
+EAOIN/BUGFIX_*.md
+EAOIN/BATCH_*.md
+EAOIN/RELEASE_*.md
+EAOIN/NEXT_GENERATION_*.md
+
+# Compiled bundles
+EAOIN/*.zip
+EAOIN/*.tar.gz
+
