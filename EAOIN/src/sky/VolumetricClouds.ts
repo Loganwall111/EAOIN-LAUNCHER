@@ -170,9 +170,12 @@ export class VolumetricClouds {
     // through it rather than landing on it.
     this.template.checkCollisions = false;
     this.template.applyFog = false;
-    // Rendering group 1 draws the deck after opaque terrain, so the soft
-    // volume blends over the world instead of being blended under it.
-    this.template.renderingGroupId = 1;
+    // Rendering group 0 keeps the deck in the *same* transparent pass as the
+    // rest of the world, so opaque terrain writes depth first and the soft
+    // cloud volume is correctly occluded behind mountains instead of drawing
+    // through them. (Group 1 rendered the deck after terrain in a later pass,
+    // which is what let cloud puffs bleed over mountain silhouettes.)
+    this.template.renderingGroupId = 0;
     this.template.alwaysSelectAsActiveMesh = true;
     this.template.doNotSyncBoundingInfo = true;
     // Never let the sky deck take part in shadow casting or picking.

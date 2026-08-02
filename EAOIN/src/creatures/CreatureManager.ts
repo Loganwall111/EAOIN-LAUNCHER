@@ -84,8 +84,8 @@ interface CreatureEntity {
   maxHealth: number;
   root: TransformNode;
   meshes: AbstractMesh[];
-  /** Limbs driven by the walk cycle (legs, wings, or serpent segments). */
-  limbs: AbstractMesh[];
+  /** Limbs driven by the walk cycle (leg hips, wings, or serpent segments). */
+  limbs: TransformNode[];
   head: AbstractMesh | null;
   target: Vector3;
   speed: number;
@@ -577,11 +577,11 @@ export class CreatureManager {
     variant: ResolvedVariant,
     root: TransformNode,
     id: string
-  ): { meshes: AbstractMesh[]; limbs: AbstractMesh[]; head: AbstractMesh | null } {
+  ): { meshes: AbstractMesh[]; limbs: TransformNode[]; head: AbstractMesh | null } {
     const plan = PLAN_SHAPES[species.bodyPlan];
     const s = variant.scale;
     const meshes: AbstractMesh[] = [];
-    const limbs: AbstractMesh[] = [];
+    const limbs: TransformNode[] = [];
 
     const bodyMat = this.partMaterial(species, variant, 'body');
     const headMat = this.partMaterial(species, variant, 'head');
@@ -652,21 +652,34 @@ export class CreatureManager {
     // --- legs -------------------------------------------------------------
     if (plan.legCount > 0) {
       const rows = plan.legCount === 2 ? [0] : plan.legCount === 6 ? [-1, 0, 1] : [-1, 1];
+      // Attachment point: the bottom of the torso, so legs actually meet the body.
+      const attachY = plan.bodyY * s - plan.bodyHeight * s * 0.5;
       for (const sx of [-1, 1]) {
         for (const sz of rows) {
+          // Each leg hangs from a hip pivot node positioned at the body bottom.
+          // Rotating the hip swings the whole leg around that joint, and the leg
+          // box hangs straight down from it — no more floating, detached legs.
+          const hip = new TransformNode(`creature_${species.id}_hip_${sx}_${sz}`, this.scene);
+          hip.parent = root;
+          hip.position = new Vector3(
+            sx * plan.legSpreadX * s,
+            attachY,
+            sz * plan.legSpreadZ * s
+          );
+          // Remember the resting hip height so the walk-cycle flex offsets it
+          // instead of snapping the hip (and detached leg) back to the origin.
+          hip.metadata = { baseY: attachY };
+
           const leg = MeshBuilder.CreateBox(`creature_${species.id}_leg`, {
             width: plan.legThickness * s, height: plan.legHeight * s, depth: plan.legThickness * s,
           }, this.scene);
-          leg.parent = root;
-          leg.setPivotPoint(new Vector3(0, (plan.legHeight * s) / 2, 0));
-          leg.position = new Vector3(
-            sx * plan.legSpreadX * s,
-            (plan.legHeight * s) / 2,
-            sz * plan.legSpreadZ * s
-          );
+          leg.parent = hip;
+          // Leg hangs below the hip (offset by half its height so it sits flush
+          // against the body with no gap).
+          leg.position = new Vector3(0, -plan.legHeight * s * 0.5, 0);
           leg.material = legMat;
           meshes.push(leg);
-          limbs.push(leg);
+          limbs.push(hip);
         }
       }
     }
@@ -1010,8 +1023,10 @@ export class CreatureManager {
       creature.limbs.forEach((leg, index) => {
         // Diagonal pairs, which is how quadrupeds actually walk.
         leg.rotation.x = swing * (index === 0 || index === 3 ? 1 : -1);
-        // Legs flex at the ground-strike for a planted feel.
-        leg.position.y = Math.abs(Math.sin(creature.walkPhase * Math.PI * 2 - index * 0.5)) * 0.04;
+        // Legs flex at the ground-strike for a planted feel. Hips keep their
+        // resting height and only offset by a small flex amount.
+        const baseY = (leg.metadata as { baseY?: number } | null)?.baseY ?? leg.position.y;
+        leg.position.y = baseY + Math.abs(Math.sin(creature.walkPhase * Math.PI * 2 - index * 0.5)) * 0.04;
       });
       // Bounce + subtle body roll so running reads as alive, not sliding.
       creature.root.position.y +=

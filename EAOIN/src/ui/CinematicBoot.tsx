@@ -29,9 +29,11 @@ type BootPhase =
 const LOGO_LETTERS = ['E', 'A', 'O', 'I', 'N'];
 
 const PHASE_SEQUENCE: Array<{ phase: BootPhase; durationMs: number }> = [
+  // The studio entrance plays FIRST, like a real AAA title sequence, so the
+  // "ONEBLOCKAWAY STUDIO" card is the very first thing the player sees.
+  { phase: 'STUDIO', durationMs: 3200 },
   { phase: 'WARNING', durationMs: 3000 },
   { phase: 'ENGINE', durationMs: 2800 },
-  { phase: 'STUDIO', durationMs: 3000 },
   { phase: 'CREDITS', durationMs: 7200 },
   { phase: 'INTRODUCING', durationMs: 1800 },
   { phase: 'NARRATION', durationMs: 8500 },
@@ -84,7 +86,7 @@ const TIPS = [
 ];
 
 export default function CinematicBoot({ onComplete, reducedMotion = false }: CinematicBootProps) {
-  const [phase, setPhase] = useState<BootPhase>(reducedMotion ? 'LOGO' : 'WARNING');
+  const [phase, setPhase] = useState<BootPhase>(reducedMotion ? 'LOGO' : 'STUDIO');
   const [litLetters, setLitLetters] = useState(0);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const chime = useMemo(() => new BootChime(), []);

@@ -29,11 +29,12 @@ interface OSWindow {
   z: number;
   open: boolean;
   minimized: boolean;
+  maximized: boolean;
   w: number;
   h: number;
 }
 
-const WINDOW_DEFS: Array<Omit<OSWindow, 'x' | 'y' | 'z' | 'open' | 'minimized' | 'w' | 'h'>> = [
+const WINDOW_DEFS: Array<Omit<OSWindow, 'x' | 'y' | 'z' | 'open' | 'minimized' | 'maximized' | 'w' | 'h'>> = [
   { id: 'terminal', title: 'Terminal', icon: '🖥️' },
   { id: 'files', title: 'File Explorer', icon: '📁' },
   { id: 'browser', title: 'Nebula Browser', icon: '🌐' },
@@ -113,7 +114,7 @@ export default function HorizonOS({ onExit }: HorizonOSProps) {
   const [windows, setWindows] = useState<OSWindow[]>(() =>
     WINDOW_DEFS.map((d, i) => {
       const size = WINDOW_SIZES[d.id] ?? { w: 520, h: 320 };
-      return { ...d, x: 90 + i * 34, y: 60 + i * 30, z: i, open: false, minimized: false, ...size };
+      return { ...d, x: 90 + i * 34, y: 60 + i * 30, z: i, open: false, minimized: false, maximized: false, ...size };
     })
   );
   const [adminPass, setAdminPass] = useState('');
@@ -168,12 +169,17 @@ export default function HorizonOS({ onExit }: HorizonOSProps) {
 
   const toggleWindow = (id: string) => {
     topRef.current += 1;
-    setWindows((ws) => ws.map((w) => (w.id === id ? { ...w, open: !w.open, z: topRef.current, minimized: false } : w)));
+    setWindows((ws) => ws.map((w) => (w.id === id ? { ...w, open: !w.open, z: topRef.current, minimized: false, maximized: false } : w)));
   };
 
   const openDefault = (id: string) => {
     topRef.current += 1;
     setWindows((ws) => ws.map((w) => (w.id === id ? { ...w, open: true, z: topRef.current, minimized: false } : w)));
+  };
+
+  const toggleMaximize = (id: string) => {
+    bringToFront(id);
+    setWindows((ws) => ws.map((w) => (w.id === id ? { ...w, maximized: !w.maximized } : w)));
   };
 
   const startDrag = (id: string, e: React.PointerEvent) => {
@@ -265,14 +271,17 @@ export default function HorizonOS({ onExit }: HorizonOSProps) {
       {openWindows.map((w) => (
         <div
           key={w.id}
-          className="hzos-window"
-          style={{ left: w.x, top: w.y, zIndex: w.z, width: w.w, height: w.h }}
+          className={`hzos-window ${w.maximized ? 'maximized' : ''}`}
+          style={w.maximized
+            ? { left: 6, top: 6, zIndex: w.z, width: 'calc(100% - 12px)', height: 'calc(100% - 56px)' }
+            : { left: w.x, top: w.y, zIndex: w.z, width: w.w, height: w.h }}
           onMouseDown={() => bringToFront(w.id)}
         >
           <div className="hzos-window-head" onPointerDown={(e) => startDrag(w.id, e)}>
             <span>{w.icon} {w.title}</span>
             <span className="hzos-window-actions">
               <button onClick={(e) => { e.stopPropagation(); setWindows((ws) => ws.map((x) => x.id === w.id ? { ...x, minimized: true } : x)); }}>─</button>
+              <button title={w.maximized ? 'Restore' : 'Maximize'} onClick={(e) => { e.stopPropagation(); toggleMaximize(w.id); }}>{w.maximized ? '❐' : '▢'}</button>
               <button onClick={(e) => { e.stopPropagation(); setWindows((ws) => ws.map((x) => x.id === w.id ? { ...x, open: false } : x)); }}>✕</button>
             </span>
           </div>

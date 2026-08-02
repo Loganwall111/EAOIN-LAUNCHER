@@ -1,12 +1,13 @@
-import { Color4, ParticleSystem, Scene, Texture, Vector3 } from '@babylonjs/core';
+import { Color4, ParticleSystem, Scene, Vector3 } from '@babylonjs/core';
 import { SpawnPoint } from '../world/TerrainGenerator';
+import { createParticleDotTexture } from './ParticleDotTexture';
 
 export class AmbientParticleRuntime {
   private readonly particles: ParticleSystem;
 
   constructor(scene: Scene, spawn: SpawnPoint) {
     this.particles = new ParticleSystem('release_to_life_ambient_particles', 900, scene);
-    this.particles.particleTexture = Texture.CreateFromBase64String('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=', 'particleTex', scene, true, false);
+    this.particles.particleTexture = createParticleDotTexture(scene);
     this.particles.emitter = new Vector3(spawn.x, spawn.y + 8, spawn.z);
     this.particles.minEmitBox = new Vector3(-35, 0, -35);
     this.particles.maxEmitBox = new Vector3(35, 12, 35);

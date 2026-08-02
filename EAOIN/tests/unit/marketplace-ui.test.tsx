@@ -244,10 +244,11 @@ describe('EditorScreen', () => {
 });
 
 describe('CinematicBoot', () => {
-  it('starts on the health & safety card', () => {
+  it('starts on the ONEBLOCKAWAY STUDIO card (the AAA intro first card)', () => {
     const { container } = render(<CinematicBoot onComplete={noop} />);
-    expect(container.textContent).toContain('Health');
-    expect(container.querySelector('.cb-warning')).not.toBeNull();
+    expect(container.textContent).toContain('ONEBLOCKAWAY');
+    expect(container.textContent).toContain('STUDIO');
+    expect(container.querySelector('.cb-studio-scene, .cinematic-studio')).not.toBeNull();
   });
 
   it('skips straight to the ready card on the first key press', () => {

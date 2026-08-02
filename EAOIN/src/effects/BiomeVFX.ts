@@ -18,8 +18,9 @@
  *   rain       — storm dimension: fast vertical streaks
  *   void       — space: sparse drifting cosmic dust
  */
-import { Color4, ParticleSystem, Scene, Texture, Vector3 } from '@babylonjs/core';
+import { Color4, ParticleSystem, RawTexture, Scene, Vector3 } from '@babylonjs/core';
 import { SkyWeather } from '../sky/SkyProfiles';
+import { createParticleDotTexture } from './ParticleDotTexture';
 
 /** Extra ambience layered on top of the profile's primary weather. */
 export type AmbientEffect = 'fireflies' | 'butterflies' | 'pollen';
@@ -36,14 +37,10 @@ interface EffectHandle {
   baseEmitRate: number;
 }
 
-/** 1x1 white dot, used as the base sprite for every soft particle. */
-const DOT_TEXTURE =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
-
 export class BiomeVFX {
   private readonly scene: Scene;
   private readonly effects = new Map<string, EffectHandle>();
-  private texture: Texture | null = null;
+  private texture: RawTexture | null = null;
   private enabled: boolean;
   private quality: number;
   private activeWeather: SkyWeather = 'clear';
@@ -57,7 +54,7 @@ export class BiomeVFX {
   }
 
   attach(): void {
-    this.texture = Texture.CreateFromBase64String(DOT_TEXTURE, 'dot', this.scene, true, false);
+    this.texture = createParticleDotTexture(this.scene);
     this.createFireflies();
     this.createButterflies();
     this.createPollen();

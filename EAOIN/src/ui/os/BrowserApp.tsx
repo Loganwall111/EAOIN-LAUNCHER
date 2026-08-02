@@ -28,7 +28,7 @@ const CATALOG: BrowserExtension[] = [
 ];
 
 const QUICK_LINKS = [
-  { name: 'YouTube', url: 'https://www.youtube.com', icon: '▶' },
+  { name: 'YouTube', url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw', icon: '▶' },
   { name: 'Wikipedia', url: 'https://www.wikipedia.org', icon: 'W' },
   { name: 'Google', url: 'https://www.google.com', icon: '🔍' },
   { name: 'Bing', url: 'https://www.bing.com', icon: 'b' },
@@ -37,7 +37,30 @@ const QUICK_LINKS = [
 ];
 
 /** A few known hosts that refuse to be embedded in an iframe. */
-const BLOCKED_HOSTS = ['youtube.com', 'google.com'];
+const BLOCKED_HOSTS = ['google.com'];
+
+/**
+ * YouTube sends `X-Frame-Options: DENY` on its main site, so a raw iframe of
+ * `youtube.com` is always blocked. But the official *embed* endpoint
+ * (`youtube.com/embed/<id>`) is designed to be framed, so when the user opens a
+ * YouTube watch/share link we transparently load the embed player and videos
+ * actually play inside the browser instead of showing "blocked".
+ */
+function youtubeEmbedUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'youtube.com') {
+      const v = u.searchParams.get('v');
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+    if (host === 'youtu.be') {
+      const id = u.pathname.slice(1);
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+  } catch { /* not a URL */ }
+  return null;
+}
 
 function hostOf(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
@@ -79,11 +102,20 @@ export default function BrowserApp() {
   const go = (raw?: string) => {
     const target = normalize(raw ?? url);
     if (BLOCKED_HOSTS.includes(hostOf(target))) setBlockedCount((c) => c + 1);
-    setCurrentUrl(target);
+    // Transparently route YouTube watch links through the embed player so they
+    // actually render instead of being refused by the browser's frame policy.
+    const embed = youtubeEmbedUrl(target);
+    setCurrentUrl(embed ?? target);
     setUrl(target);
   };
 
   const home = () => { setCurrentUrl('about:home'); setUrl(''); };
+
+  /** Open the current page in a real browser tab (bypasses iframe blocking). */
+  const popOut = () => {
+    if (currentUrl === 'about:home' || currentUrl.startsWith('about:')) return;
+    window.open(currentUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const toggleExt = (id: string) => {
     setInstalled((s) => {
@@ -109,6 +141,7 @@ export default function BrowserApp() {
         </div>
         <button className={`brw-btn ${installed['dark'] ? 'ext-active' : ''}`} onClick={() => toggleExt('dark')} title="Dark Reader">🌙</button>
         <button className="brw-btn" onClick={() => setShowStore(true)} title="Extensions">🧩 Extensions</button>
+        <button className="brw-btn" onClick={popOut} title="Open in a real browser tab (bypasses block pages)">↗ Open in tab</button>
       </div>
 
       <div className="browser-tabs">

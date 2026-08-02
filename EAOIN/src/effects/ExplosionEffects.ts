@@ -10,11 +10,9 @@
  * Deliberately deterministic and pure of game state except for the blocks it
  * clears, so it composes cleanly with ChunkRenderManager streaming.
  */
-import { Color3, Color4, ParticleSystem, PointLight, Scene, Texture, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, ParticleSystem, PointLight, Scene, Vector3 } from '@babylonjs/core';
 import { BlockID } from '@shared/blocks/BlockRegistry';
-
-/** Tiny white particle sprite used for blast smoke and embers. */
-const PARTICLE_DOT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+import { createParticleDotTexture } from './ParticleDotTexture';
 
 /** Default fuse time in seconds before TNT detonates. */
 export const TNT_FUSE_SECONDS = 1.6;
@@ -104,7 +102,7 @@ export function detonateTNT(scene: Scene, ctx: ExplosionContext, x: number, y: n
 
   // --- Blast particles ----------------------------------------------------
   const ps = new ParticleSystem(`tnt_smoke_${x}_${y}_${z}`, 120, scene);
-  ps.particleTexture = Texture.CreateFromBase64String(PARTICLE_DOT, 'tnt_blast_tex', scene, true, false);
+  ps.particleTexture = createParticleDotTexture(scene);
   ps.emitter = new Vector3(x, y, z);
   ps.minSize = 0.5; ps.maxSize = 2.2;
   ps.minLifeTime = 0.4; ps.maxLifeTime = 1.6;
