@@ -304,7 +304,7 @@ export default function App() {
     setWorldAttempt((attempt) => attempt + 1);
   }, []);
 
-  const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''}`;
+  const shellClass = `eaoin-app ${settings.highContrast ? 'high-contrast' : ''} ${settings.reducedMotion ? 'reduced-motion' : ''} ${settings.touchControls ? 'touch-active' : ''}`;
 
   // Persist launcher selection.
   useEffect(() => {

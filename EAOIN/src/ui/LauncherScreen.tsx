@@ -95,7 +95,7 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
 
       {/* Studio name at the very top */}
       <header className="launcher-header">
-        <div className="launcher-studio">ONEBLOCKAWAY STUDIO</div>
+        <div className="launcher-studio">ONEBLOCKAWAY STUDIOS</div>
         <div className="launcher-wordmark">EAOIN LAUNCHER</div>
       </header>
 

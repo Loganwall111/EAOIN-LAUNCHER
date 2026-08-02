@@ -251,21 +251,27 @@ describe('CinematicBoot', () => {
     expect(container.querySelector('.cb-studio-scene, .cinematic-studio')).not.toBeNull();
   });
 
-  it('protects the ONEBLOCKAWAY studio intro from being skipped on the first press', () => {
-    // 3.x: the studio title card is the AAA intro and plays FIRST, so a stray
-    // key/click must not skip past it. After it plays out, a press skips the
-    // remaining boot straight to "press any key".
+  it('protects the intro scenes from being skipped by a stray press', () => {
+    // A stray key/click must NOT blow past the studio card or the warning /
+    // engine / credits scenes (this is what hid them on touch devices). Only
+    // Escape deliberately skips to the ready card.
     vi.useFakeTimers();
     const { container } = render(<CinematicBoot onComplete={noop} />);
 
-    // Studio is the first card and can't be skipped away.
+    // Studio is the first card; a stray Enter must not skip it or advance it.
     fireEvent.keyDown(window, { key: 'Enter' });
     expect(container.querySelector('.cb-studio-scene, .cinematic-studio')).not.toBeNull();
     expect(container.querySelector('.cb-ready')).toBeNull();
 
-    // Once the studio has played out, the next press jumps to the ready card.
+    // After the studio plays out we land on the warning scene — a stray press
+    // still must not skip straight to ready.
     act(() => { vi.advanceTimersByTime(4000); });
     fireEvent.keyDown(window, { key: 'Enter' });
+    expect(container.querySelector('.cb-warning, .cb-warning-scene')).not.toBeNull();
+    expect(container.querySelector('.cb-ready')).toBeNull();
+
+    // Escape deliberately skips to the ready card.
+    fireEvent.keyDown(window, { key: 'Escape' });
     expect(container.querySelector('.cb-ready')).not.toBeNull();
     expect(container.querySelectorAll('.cb-logo-mark')).toHaveLength(1);
     expect(container.querySelectorAll('[aria-label="EAOIN"]')).toHaveLength(1);

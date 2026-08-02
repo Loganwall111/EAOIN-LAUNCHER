@@ -110,21 +110,30 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
     }, 1050);
   }, [onComplete]);
 
-  const skip = useCallback(() => {
-    setPhase((current) => {
-      // The ONEBLOCKAWAY STUDIO card is the AAA title sequence — a stray click
-      // must not skip past it, or players never see the studio entrance.
-      if (current === 'STUDIO') return current;
-      return current === 'READY' || current === 'DONE' ? current : 'READY';
-    });
-  }, []);
-
-  /* ------------------------------ input ----------------------------------- */
-
+  /* ------------------------------ input -----------------------------------
+     A stray tap / click / key press must NOT blow past the intro scenes (the
+     warning, the engine card, the credits…). Only the Escape key deliberately
+     skips; everything else just finishes the sequence once it reaches READY.
+     This is what let iPad/touch users see nothing but the background dots —
+     a single tap was jumping straight to the ready card. */
   useEffect(() => {
-    const onInput = () => {
+    const onInput = (e: KeyboardEvent | PointerEvent) => {
+      if (e.type === 'keydown') {
+        const key = (e as KeyboardEvent).key;
+        // Only Escape skips the intro.
+        if (key === 'Escape') {
+          if (phase === 'READY') finish();
+          else {
+            setPhase((current) => (current === 'READY' || current === 'DONE' ? current : 'READY'));
+          }
+          return;
+        }
+        // Any other key only finishes once the intro has reached READY.
+        if (phase === 'READY') finish();
+        return;
+      }
+      // Pointer/click: only finishes at READY (never skips the intro).
       if (phase === 'READY') finish();
-      else skip();
     };
     window.addEventListener('keydown', onInput);
     window.addEventListener('pointerdown', onInput);
@@ -132,7 +141,7 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
       window.removeEventListener('keydown', onInput);
       window.removeEventListener('pointerdown', onInput);
     };
-  }, [phase, skip, finish]);
+  }, [phase, finish]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSkipHintVisible(true), 1400);

@@ -547,3 +547,55 @@
 @media (max-width: 900px) {
   .game-hud .boss-bar { width: 76vw; top: 112px; }
 }
+
+/* --------------------------------------------------------------------------
+   Touch-controls spacing
+   When the on-screen mobile buttons are enabled the HUD panels must lift out
+   of the zones the joystick (bottom-left) and action buttons (bottom-right)
+   occupy, so nothing overlaps or squishes the chat / abilities / equipped.
+   -------------------------------------------------------------------------- */
+
+.touch-active .game-hud .chat-panel,
+.touch-active .eaoin-hud .hud-chat {
+  /* Clear of the left joystick (which sits up at ~120px). */
+  left: calc(var(--hud-gutter) + 120px) !important;
+  bottom: calc(var(--hud-bottom-reserve) + 46px) !important;
+  width: min(420px, 36vw) !important;
+  z-index: var(--hud-z-chat);
+}
+
+.touch-active .game-hud .command-console {
+  bottom: calc(var(--hud-bottom-reserve) + 54px) !important;
+}
+
+.touch-active .eaoin-hud .hud-nav {
+  left: calc(var(--hud-gutter) + 120px) !important;
+  bottom: calc(var(--hud-bottom-reserve) + 8px) !important;
+}
+
+/* Abilities and equipped card clear of the right action-button column. */
+.touch-active .eaoin-hud .hud-abilities {
+  right: calc(var(--hud-gutter) + 96px) !important;
+  bottom: calc(var(--hud-gutter) + 130px) !important;
+}
+
+.touch-active .eaoin-hud .hud-equipped {
+  right: calc(var(--hud-gutter) + 96px) !important;
+  bottom: calc(var(--hud-gutter) + 216px) !important;
+}
+
+.touch-active .game-hud .mining-progress {
+  bottom: calc(var(--hud-bottom-reserve) + 130px) !important;
+}
+
+/* General breathing room: raise the chat clear of the hotbar and separate the
+   bottom-left panels so they never pile on top of one another. */
+.eaoin-hud .hud-chat {
+  bottom: calc(var(--hud-bottom-reserve) + 8px) !important;
+}
+.game-hud .chat-panel {
+  bottom: calc(var(--hud-bottom-reserve) + 8px) !important;
+}
+.game-hud .command-console {
+  bottom: calc(var(--hud-bottom-reserve) + 16px) !important;
+}

@@ -38,7 +38,7 @@ export default function LauncherBoot({ onComplete }: LauncherBootProps) {
           <div className="lb-warp-ring lb-warp-ring-1" />
           <div className="lb-warp-ring lb-warp-ring-2" />
           <div className="lb-warp-ring lb-warp-ring-3" />
-          <div className="lb-warp-text"><span>ONEBLOCKAWAY STUDIO</span>LAUNCHER</div>
+          <div className="lb-warp-text"><span>ONEBLOCKAWAY STUDIOS</span>LAUNCHER</div>
           <div className="lb-warp-flash" />
         </div>
       )}

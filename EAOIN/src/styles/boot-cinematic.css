@@ -503,9 +503,12 @@
 
 .cb-studio-name {
   margin: 12px 0 22px;
-  font: 900 clamp(58px, 15vw, 200px)/0.85 var(--ui-font, sans-serif);
-  letter-spacing: 0.1em;
-  text-indent: 0.1em;
+  font: 900 clamp(28px, 7vw, 130px)/1.05 var(--ui-font, sans-serif);
+  letter-spacing: 0.04em;
+  /* Never overflow horizontally — the full word must always fit the screen. */
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
   /* Base is fully visible — never hidden by a fill-mode `from` keyframe. */
   color: #ffffff;
   opacity: 1;
@@ -524,18 +527,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   color: rgba(210, 228, 244, 0.85);
-  font: 800 13px/1 var(--ui-font, sans-serif);
-  letter-spacing: 0.66em;
-  text-indent: 0.66em;
+  font: 800 12px/1 var(--ui-font, sans-serif);
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .cb-studio-rule::before,
 .cb-studio-rule::after {
   content: '';
-  width: clamp(44px, 8vw, 110px);
+  width: clamp(32px, 6vw, 90px);
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(98, 216, 255, 0.6));
 }
@@ -545,17 +549,18 @@
 /* Big "PRESENTS" stamp under the studio name. */
 .cb-studio-tagline {
   margin-top: 22px;
-  font: 800 clamp(16px, 2.6vw, 30px)/1 var(--ui-font, sans-serif);
-  letter-spacing: 0.9em;
-  text-indent: 0.9em;
+  font: 800 clamp(14px, 2.4vw, 26px)/1 var(--ui-font, sans-serif);
+  letter-spacing: 0.45em;
+  text-indent: 0.45em;
   color: #cfe2ff;
   opacity: 1;
+  white-space: nowrap;
   text-shadow: 0 0 30px rgba(120, 160, 255, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6);
   animation: cbTaglineIn 1.2s 0.4s ease-out;
 }
 @keyframes cbTaglineIn {
-  from { letter-spacing: 1.4em; opacity: 0.3; }
-  to   { letter-spacing: 0.9em; opacity: 1; }
+  from { letter-spacing: 0.7em; opacity: 0.3; }
+  to   { letter-spacing: 0.45em; opacity: 1; }
 }
 
 /* ---------------------------------------------------------------- credits */
@@ -941,8 +946,26 @@
 
 /* --------------------------------------------------------------- responsive */
 
+/* Narrow / tablet breakpoint: make every scene fit the screen without the
+   content overflowing or being clipped (a stray tap or a short viewport must
+   never hide the warning / engine / credits text). */
+@media (max-width: 820px) {
+  .cb-scene { width: calc(100vw - 32px); min-height: 0; }
+  .cb-warning-scene,
+  .cb-engine-scene { grid-template-columns: 1fr; gap: 20px; text-align: center; }
+  .cb-warning-emblem { width: 76px; justify-self: center; }
+  .cb-warning-copy { padding: 14px 0 0; border-left: 0; border-top: 1px solid rgba(255,255,255,0.13); text-align: center; }
+  .cb-warning-copy p { margin-left: auto; margin-right: auto; }
+  .cb-warning-footer { justify-content: center; }
+  .cb-engine-visual { width: 150px; justify-self: center; }
+  .cb-engine-copy { justify-self: center; }
+  .cb-engine-specs { justify-content: center; }
+  .cb-studio-sigil { width: 76px; height: 76px; }
+  .cb-studio-scene { gap: 16px; }
+}
+
 @media (max-width: 720px) {
-  .cb-scene { width: calc(100vw - 32px); min-height: calc(100vh - 70px); }
+  .cb-scene { width: calc(100vw - 32px); min-height: 0; }
   .cb-status-rail { top: 26px; gap: 8px; letter-spacing: 0.15em; }
   .cb-status-diamond { display: none; }
   .cb-warning-scene,
