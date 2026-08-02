@@ -22,7 +22,7 @@ jobs:
         working-directory: EAOIN
       - name: Build
         env:
-          BASE_PATH: /EAOIN-LAUNCHER/
+          BASE_PATH: /workspace-019f9970-c7a8-70dc-b070-31b29d1f5b35/
         run: npm run build
         working-directory: EAOIN
       - uses: actions/upload-pages-artifact@v3
