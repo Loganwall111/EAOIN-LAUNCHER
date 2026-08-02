@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type GameId = 'none' | 'shooter' | 'cards';
+type GameId = 'none' | 'shooter' | 'cards' | 'snake';
 
 export default function GameHub() {
   const [game, setGame] = useState<GameId>('none');
@@ -30,6 +30,12 @@ export default function GameHub() {
               <small>Match the pairs. Trains your cosmic recall.</small>
               <span className="gh-play">▶ Play</span>
             </button>
+            <button className="gh-card" onClick={() => setGame('snake')}>
+              <span className="gh-card-icon">🐍</span>
+              <strong>Neon Snake</strong>
+              <small>Eat the motes. Don't eat yourself.</small>
+              <span className="gh-play">▶ Play</span>
+            </button>
           </div>
           <p className="gh-hint">More arcade cabinets arrive with each OS update.</p>
         </div>
@@ -37,6 +43,136 @@ export default function GameHub() {
 
       {game === 'shooter' && <ArenaShooter onExit={() => setGame('none')} />}
       {game === 'cards' && <MemoryCards onExit={() => setGame('none')} />}
+      {game === 'snake' && <SnakeGame onExit={() => setGame('none')} />}
+    </div>
+  );
+}
+
+/* ------------------------------- Neon Snake ------------------------------ */
+
+const GRID = 20;
+
+function SnakeGame({ onExit }: { onExit: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [score, setScore] = useState(0);
+  const [hi, setHi] = useState<number>(() => Number(localStorage.getItem('eaoin_os_snake_hi') ?? 0));
+  const [over, setOver] = useState(false);
+  const stateRef = useRef({ snake: [{ x: 9, y: 9 }], dir: { x: 1, y: 0 }, food: { x: 4, y: 4 }, alive: true });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const size = canvas.clientWidth;
+    canvas.width = size;
+    canvas.height = size;
+    const cell = size / GRID;
+    const s = stateRef.current;
+
+    // Place initial food.
+    const placeFood = () => {
+      while (true) {
+        const f = { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
+        if (!s.snake.some((seg) => seg.x === f.x && seg.y === f.y)) { s.food = f; return; }
+      }
+    };
+    placeFood();
+
+    const tick = () => {
+      if (!s.alive) { draw(); return; }
+      const head = s.snake[0];
+      const nx = head.x + s.dir.x;
+      const ny = head.y + s.dir.y;
+      const hitWall = nx < 0 || ny < 0 || nx >= GRID || ny >= GRID;
+      const hitSelf = s.snake.some((seg) => seg.x === nx && seg.y === ny);
+      if (hitWall || hitSelf) {
+        s.alive = false;
+        setOver(true);
+        setScore((sc) => { if (sc > hi) { setHi(sc); localStorage.setItem('eaoin_os_snake_hi', String(sc)); } return sc; });
+        draw();
+        return;
+      }
+      s.snake.unshift({ x: nx, y: ny });
+      if (nx === s.food.x && ny === s.food.y) {
+        setScore((sc) => sc + 1);
+        placeFood();
+      } else {
+        s.snake.pop();
+      }
+      draw();
+    };
+
+    const draw = () => {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = '#05070f';
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < GRID; i++) {
+        for (let j = 0; j < GRID; j++) {
+          ctx.strokeStyle = 'rgba(90,150,255,0.06)';
+          ctx.strokeRect(i * cell, j * cell, cell, cell);
+        }
+      }
+      // food
+      ctx.fillStyle = '#7ad8ff';
+      ctx.shadowColor = '#7ad8ff'; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(s.food.x * cell + cell / 2, s.food.y * cell + cell / 2, cell * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      // snake
+      s.snake.forEach((seg, i) => {
+        ctx.fillStyle = i === 0 ? '#39e08a' : '#1f9a5a';
+        ctx.shadowColor = '#39e08a'; ctx.shadowBlur = i === 0 ? 14 : 6;
+        ctx.fillRect(seg.x * cell + 1, seg.y * cell + 1, cell - 2, cell - 2);
+      });
+      ctx.shadowBlur = 0;
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      const d = s.dir;
+      const map: Record<string, { x: number; y: number }> = {
+        ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
+        ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 },
+        w: { x: 0, y: -1 }, s: { x: 0, y: 1 }, a: { x: -1, y: 0 }, d: { x: 1, y: 0 },
+      };
+      const next = map[e.key];
+      if (next && !(next.x === -d.x && next.y === -d.y)) s.dir = next;
+    };
+    window.addEventListener('keydown', onKey);
+    const iv = window.setInterval(tick, 110);
+
+    return () => { window.removeEventListener('keydown', onKey); clearInterval(iv); };
+  }, [hi]);
+
+  const restart = () => {
+    stateRef.current = { snake: [{ x: 9, y: 9 }], dir: { x: 1, y: 0 }, food: { x: 4, y: 4 }, alive: true };
+    setScore(0);
+    setOver(false);
+  };
+
+  return (
+    <div className="gh-game">
+      <div className="gh-game-head">
+        <span>🐍 Neon Snake</span>
+        <span className="gh-hud"><b>SCORE {score}</b> • 🏆 {hi}</span>
+        <button className="gh-tool" onClick={onExit}>✕</button>
+      </div>
+      <div className="snake-wrap">
+        <canvas ref={canvasRef} className="snake-canvas" />
+        <div className="gh-hint">Arrow keys / WASD to steer. Don't hit the walls or yourself.</div>
+      </div>
+      {over && (
+        <div className="gh-overlay">
+          <div className="gh-overlay-card">
+            <h2>💥 Game Over</h2>
+            <p>Score: <b>{score}</b> {score >= hi && score > 0 ? '— new record!' : ''}</p>
+            <div className="gh-overlay-actions">
+              <button className="gh-btn" onClick={restart}>↻ Play Again</button>
+              <button className="gh-btn" onClick={onExit}>← Hub</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

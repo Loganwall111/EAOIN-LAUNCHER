@@ -61,32 +61,10 @@
   animation: neuronPulse 3.5s ease-in-out infinite;
 }
 
-/* Realistic glowing lady visible during galaxy zoom */
-.galaxy-lady {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.6);
-  width: 220px;
-  height: 220px;
-  background: radial-gradient(circle, #c8aaff 12%, #7a4dff 42%, transparent 78%);
-  border-radius: 50%;
-  box-shadow: 
-    0 0 140px #c8aaff,
-    0 0 260px #7a4dff,
-    0 0 380px rgba(122, 77, 255, 0.6);
-  animation: galaxyLadyZoom 6.2s cubic-bezier(0.23, 1, 0.32, 1) forwards, ladyPulse 3.5s ease-in-out infinite;
-  z-index: 2;
-}
-
-@keyframes galaxyLadyZoom {
-  from { transform: translate(-50%, -50%) scale(0.25); opacity: 0.3; }
-  to   { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
-}
-
+/* Purple loading bar, parked flush at the bottom of the loading frame. */
 .aaa-loading-bar {
   position: absolute;
-  bottom: 11%;
+  bottom: 2.5%;
   left: 50%;
   transform: translateX(-50%);
   width: 420px;
@@ -106,13 +84,30 @@
 
 .loading-text {
   position: absolute;
-  bottom: 7%;
+  bottom: 6.5%;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11px;
   letter-spacing: 3.5px;
   color: #4dd8ff;
   text-transform: uppercase;
+}
+
+/* White flash-bang that goes off right before the girl begins to speak. */
+.galaxy-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  animation: galaxyFlash 0.65s ease-in forwards;
+  animation-delay: 5.4s;
+}
+@keyframes galaxyFlash {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* Dream Sequence - Purple Lady */
@@ -274,52 +269,194 @@
   50% { transform: scale(1.08); }
 }
 
-/* Cosmic Girl animated lips + hand */
+/* Cosmic Girl — animated voxel-style figure that looks at you and moves. */
 .cosmic-girl-wrap {
   position: relative;
   margin-bottom: 40px;
+  display: flex;
+  justify-content: center;
 }
-.cosmic-girl {
-  display: block;
-  margin: 0 auto;
+
+.cosmic-figure {
+  position: relative;
+  width: 210px;
+  height: 320px;
+  animation: cg-bob 3.4s ease-in-out infinite;
+  filter: drop-shadow(0 18px 30px rgba(30, 90, 200, 0.5));
 }
-.cosmic-lips {
+
+.cg-aura {
   position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle, rgba(80, 210, 255, 0.35), rgba(40, 120, 255, 0.12) 55%, transparent 78%);
+  border-radius: 50%;
+  filter: blur(4px);
+  animation: cg-aura-pulse 3.4s ease-in-out infinite;
+}
+
+/* Head */
+.cg-head {
+  position: absolute;
+  top: 0;
   left: 50%;
-  top: 52%;
-  transform: translate(-50%, 0);
-  width: 34px;
+  transform: translateX(-50%);
+  width: 82px;
+  height: 86px;
+  background: linear-gradient(180deg, #6fd8ff, #2a8ad8);
+  border-radius: 14px 14px 12px 12px;
+  box-shadow: inset 0 -8px 14px rgba(0, 0, 40, 0.35), 0 0 24px rgba(90, 200, 255, 0.6);
+  animation: cg-head-look 7s ease-in-out infinite;
+  z-index: 3;
+}
+.cg-hair {
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  right: -4px;
+  height: 40px;
+  background: linear-gradient(180deg, #1a3f8a, #2a6ad8 70%);
+  border-radius: 16px 16px 8px 8px;
+  box-shadow: inset 0 4px 8px rgba(255, 255, 255, 0.25);
+}
+.cg-face {
+  position: absolute;
+  inset: 34px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+}
+.cg-eyes {
+  display: flex;
+  gap: 18px;
+  margin-top: 4px;
+}
+.cg-eye {
+  width: 12px;
   height: 14px;
+  background: radial-gradient(circle at 35% 35%, #3a2a7a, #0a0a24 70%);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(220, 240, 255, 0.8);
+  transform: scaleY(1);
+  transition: transform 120ms;
+}
+.cg-eye.blink { transform: scaleY(0.1); }
+.cg-mouth {
+  width: 26px;
+  height: 12px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 0 8px rgba(120, 220, 255, 0.9));
+  transform-origin: center;
+  transition: transform 50ms linear;
+  filter: drop-shadow(0 0 6px rgba(220, 245, 255, 0.9));
 }
-.cosmic-lips-inner {
+.cg-mouth-inner {
   display: block;
-  width: 26px;
-  height: 6px;
+  width: 22px;
+  height: 8px;
   background: #0a2a3a;
   border-radius: 50%;
-  transform-origin: center;
-  /* scaleY is driven in real time by the voice clip's AnalyserNode (see
-     WakeUpSequence). Keeping a transition smooths analyser jitter. */
-  transition: transform 50ms linear;
 }
-.cosmic-hand {
+
+/* Torso */
+.cg-body {
   position: absolute;
-  right: 6%;
-  bottom: 8%;
-  font-size: 30px;
-  color: #8ae0ff;
-  text-shadow: 0 0 16px #4dd8ff, 0 0 30px #2a7bff;
-  animation: cosmic-hand-wave 2.6s ease-in-out infinite;
-  transform-origin: bottom center;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 66px;
+  height: 92px;
+  background: linear-gradient(180deg, #7ad8ff, #2a7ad8);
+  border-radius: 12px;
+  box-shadow: inset 0 -10px 16px rgba(0, 0, 40, 0.3), 0 0 20px rgba(90, 200, 255, 0.5);
+  z-index: 2;
 }
-@keyframes cosmic-hand-wave {
-  0%, 100% { transform: rotate(0deg) translateY(0); }
-  25% { transform: rotate(18deg) translateY(-4px); }
-  50% { transform: rotate(-6deg) translateY(0); }
-  75% { transform: rotate(10deg) translateY(-2px); }
+.cg-chest-mark {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  background: radial-gradient(circle, #dff6ff, #6fc8ff 70%);
+  border-radius: 50%;
+  opacity: 0.9;
 }
+
+/* Arms — gentle wave */
+.cg-arm {
+  position: absolute;
+  top: 92px;
+  width: 20px;
+  height: 74px;
+  background: linear-gradient(180deg, #5fc8f8, #2a7ad8);
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgba(90, 200, 255, 0.5);
+  transform-origin: top center;
+  z-index: 2;
+}
+.cg-arm-l { left: 28px; animation: cg-wave-l 3s ease-in-out infinite; }
+.cg-arm-r { right: 28px; animation: cg-wave-r 3s ease-in-out infinite; }
+.cg-hand {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 16px;
+  background: #b9e6ff;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(200, 240, 255, 0.8);
+}
+
+/* Legs — gentle sway */
+.cg-leg {
+  position: absolute;
+  top: 174px;
+  width: 22px;
+  height: 120px;
+  background: linear-gradient(180deg, #2a7ad8, #1a4fa8);
+  border-radius: 8px;
+  box-shadow: 0 0 14px rgba(90, 200, 255, 0.4);
+  transform-origin: top center;
+  z-index: 1;
+}
+.cg-leg-l { left: 52px; animation: cg-sway-l 3.6s ease-in-out infinite; }
+.cg-leg-r { right: 52px; animation: cg-sway-r 3.6s ease-in-out infinite; }
+.cg-foot {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 12px;
+  background: #2a4fa8;
+  border-radius: 6px 6px 4px 4px;
+}
+
+/* Animations */
+@keyframes cg-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes cg-aura-pulse { 0%,100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+@keyframes cg-head-look {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  20% { transform: translateX(-50%) rotate(-3deg); }
+  45% { transform: translateX(-50%) rotate(2deg); }
+  70% { transform: translateX(-50%) rotate(-2deg); }
+}
+@keyframes cg-wave-l {
+  0%, 100% { transform: rotate(14deg); }
+  25% { transform: rotate(-10deg); }
+  50% { transform: rotate(20deg); }
+  75% { transform: rotate(-6deg); }
+}
+@keyframes cg-wave-r {
+  0%, 100% { transform: rotate(-14deg); }
+  25% { transform: rotate(10deg); }
+  50% { transform: rotate(-20deg); }
+  75% { transform: rotate(6deg); }
+}
+@keyframes cg-sway-l { 0%,100% { transform: rotate(4deg); } 50% { transform: rotate(-4deg); } }
+@keyframes cg-sway-r { 0%,100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }

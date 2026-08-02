@@ -44,13 +44,30 @@ function paletteFor(t: ServerType): LobbyPalette {
   return PALETTES[t] ?? PALETTES.survival;
 }
 
+type District = 'plaza' | 'suburb' | 'tower' | 'dock';
+
+/** Which city district a chunk belongs to, so the city keeps growing in every direction. */
+function districtFor(t: ServerType, cx: number, cz: number): District {
+  // The origin block is always the grand central plaza.
+  if (cx === 0 && cz === 0) return 'plaza';
+  const h = new AdvancedNoise(`district:${t}`).hash(cx, cz, 0);
+  if (t === 'skyblock') return h > 0.6 ? 'suburb' : 'plaza';
+  if (h > 0.82) return 'dock';
+  if (h > 0.52) return 'tower';
+  return 'suburb';
+}
+
 /** Chunk-local building height at a city-block cell (0 = open ground / road). */
-function buildingHeight(t: ServerType, noise: AdvancedNoise, lx: number, lz: number): number {
+function buildingHeight(t: ServerType, district: District, noise: AdvancedNoise, lx: number, lz: number): number {
   const distC = Math.max(Math.abs(lx - 8), Math.abs(lz - 8)); // from block centre
+  if (district === 'dock' && lx === 8) return 0;  // canal runs through the middle of docks
   if (distC <= 2) return 0;   // plaza + fountain
   if (lx === 8 || lz === 8) return 0; // cross roads through the centre
   const roll = noise.hash(lx, lz, 0);
   if (roll < 0.18) return 0; // small gaps / courtyards
+  if (district === 'tower') return 5 + Math.floor(roll * 5);       // tall towers
+  if (district === 'suburb') return 2 + Math.floor(roll * 2);      // low houses
+  if (district === 'dock') return 2 + Math.floor(roll * 2);        // warehouses + piers
   if (t === 'creative') return 2 + (roll > 0.6 ? 1 : 0);
   if (t === 'mmo') return 4 + Math.floor(roll * 4);
   if (t === 'roleplay') return 3 + Math.floor(roll * 2);
@@ -68,9 +85,20 @@ export function generateServerLobby(chunk: Chunk, serverType: ServerType, seed: 
   const pal = paletteFor(serverType);
   const noise = new AdvancedNoise(`${serverType}:${seed}:${chunk.x}:${chunk.z}`);
   const t = serverType;
+  const district = districtFor(t, chunk.x, chunk.z);
 
   for (let lx = 0; lx < CHUNK_SIZE; lx++) {
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      // Dock canal: a water channel replaces the ground down the middle.
+      if (district === 'dock' && lx === 8) {
+        chunk.setBlock(lx, 60, lz, 5);   // water
+        chunk.setBlock(lx, 61, lz, 5);
+        // Pier posts + a little boat accent.
+        if (lz % 4 === 0) chunk.setBlock(lx, 59, lz, pal.wall);
+        if (lz % 8 === 2) { chunk.setBlock(lx, 62, lz, pal.roof); chunk.setBlock(lx, 63, lz, pal.glow); }
+        continue;
+      }
+
       // Flat ground plane at y=60.
       chunk.setBlock(lx, 60, lz, pal.plaza);
       chunk.setBlock(lx, 59, lz, 2); // dirt under
@@ -85,12 +113,12 @@ export function generateServerLobby(chunk: Chunk, serverType: ServerType, seed: 
         continue;
       }
 
-      const h = buildingHeight(t, noise, lx, lz);
+      const h = buildingHeight(t, district, noise, lx, lz);
       const distC = Math.max(Math.abs(lx - 8), Math.abs(lz - 8));
 
       if (h <= 0) {
         // Central fountain.
-        if (distC <= 1) {
+        if (district !== 'dock' && distC <= 1) {
           chunk.setBlock(lx, 61, lz, pal.accent);
           if (lx === 8 && lz === 8) chunk.setBlock(lx, 62, lz, pal.glow);
           continue;
@@ -115,16 +143,20 @@ export function generateServerLobby(chunk: Chunk, serverType: ServerType, seed: 
 
       // ---- Building body with walls, windows and a glowing roof lamp ----
       const half = Math.floor(h / 2);
+      const tallTower = district === 'tower';
       for (let dy = 1; dy <= h; dy++) {
         const onEdge = lx === 8 || lz === 8 || Math.abs(lx - 8) === distC || Math.abs(lz - 8) === distC;
         const isRoof = dy === h;
         let block = pal.wall;
         if (isRoof) block = pal.roof;
-        else if (onEdge && dy === Math.max(1, half)) block = pal.accent; // window band
+        // Window bands every few floors on towers.
+        else if (tallTower && dy % 3 === 0) block = pal.accent;
+        else if (!tallTower && onEdge && dy === Math.max(1, half)) block = pal.accent;
         chunk.setBlock(lx, 60 + dy, lz, block);
       }
-      // Roof lamp / antenna.
+      // Roof lamp / antenna — taller for towers.
       if ((lx + lz) % 5 === 0) chunk.setBlock(lx, 61 + h, lz, pal.glow);
+      if (tallTower && lx === 8 && lz === 8) chunk.setBlock(lx, 61 + h + 1, lz, pal.glow);
     }
   }
 }

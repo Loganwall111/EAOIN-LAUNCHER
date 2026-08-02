@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import CosmicGirlFigure from './CosmicGirlFigure';
 
 interface WakeUpSequenceProps {
   onComplete: () => void;
@@ -141,34 +142,21 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
           <div className="galaxies" />
           <div className="whispers">Whispers from the mind…</div>
           <div className="neuron-field" />
-          {/* The Lady in Violet now visible & zooming during galaxy phase */}
-          <div className="galaxy-lady" />
+          <div className="loading-text">SYNCHRONIZING WITH THE WORLD…</div>
+          {/* Purple loading bar, parked at the very bottom of the frame. */}
           <div className="aaa-loading-bar">
             <div className="bar-fill" style={{ width: '100%' }} />
           </div>
-          <div className="loading-text">SYNCHRONIZING WITH THE WORLD…</div>
+          {/* White flash-bang just before the girl begins to speak. */}
+          <div className="galaxy-flash" aria-hidden="true" />
         </div>
       )}
 
-      {/* Dream sequence with the neon-blue Cosmic Girl (real face, not a dot) */}
+      {/* Dream sequence with the animated Cosmic Girl looking right at you. */}
       {phase === 'DREAM' && (
         <div className="dream-sequence">
           <div className="cosmic-girl-wrap">
-            <img
-              className="cosmic-girl"
-              src={`${import.meta.env.BASE_URL}textures/cosmic_girl.png`}
-              alt="The Cosmic Girl"
-              draggable={false}
-            />
-            {/* Real audio-driven lipsync — the mouth follows her actual voice. */}
-            <div className="cosmic-lips" aria-hidden="true">
-              <span
-                className="cosmic-lips-inner"
-                style={{ transform: `scaleY(${0.25 + mouth * 1.15})` }}
-              />
-            </div>
-            {/* Animated raised hand / glow shimmer. */}
-            <div className="cosmic-hand" aria-hidden="true">✦</div>
+            <CosmicGirlFigure mouth={mouth} />
           </div>
           <div className="dream-text">
             {DREAM_LINES[dreamLineIndex]}

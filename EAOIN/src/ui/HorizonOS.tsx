@@ -12,6 +12,9 @@ import { useEffect, useRef, useState } from 'react';
 import FileExplorer from './os/FileExplorer';
 import BrowserApp from './os/BrowserApp';
 import GameHub from './os/GameHub';
+import MusicPlayer from './os/MusicPlayer';
+import MailApp from './os/MailApp';
+import CalendarApp from './os/CalendarApp';
 
 export interface HorizonOSProps {
   onExit: () => void;
@@ -35,6 +38,9 @@ const WINDOW_DEFS: Array<Omit<OSWindow, 'x' | 'y' | 'z' | 'open' | 'minimized' |
   { id: 'files', title: 'File Explorer', icon: '📁' },
   { id: 'browser', title: 'Nebula Browser', icon: '🌐' },
   { id: 'games', title: 'Game Hub', icon: '🎮' },
+  { id: 'music', title: 'Music Player', icon: '🎵' },
+  { id: 'mail', title: 'Mail', icon: '✉️' },
+  { id: 'calendar', title: 'Calendar', icon: '📅' },
   { id: 'cameras', title: 'Security Cameras', icon: '📹' },
   { id: 'lore', title: 'Game Lore', icon: '📖' },
   { id: 'notes', title: "Creator's Notes", icon: '✍️' },
@@ -44,6 +50,9 @@ const WINDOW_SIZES: Record<string, { w: number; h: number }> = {
   files: { w: 620, h: 400 },
   browser: { w: 660, h: 440 },
   games: { w: 560, h: 440 },
+  music: { w: 380, h: 430 },
+  mail: { w: 620, h: 400 },
+  calendar: { w: 520, h: 430 },
 };
 
 const BOOT_LINES = [
@@ -278,6 +287,9 @@ export default function HorizonOS({ onExit }: HorizonOSProps) {
             {w.id === 'files' && <FileExplorer />}
             {w.id === 'browser' && <BrowserApp />}
             {w.id === 'games' && <GameHub />}
+            {w.id === 'music' && <MusicPlayer />}
+            {w.id === 'mail' && <MailApp />}
+            {w.id === 'calendar' && <CalendarApp />}
             {w.id === 'cameras' && (
               <div className="hzos-list">
                 {SECURITY_LOG.map((c) => <div key={c.cam} className="hzos-row"><b>{c.cam}</b> [{c.time}] {c.desc}</div>)}

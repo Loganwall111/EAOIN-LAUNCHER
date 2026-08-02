@@ -195,3 +195,74 @@
 .gh-overlay-actions { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
 .gh-btn { background: #2a7ae0; color: #fff; border: none; border-radius: 14px; padding: 7px 16px; cursor: pointer; }
 .gh-btn:hover { background: #3a8af0; }
+
+/* ---------------- Music Player ---------------- */
+.music-player { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px; height: 100%; background: radial-gradient(circle at 50% 0%, #1a2350, #0a0e22); color: #fff; }
+.mp-track-art { width: 120px; height: 120px; border-radius: 12px; background: linear-gradient(180deg,#2a4a9a,#0e1a3a); display: flex; align-items: center; justify-content: center; font-size: 52px; box-shadow: 0 0 30px rgba(90,160,255,0.5); }
+.mp-track-info { text-align: center; }
+.mp-track-info strong { display: block; font-size: 16px; }
+.mp-track-info span { color: #9fb6d8; font-size: 12px; }
+.mp-eq { display: flex; align-items: flex-end; gap: 2px; height: 48px; }
+.mp-eq span { width: 4px; background: linear-gradient(180deg,#7ad8ff,#2a7ad8); border-radius: 2px; }
+.mp-progress { width: 100%; }
+.mp-progress-track { height: 4px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; }
+.mp-progress-track span { display: block; height: 100%; background: linear-gradient(90deg,#2a7ad8,#7ad8ff); }
+.mp-controls { display: flex; gap: 12px; align-items: center; }
+.mp-btn { background: #2a4a8a; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+.mp-btn:hover { background: #3a5a9a; }
+.mp-btn.play { width: 44px; height: 44px; border-radius: 50%; font-size: 16px; background: #2a7ae0; }
+.mp-btn.play.on { background: #1f7a44; }
+.mp-volume { display: flex; align-items: center; gap: 8px; width: 100%; }
+.mp-volume input { flex: 1; accent-color: #62d8ff; }
+.mp-tracklist { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+.mp-track-row { display: flex; gap: 6px; padding: 5px 8px; background: none; border: none; color: #cfe0ff; cursor: pointer; font-size: 12px; text-align: left; border-radius: 4px; }
+.mp-track-row:hover { background: rgba(255,255,255,0.08); }
+.mp-track-row.active { background: rgba(42,122,224,0.3); color: #fff; }
+
+/* ---------------- Mail ---------------- */
+.mail-app { display: flex; height: 100%; min-height: 0; font-size: 13px; color: #223; }
+.mail-sidebar { width: 130px; background: #eef1f6; border-right: 1px solid #d0d7e0; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mail-nav { text-align: left; padding: 8px; background: none; border: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: #334; }
+.mail-nav:hover { background: #dbe6f4; }
+.mail-nav.active { background: #cfdff2; }
+.mail-body { flex: 1; min-height: 0; display: flex; }
+.mail-layout { flex: 1; display: flex; min-height: 0; }
+.mail-list { width: 230px; border-right: 1px solid #e0e5ec; overflow: auto; display: flex; flex-direction: column; }
+.mail-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: none; border: none; border-bottom: 1px solid #edf0f5; cursor: pointer; text-align: left; }
+.mail-row:hover { background: #f2f6fb; }
+.mail-row.sel { background: #d6e6f8; }
+.mail-row.unread .mail-from, .mail-row.unread .mail-subj { font-weight: 700; }
+.mail-from { font-size: 12px; color: #2a5590; }
+.mail-subj { font-size: 12px; }
+.mail-preview { font-size: 11px; color: #889; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-time { font-size: 10px; color: #99a; }
+.mail-read { flex: 1; padding: 14px 16px; overflow: auto; }
+.mail-read-subj { margin: 0 0 6px; font-size: 16px; }
+.mail-read-meta { font-size: 12px; color: #667; margin-bottom: 10px; }
+.mail-read-body { white-space: pre-wrap; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; line-height: 1.6; }
+.mail-empty { color: #889; }
+.mail-compose { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+.mail-compose label { font-size: 11px; color: #667; }
+.mail-compose input, .mail-compose textarea { padding: 7px 9px; border: 1px solid #c9d0da; border-radius: 4px; font-family: inherit; font-size: 13px; }
+.mail-compose-actions { display: flex; gap: 8px; }
+
+/* ---------------- Calendar ---------------- */
+.calendar-app { display: flex; flex-direction: column; height: 100%; min-height: 0; font-size: 12px; color: #223; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: #eef1f6; border-bottom: 1px solid #d0d7e0; }
+.cal-title { font-size: 15px; }
+.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); padding: 4px 8px; background: #f7f9fc; border-bottom: 1px solid #e3e8ef; }
+.cal-wd { text-align: center; color: #667; font-size: 11px; }
+.cal-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(44px, 1fr); gap: 2px; padding: 6px 8px; overflow: auto; }
+.cal-cell { border: 1px solid #e3e8ef; border-radius: 4px; padding: 3px; cursor: pointer; background: #fff; overflow: hidden; }
+.cal-cell.empty { background: transparent; border: none; cursor: default; }
+.cal-cell.today { outline: 2px solid #62d8ff; }
+.cal-cell.pick { background: #d6e6f8; }
+.cal-daynum { font-weight: 700; }
+.cal-events { display: flex; flex-direction: column; gap: 2px; }
+.cal-event { font-size: 9px; color: #2a5590; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-note { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid #d0d7e0; background: #f7f9fc; }
+.cal-note input { flex: 1; padding: 5px 8px; border: 1px solid #c9d0da; border-radius: 4px; }
+
+/* ---------------- Neon Snake ---------------- */
+.snake-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
+.snake-canvas { width: min(320px, 100%); aspect-ratio: 1; border: 2px solid #1e2a4a; border-radius: 8px; background: #05070f; }
