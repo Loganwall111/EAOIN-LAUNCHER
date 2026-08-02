@@ -1459,6 +1459,19 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           // Psychedelic world tint + message.
           if (streamFrame % 90 === 0) showActionMessage(`🌈 ${specialState.label}`);
         }
+        // --- Oris / Psychedelics survival rewards --------------------------
+        // Surviving the Chorus event grants an achievement; surviving the
+        // Psychedelics moon grants a shard-unlock code and drops a Shard.
+        if (specialEvents.hasSurvivedOris()) {
+          if (streamFrame % 40 === 0) showActionMessage('🏆 Achievement: SURVIVED ORIS');
+        }
+        const shard = specialEvents.consumeShardCode();
+        if (shard.fresh && shard.code) {
+          showActionMessage(`🗝️ Hidden chest code: ${shard.code}`);
+          showActionMessage('💠 You found a Shard! The reward chest has been unlocked.');
+          publishInventory(addToInventory(inventoryRef.current, 308 as BlockID, 1));
+          onGameplayEvent('shardsCollected', 1);
+        }
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
         // Seamless dimension traversal: crossing a physical planet's

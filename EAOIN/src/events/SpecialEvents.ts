@@ -54,6 +54,13 @@ export class SpecialEvents {
   private orisActive = false;
   /** Reached when a chorus block is actually grown (for the achievement). */
   private chorusGrew = false;
+  /** True once the player has survived a full Oris/Chorus event. */
+  private survivedOris = false;
+  /** True once the player has survived a full Psychedelics moon. */
+  private survivedPsychedelics = false;
+  /** A one-shot shard-unlock code awarded after surviving Psychedelics. */
+  private shardCode = '';
+  private shardCodeEmitted = false;
 
   /** How far into the Oris cycle we are (0-1); 1 = event day approaches. */
   getOrisProgress(): number {
@@ -94,6 +101,12 @@ export class SpecialEvents {
     }
 
     if (age >= this.duration) {
+      // Award survival on a full event completion.
+      if (this.current === 'oris_chorus') this.survivedOris = true;
+      if (this.current === 'psychedelics') {
+        this.survivedPsychedelics = true;
+        if (!this.shardCode) this.shardCode = `CHORUS-${(this.eventStart % 10000).toFixed(0)}`;
+      }
       this.current = 'none';
       this.orisActive = false;
     }
@@ -142,4 +155,14 @@ export class SpecialEvents {
   }
 
   getChorusGrew(): boolean { return this.chorusGrew; }
+
+  hasSurvivedOris(): boolean { return this.survivedOris; }
+  hasSurvivedPsychedelics(): boolean { return this.survivedPsychedelics; }
+
+  /** The shard-unlock code, plus whether it's newly available this frame. */
+  consumeShardCode(): { code: string; fresh: boolean } {
+    const fresh = !!this.shardCode && !this.shardCodeEmitted;
+    this.shardCodeEmitted = true;
+    return { code: this.shardCode, fresh };
+  }
 }
