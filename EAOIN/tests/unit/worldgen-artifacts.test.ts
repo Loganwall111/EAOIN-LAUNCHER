@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import AdvancedTerrainGenerator from '../../src/world/AdvancedTerrainGenerator';
+import { CavesAndCliffsTerrainGenerator } from '../../src/world/CavesAndCliffsTerrainGenerator';
 import { AdvancedNoise } from '../../src/world/AdvancedNoise';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../../src/world/Chunk';
 
@@ -491,7 +492,7 @@ describe('sinkhole craters across chunk boundaries', () => {
       // Reach past `private` the same way the surface-pass test above does:
       // these are the generator's own placement internals, and the whole point
       // of the test is to pin them.
-      const gen = new AdvancedTerrainGenerator({ seed }) as unknown as {
+      const gen = new CavesAndCliffsTerrainGenerator({ seed }) as unknown as {
         applySinkholes: (c: Chunk) => void;
         generateChunk: (cx: number, cz: number) => Chunk;
         getTerrainHeight: (x: number, z: number) => number;

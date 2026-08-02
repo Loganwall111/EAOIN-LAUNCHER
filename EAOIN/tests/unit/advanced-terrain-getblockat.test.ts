@@ -19,7 +19,12 @@ import AdvancedTerrainGenerator from '../../src/world/AdvancedTerrainGenerator';
 const SEED = 'eaoin_seed_2026';
 
 describe('AdvancedTerrainGenerator.getBlockAt', () => {
-  const terrain = new AdvancedTerrainGenerator({ seed: SEED });
+  // The banded y≈64 column documented below is the *fallback* terrain shape
+  // (used when the full CavesAndCliffs pipeline is disabled), so pin it with
+  // `experimentalCavesAndCliffs: false`. With the full generator on, getBlockAt
+  // returns real generated voxels (verified by the world-load / worldgen
+  // suites) rather than this simple analytic band.
+  const terrain = new AdvancedTerrainGenerator({ seed: SEED, experimentalCavesAndCliffs: false });
 
   it('is exposed as a public (x, y, z) → number method', () => {
     expect(typeof terrain.getBlockAt).toBe('function');
@@ -47,7 +52,7 @@ describe('AdvancedTerrainGenerator.getBlockAt', () => {
   });
 
   it('is deterministic for identical configs and steady across the horizontal plane', () => {
-    const twin = new AdvancedTerrainGenerator({ seed: SEED });
+    const twin = new AdvancedTerrainGenerator({ seed: SEED, experimentalCavesAndCliffs: false });
     for (const y of [0, 59, 60, 64, 65]) {
       expect(twin.getBlockAt(777, y, -333)).toBe(terrain.getBlockAt(777, y, -333));
       expect(terrain.getBlockAt(-10000, y, 10000)).toBe(terrain.getBlockAt(10000, y, -10000));

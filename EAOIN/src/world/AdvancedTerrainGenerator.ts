@@ -48,7 +48,18 @@ export class AdvancedTerrainGenerator {
   private readonly legacy?: CavesAndCliffsTerrainGenerator;
   private heightMultiplier = 1;
   constructor(config: Partial<WorldGenConfig> & { seed: string }) {
-    this.config = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
+    const merged = { ...DEFAULT_OVERWORLD_CONFIG, ...config };
+    // Corrupted numeric overrides (e.g. a NaN migrated world preset) must not
+    // propagate into generation or into config reads like `bedrockThickness`.
+    // Fall back to the safe default for any non-finite number so a damaged
+    // preset still yields a finite stone column instead of empty storage.
+    for (const key of Object.keys(DEFAULT_OVERWORLD_CONFIG)) {
+      const value = (merged as unknown as Record<string, unknown>)[key];
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        (merged as unknown as Record<string, unknown>)[key] = (DEFAULT_OVERWORLD_CONFIG as unknown as Record<string, unknown>)[key];
+      }
+    }
+    this.config = merged;
     if (this.config.experimentalCavesAndCliffs) this.legacy = new CavesAndCliffsTerrainGenerator(this.config);
   }
   private height(x: number, z: number): number {
@@ -91,6 +102,20 @@ export class AdvancedTerrainGenerator {
   getBaseHeight(x:number,z:number):number { return this.legacy ? this.legacy.getBaseHeight(x,z) : this.getTerrainHeight(x,z); }
   getMountainHeight(x:number,z:number):number { return this.legacy ? this.legacy.getMountainHeight(x,z) : this.getTerrainHeight(x,z); }
   getBiomeAt(x:number,z:number): any { return this.legacy ? this.legacy.getBiomeAt(x,z) : { id:'plains', name:'Plains' }; }
+  // ---- pass-level internals (forwarded to the full generator) --------------
+  // The full CavesAndCliffs pipeline runs a sequence of named passes. Expose
+  // them (and the noise sources) here so decoration/worldgen tooling and the
+  // regression suite can reach the real implementation regardless of whether a
+  // world runs the full generator or the banded fallback.
+  get noise(): any { return (this.legacy as any)?.noise; }
+  get detailNoise(): any { return (this.legacy as any)?.detailNoise; }
+  get caveNoise(): any { return (this.legacy as any)?.caveNoise; }
+  get biomeNoise(): any { return (this.legacy as any)?.biomeNoise; }
+  applySurfacePass(chunk: Chunk): void { (this.legacy as any)?.applySurfacePass?.(chunk); }
+  applySinkholes(chunk: Chunk): void { (this.legacy as any)?.applySinkholes?.(chunk); }
+  hasClearanceAbove(x: number, z: number, height: number): boolean {
+    return this.legacy ? this.legacy.hasClearanceAbove(x, z, height) : true;
+  }
   setBlockAt(x: number, y: number, z: number, block: BlockID): boolean {
     if (this.legacy) return this.legacy.setBlockAt(x, y, z, block);
     return false;
@@ -101,11 +126,12 @@ export class AdvancedTerrainGenerator {
   setDeveloperTuning(tuning:{heightMultiplier:number; biomeMods:BiomeModificationFlags}):void { this.heightMultiplier = Number.isFinite(tuning.heightMultiplier) ? tuning.heightMultiplier : 1; void tuning.biomeMods; this.legacy?.setDeveloperTuning(tuning); }
   getSpawnPoint(): SpawnPoint {
     // The camera's Y is the *eye*, and the player stands 1.62 blocks tall
-    // (PLAYER_EYE_HEIGHT). Placing the eye exactly at surfaceHeight + 1.62
-    // puts the boots directly on the grass top. Earlier values of +1 (feet
-    // embedded in the block) or +3.0 (feet hovering above it) were both wrong.
+    // (PLAYER_EYE_HEIGHT). The surface height is the y of the top solid
+    // block, so the boots rest on top of it (+1) and the eye is another 1.62
+    // above that. (Missing the +1 placed the eye exactly at surface+1.62,
+    // which put the player's body one block inside the ground.)
     const surfaceHeight = this.getTerrainHeight(0, 0);
-    return { x: 0, y: surfaceHeight + 1.62, z: 0 };
+    return { x: 0.5, y: surfaceHeight + 1 + 1.62, z: 0.5 };
   }
 }
 export default AdvancedTerrainGenerator;

@@ -228,14 +228,20 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
       audioEl?.pause();
       audioEl = new Audio(`${base}audio/narration_${index + 1}.mp3`);
       audioEl.volume = 0.95;
-      void audioEl.play().catch(() => {
+      const fallback = () => {
         // Fall back to the browser voice only if the audio can't load.
         if ('speechSynthesis' in window) {
           const utterance = new SpeechSynthesisUtterance(narrationLines[index]);
           utterance.rate = 0.86; utterance.pitch = 0.88; utterance.volume = 0.95;
           window.speechSynthesis.speak(utterance);
         }
-      });
+      };
+      // `play()` is a Promise in real browsers but can return `undefined` in
+      // test/jsdom environments — guard against both so the intro never throws.
+      try {
+        const played = audioEl.play();
+        if (played && typeof played.catch === 'function') void played.catch(fallback);
+      } catch { fallback(); }
     };
 
     playLine(0);

@@ -59,6 +59,14 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // Guard against environments without a GPU context (jsdom tests, headless
+    // browsers). Babylon throws "WebGL not supported" on construction, which
+    // would crash the whole loading overlay. Without WebGL we simply skip the
+    // 3D tunnel and leave the CSS backdrop in place.
+    try {
+      const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+      if (!gl) return;
+    } catch { return; }
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true });
     const scene = new Scene(engine);
     scene.clearColor = new Color4(0.005, 0.004, 0.02, 1);
