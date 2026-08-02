@@ -47,6 +47,8 @@ export interface SpeciesDefinition {
   loot: Array<{ blockId: number; amount: number }>;
   /** Only spawns at night when true. */
   nocturnal?: boolean;
+  /** Only spawns during a full-moon event (moon-event system). */
+  fullMoonOnly?: boolean;
   /** Depth band for marine life, in blocks below sea level. */
   depthRange?: [number, number];
   description: string;
@@ -421,6 +423,23 @@ const EAOIN_NATIVES: SpeciesDefinition[] = [
     biomes: ['plain', 'forest', 'desert', 'savanna', 'badlands'], weight: 9, nocturnal: true,
     loot: [{ blockId: 2, amount: 1 }],
     description: 'Walks until the sun stops it.',
+  },
+  {
+    id: 'zombie', name: 'Zombie', emoji: '🧟‍♂️', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#3e7a4a', head: '#4a8a56', limb: '#2a5a36', accent: '#162a1a' },
+    scale: 1.02, health: 40, speed: 1.05, damage: 7,
+    biomes: ['plain', 'forest', 'swamp', 'badlands', 'mountain', 'taiga'], weight: 12, nocturnal: true,
+    loot: [{ blockId: 2, amount: 2 }],
+    description: 'The risen dead. They shamble, but they do not tire.',
+  },
+  {
+    id: 'werewolf', name: 'Werewolf', emoji: '🐺', bodyPlan: 'quadruped', habitat: 'land', temperament: 'hostile',
+    palette: { body: '#3a3a44', head: '#4a4a54', limb: '#2a2a32', accent: '#c8c8d0' },
+    scale: 1.3, health: 90, speed: 2.6, damage: 16,
+    // Only appears under a full moon via the moon-event system.
+    biomes: ['forest', 'taiga', 'mountain', 'plain'], weight: 3, nocturnal: true, fullMoonOnly: true,
+    loot: [{ blockId: 3, amount: 2 }],
+    description: 'It only comes out on the full moon. Run.',
   },
   {
     id: 'bone_archer', name: 'Bone Archer', emoji: '💀', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',

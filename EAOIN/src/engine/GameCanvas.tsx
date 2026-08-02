@@ -47,6 +47,7 @@ import {
   shouldEnableAtmosphereParticles,
 } from './GameCanvasConfig';
 import { WeatherEffects } from '../effects/WeatherEffects';
+import { MoonEvents } from '../effects/MoonEvents';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -511,6 +512,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       const lighting = configureSceneLighting(scene, spawn);
       // Storm lightning + meteors/comets that streak across the sky and crash.
       const weatherEffects = new WeatherEffects(scene, lighting.sun, lighting.sky);
+      const moonEvents = new MoonEvents();
       const configureTerrainShadow = (mesh: Mesh): void => {
         const enabled = effectSettingsFor(effectTier).shadowsEnabled;
         if (enabled) lighting.shadowGenerator.addShadowCaster(mesh, false);
@@ -1408,6 +1410,22 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         physics.update(deltaSeconds);
         // Storm lightning flashes + meteors/comets that streak and crash.
         weatherEffects.update(deltaSeconds, atmosphere.getProfile().weather, camera.position, 0.55, 0.42);
+        // Moon events: blood/crimson/full moon tint the night and raise hostile
+        // spawn pressure. Only at night.
+        moonEvents.update(deltaSeconds);
+        const moonState = moonEvents.getState();
+        if (moonState.id !== 'none' && moonState.strength > 0.01) {
+          creatureManager.setMoonEvent(moonEvents.hostilityMultiplier(), moonEvents.allowFullMoonCreature());
+          const tint = moonEvents.skyTint();
+          if (tint) {
+            scene.clearColor.r = Math.max(scene.clearColor.r, tint.r * 0.5);
+            scene.clearColor.g = Math.max(scene.clearColor.g, tint.g * 0.5);
+            scene.clearColor.b = Math.max(scene.clearColor.b, tint.b * 0.5);
+          }
+          if (streamFrame % 120 === 0) showActionMessage(`🌕 ${moonState.label}`);
+        } else {
+          creatureManager.setMoonEvent(1, false);
+        }
         // 1.0 — animate the dimension portals and spawn reality rifts occasionally.
         portalSystem.update(deltaSeconds, camera.position);
         // Seamless dimension traversal: crossing a physical planet's

@@ -248,6 +248,10 @@ export class CreatureManager {
   onPlayerDamage?: (attack: CreatureAttack) => void;
   /** World clock hour, so nocturnal species only appear at night. */
   private timeOfDay = 12;
+  /** Hostile spawn-pressure multiplier from a moon event (blood/crimson/full). */
+  private hostilityMultiplier = 1;
+  /** True during a full-moon event so full-moon-only creatures may spawn. */
+  private fullMoonActive = false;
 
   constructor(
     private readonly scene: Scene,
@@ -258,6 +262,12 @@ export class CreatureManager {
   /** Keep the spawner in step with the world clock. */
   setTimeOfDay(hour: number): void {
     this.timeOfDay = hour;
+  }
+
+  /** Set the moon-event spawn pressure (blood/crimson/full moon). */
+  setMoonEvent(hostilityMultiplier: number, fullMoonActive: boolean): void {
+    this.hostilityMultiplier = hostilityMultiplier;
+    this.fullMoonActive = fullMoonActive;
   }
 
   update(playerPosition: Vector3, deltaSeconds: number): void {
@@ -473,7 +483,9 @@ export class CreatureManager {
   private trySpawnCell(cellX: number, cellZ: number, playerPosition: Vector3): void {
     const id = `${cellX}:${cellZ}`;
     if (this.creatures.has(id)) return;
-    if (this.hashToUnit(`spawn-gate:${id}`) < 0.42) return;
+    // Blood/crimson/full-moon events lower the spawn gate so hostile mobs swarm.
+    const gate = this.hostilityMultiplier > 1 ? 0.42 / Math.max(1.5, this.hostilityMultiplier) : 0.42;
+    if (this.hashToUnit(`spawn-gate:${id}`) < gate) return;
 
     const worldX = cellX * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`spawn-x:${id}`) * (SPAWN_CELL_SIZE - 4));
     const worldZ = cellZ * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`spawn-z:${id}`) * (SPAWN_CELL_SIZE - 4));
@@ -485,7 +497,9 @@ export class CreatureManager {
     const biome = this.biomeIdAt(worldX, worldZ);
     const isNight = this.timeOfDay < 6 || this.timeOfDay >= 19;
     const candidates = speciesForBiome(biome, { habitat: 'land', isNight })
-      .filter((s) => s.habitat === 'land' || s.habitat === 'amphibious');
+      .filter((s) => s.habitat === 'land' || s.habitat === 'amphibious')
+      // Full-moon-only creatures (werewolves) only appear during a full moon.
+      .filter((s) => !s.fullMoonOnly || this.fullMoonActive);
     if (candidates.length === 0) return;
 
     const species = pickSpecies(candidates, this.hashToUnit(`species:${id}`));
