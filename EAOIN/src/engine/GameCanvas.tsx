@@ -38,6 +38,7 @@ import {
   worldClockRatePerSecond,
 } from '../dev/DeveloperTuning';
 import { DimensionChunkSource } from './DimensionChunkSource';
+import TouchControls from '../ui/TouchControls';
 import { AdaptivePerformance, EffectTier, effectSettingsFor } from '../performance/AdaptivePerformance';
 import {
   adaptiveBudgetForSettings,
@@ -267,6 +268,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0, species: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
   const [initializationError, setInitializationError] = useState<string | null>(null);
+  /** Virtual joystick value from the touch controls overlay (-1..1 each axis). */
+  const touchStickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Accumulated look-drag from touch (consumed + reset each frame in the loop). */
+  const touchLookRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => { selectedBlockRef.current = selectedBlock; }, [selectedBlock]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
@@ -1131,10 +1136,28 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       let timeState: WorldTimeState = worldTimeRef.current;
       const lastCameraPosition = camera.position.clone();
       const tempForward = Vector3.Zero();
+      const tempRight = Vector3.Zero();
+      const tempMove = Vector3.Zero();
       const tempAvatarFeet = Vector3.Zero();
       const tempVerticalMove = Vector3.Zero();
       const tempWind = Vector3.Zero();
       const tempRiftPull = Vector3.Zero();
+
+      // Edge-trigger state for controller buttons (so a held button doesn't
+      // re-fire its action every frame).
+      let padBtn0 = false, padBtn1 = false, padBtn2 = false, padBtn3 = false;
+      let padBtn4 = false, padBtn5 = false, padBtn6 = false, padBtn7 = false;
+      let padBtn8 = false, padBtn9 = false;
+
+      /** Cycle the hotbar selection by a signed step (controller bumpers / touch). */
+      const cycleHotbar = (dir: number): void => {
+        const cur = HOTBAR_BLOCKS.indexOf(selectedBlockRef.current as (typeof HOTBAR_BLOCKS)[number]);
+        const next = HOTBAR_BLOCKS[(cur + dir + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length];
+        selectedBlockRef.current = next;
+        onSelectedBlockChange(next);
+        audio.play('ui', settingsRef.current);
+        showActionMessage(`Selected ${getBlock(next).name}`);
+      };
       /**
        * 0 = open sky above the player, 1 = fully enclosed.
        *
@@ -1540,6 +1563,98 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
         camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
         scene.fogEnabled = settingsRef.current.fogEnabled;
+
+        /* ---- Controller + touch input (off by default) -------------------
+           When controllerSupport is on, a connected gamepad drives the camera:
+           left stick moves, right stick looks, and the face/trigger buttons
+           jump, fly, mine, place, open the inventory, open chat and pause.
+           When touchControls is on, the on-screen joystick (`touchStickRef`)
+           moves the camera the same way. Both are layered on top of the normal
+           keyboard/mouse scheme, so they never conflict with it. */
+        const usingController = settingsRef.current.controllerSupport;
+        const usingTouch = settingsRef.current.touchControls;
+        if (usingController || usingTouch) {
+          let moveX = 0;
+          let moveY = 0;
+          let lookX = 0;
+          let lookY = 0;
+          if (usingController) {
+            const pad = (typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [])[0] ?? null;
+            if (pad) {
+              const LX = pad.axes[0] ?? 0;
+              const LY = pad.axes[1] ?? 0;
+              const RX = pad.axes[2] ?? 0;
+              const RY = pad.axes[3] ?? 0;
+              const dead = 0.14;
+              moveX = Math.abs(LX) > dead ? LX : 0;
+              moveY = Math.abs(LY) > dead ? LY : 0;
+              lookX = Math.abs(RX) > dead ? RX : 0;
+              lookY = Math.abs(RY) > dead ? RY : 0;
+              const btn = (i: number) => (pad.buttons[i]?.pressed ?? false);
+              // Buttons only fire on a fresh press (edge-triggered).
+              if (btn(0) && !padBtn0) { padBtn0 = true; jumpRequested = true; }
+              if (!btn(0)) padBtn0 = false;
+              if (btn(1) && !padBtn1) { padBtn1 = true; toggleFlightMode(); showActionMessage(`Flight ${flightEnabledRef.current ? 'ON' : 'OFF'}`); }
+              if (!btn(1)) padBtn1 = false;
+              if (btn(2) && !padBtn2) { padBtn2 = true; startMining(); }
+              if (!btn(2)) padBtn2 = false;
+              if (btn(3) && !padBtn3) { padBtn3 = true; placeSelectedBlock(); }
+              if (!btn(3)) padBtn3 = false;
+              if (btn(9) && !padBtn9) { padBtn9 = true; setPaused((p) => !p); }
+              if (!btn(9)) padBtn9 = false;
+              if (btn(8) && !padBtn8) { padBtn8 = true; onToggleInventory(); }
+              if (!btn(8)) padBtn8 = false;
+              if (btn(6) && !padBtn6) { padBtn6 = true; setChatOpen(true); setCommandOpen(false); }
+              if (!btn(6)) padBtn6 = false;
+              if (btn(7) && !padBtn7) { padBtn7 = true; setCommandOpen(true); setChatOpen(false); }
+              if (!btn(7)) padBtn7 = false;
+              // Triggers mine (hold to keep mining) / place.
+              if (pad.buttons[7]?.value > 0.5) startMining();
+              if (pad.buttons[6]?.value > 0.5) placeSelectedBlock();
+              // Bumpers cycle the hotbar.
+              if (btn(4) && !padBtn4) { padBtn4 = true; cycleHotbar(-1); }
+              if (!btn(4)) padBtn4 = false;
+              if (btn(5) && !padBtn5) { padBtn5 = true; cycleHotbar(1); }
+              if (!btn(5)) padBtn5 = false;
+            }
+          }
+          if (usingTouch) {
+            const stick = touchStickRef.current;
+            moveX += stick.x;
+            moveY += stick.y;
+            // Touch drag on the world rotates the camera (Minecraft-PE style).
+            lookX += touchLookRef.current.x;
+            lookY += touchLookRef.current.y;
+            touchLookRef.current.x = 0;
+            touchLookRef.current.y = 0;
+          }
+
+          // Look: right stick (controller) / drag (touch) rotates the camera.
+          const lookSens = usingController ? 0.0026 : 0.006;
+          if (Math.abs(lookX) > 0.001 || Math.abs(lookY) > 0.001) {
+            camera.rotation.y -= lookX * lookSens * 60 * deltaSeconds;
+            camera.rotation.x -= lookY * lookSens * 60 * deltaSeconds;
+            const halfPi = Math.PI / 2 - 0.01;
+            camera.rotation.x = Math.max(-halfPi, Math.min(halfPi, camera.rotation.x));
+          }
+
+          // Movement: drive the camera along its facing directions.
+          if (Math.abs(moveX) > 0.001 || Math.abs(moveY) > 0.001) {
+            camera.getDirectionToRef(Vector3.LeftHandedForwardReadOnly, tempForward);
+            camera.getDirectionToRef(Vector3.RightReadOnly, tempRight);
+            tempForward.y = 0; tempRight.y = 0;
+            if (tempForward.lengthSquared() > 0.001) tempForward.normalize();
+            if (tempRight.lengthSquared() > 0.001) tempRight.normalize();
+            tempMove.copyFrom(tempForward).scaleInPlace(moveY);
+            tempMove.addInPlace(tempRight.scale(moveX));
+            tempMove.normalize();
+            const walkSpeed = (flightEnabledRef.current ? settingsRef.current.cameraSpeed * 2.6 : settingsRef.current.cameraSpeed * 1.15) * 60 * deltaSeconds;
+            tempMove.scaleInPlace(Math.max(0, walkSpeed));
+            (camera as any).moveWithCollisions?.(tempMove);
+            if (!(camera as any).moveWithCollisions) camera.position.addInPlace(tempMove);
+          }
+        }
+
         if (thirdPerson) {
           // Visual third-person model: keep the real camera/player collision at
           // the controlled position, and draw the avatar a few blocks in front
@@ -2191,12 +2306,64 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const handleContextMenu = (e: MouseEvent): void => { e.preventDefault(); };
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
+
+      // Touch-drag look: dragging anywhere on the world (when touch controls are
+      // on) rotates the camera. Accumulated deltas are consumed in the loop.
+      let touchDragActive = false;
+      let lastTouchX = 0;
+      let lastTouchY = 0;
+      const handleCanvasTouchStart = (e: TouchEvent): void => {
+        if (!settingsRef.current.touchControls) return;
+        const t = e.touches[0];
+        if (!t) return;
+        touchDragActive = true;
+        lastTouchX = t.clientX;
+        lastTouchY = t.clientY;
+      };
+      const handleCanvasTouchMove = (e: TouchEvent): void => {
+        if (!touchDragActive || !settingsRef.current.touchControls) return;
+        const t = e.touches[0];
+        if (!t) return;
+        touchLookRef.current.x += t.clientX - lastTouchX;
+        touchLookRef.current.y += t.clientY - lastTouchY;
+        lastTouchX = t.clientX;
+        lastTouchY = t.clientY;
+      };
+      const handleCanvasTouchEnd = (): void => { touchDragActive = false; };
+      canvas.addEventListener('touchstart', handleCanvasTouchStart, { passive: true });
+      canvas.addEventListener('touchmove', handleCanvasTouchMove, { passive: true });
+      canvas.addEventListener('touchend', handleCanvasTouchEnd, { passive: true });
+
       const handleAbilityEvent = (event: Event): void => {
         const key = (event as CustomEvent<{ key: string }>).detail?.key;
         if (!key) return;
         handleKeyDown(new KeyboardEvent('keydown', { key, bubbles: false }));
       };
       window.addEventListener('eaoin-ability', handleAbilityEvent);
+
+      // Touch controls: the on-screen overlay reports joystick movement and
+      // discrete actions over the window so the in-scene handlers can use them.
+      const handleTouchMove = (event: Event): void => {
+        const d = (event as CustomEvent<{ x?: number; y?: number }>).detail;
+        touchStickRef.current = { x: d?.x ?? 0, y: d?.y ?? 0 };
+      };
+      const handleTouchAction = (event: Event): void => {
+        const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+        if (!action) return;
+        if (action === 'mine') startMining();
+        else if (action === 'place') placeSelectedBlock();
+        else if (action === 'jump') jumpRequested = true;
+        else if (action === 'fly') toggleFlightMode();
+        else if (action === 'inventory') onToggleInventory();
+        else if (action === 'chat') { setChatOpen(true); setCommandOpen(false); }
+        else if (action === 'command') { setCommandOpen(true); setChatOpen(false); }
+        else if (action === 'pause') setPaused((p) => !p);
+        else if (action === 'hotbarNext') cycleHotbar(1);
+        else if (action === 'hotbarPrev') cycleHotbar(-1);
+      };
+      window.addEventListener('eaoin-touch-move', handleTouchMove);
+      window.addEventListener('eaoin-touch-action', handleTouchAction);
+
       // Instant dimension travel, raised by the Dimensions menu (F8).
       const handleTravelEvent = (event: Event): void => {
         const dimensionId = (event as CustomEvent<{ dimensionId: string }>).detail?.dimensionId;
@@ -2297,7 +2464,12 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         unsubscribeDevTuning();
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
+        canvas.removeEventListener('touchstart', handleCanvasTouchStart);
+        canvas.removeEventListener('touchmove', handleCanvasTouchMove);
+        canvas.removeEventListener('touchend', handleCanvasTouchEnd);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
+        window.removeEventListener('eaoin-touch-move', handleTouchMove);
+        window.removeEventListener('eaoin-touch-action', handleTouchAction);
         window.removeEventListener('eaoin-awakening-tilt', handleAwakeningTilt);
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
@@ -2429,6 +2601,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         </div>
         {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 8 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
       </div>
+      {/* On-screen mobile controls — only when "Touch controls" is on. */}
+      <TouchControls enabled={settings.touchControls} />
     </div>
   );
 }

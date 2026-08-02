@@ -230,6 +230,12 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                 <Row label="Experimental Vulkan mode" hint="WebGPU path with native bootstrap">
                   <Toggle checked={settings.experimentalVulkanMode} onChange={(v) => patch({ experimentalVulkanMode: v })} label="Experimental Vulkan" />
                 </Row>
+                <Row label="Controller support" hint="Gamepad/controller. Off by default (PC keyboard + mouse). Lets you move, look, jump, fly, mine and place blocks with a controller.">
+                  <Toggle checked={settings.controllerSupport} onChange={(v) => patch({ controllerSupport: v })} label="Controller support" />
+                </Row>
+                <Row label="Touch controls" hint="On-screen mobile buttons (virtual joystick, mine/place/fly/jump/inventory/chat/pause). Off by default.">
+                  <Toggle checked={settings.touchControls} onChange={(v) => patch({ touchControls: v })} label="Touch controls" />
+                </Row>
               </>
             )}
 

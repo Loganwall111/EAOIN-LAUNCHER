@@ -56,6 +56,18 @@ export interface GameSettings {
   rayTracedReflections: boolean;
   rayTracedShadows: boolean;
   rayTracedAO: boolean;
+  /**
+   * Gamepad / controller support. Off by default (PC keyboard + mouse only).
+   * When enabled, a connected gamepad can move, look, jump, fly, mine and
+   * place blocks, open the inventory/chat, and pause the game.
+   */
+  controllerSupport: boolean;
+  /**
+   * Touch / mobile on-screen controls. Off by default. When enabled, a virtual
+   * joystick and action buttons (mine / place / fly / jump / inventory / chat /
+   * pause) overlay the world so the game is playable on a phone or tablet.
+   */
+  touchControls: boolean;
 }
 
 /** Mirrors `RayTracingQuality` without importing the renderer into settings. */
@@ -96,6 +108,9 @@ export function createDefaultSettings(): GameSettings {
     rayTracedShadows: true,
     rayTracedAO: true,
     extremeDistance: false,
+    // Off by default — PC (keyboard + mouse) is the default control scheme.
+    controllerSupport: false,
+    touchControls: false,
   };
 }
 
@@ -130,6 +145,8 @@ export function clampSettings(settings: GameSettings): GameSettings {
     rayTracedReflections: settings.rayTracedReflections ?? true,
     rayTracedShadows: settings.rayTracedShadows ?? true,
     rayTracedAO: settings.rayTracedAO ?? true,
+    controllerSupport: settings.controllerSupport ?? false,
+    touchControls: settings.touchControls ?? false,
   };
 }
 
