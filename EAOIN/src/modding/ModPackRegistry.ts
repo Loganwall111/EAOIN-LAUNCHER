@@ -328,4 +328,47 @@ export class ModPackRegistry {
   getTotalEnabled(): number {
     return Array.from(this.mods.values()).filter((m) => m.enabled).length;
   }
+
+  /**
+   * Register a user-built mod created in the in-game mod editor. Each editor
+   * mod is stored under a deterministic id and, once created, behaves exactly
+   * like a shipped mod (appears in the browser, grants its blocks/items when
+   * enabled).
+   */
+  createCustomMod(spec: {
+    name: string;
+    description: string;
+    icon?: string;
+    blocks?: BlockDef[];
+    items?: number[];
+    mobs?: string[];
+    bosses?: string[];
+  }): ModID {
+    const id = `custom_${spec.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
+    const mod: ModDefinition = {
+      id,
+      name: spec.name,
+      author: 'You',
+      version: '1.0.0-editor',
+      description: spec.description || 'A mod built in the in-game editor.',
+      category: 'tools',
+      icon: spec.icon ?? '🧩',
+      enabled: false,
+      adds: {
+        blocks: spec.blocks ?? [],
+        items: spec.items ?? [],
+        mobs: spec.mobs ?? [],
+        bosses: spec.bosses ?? [],
+      },
+      configurable: true,
+      downloads: 0,
+    };
+    this.mods.set(id, mod);
+    this.notify();
+    return id;
+  }
+
+  removeMod(id: ModID): boolean {
+    return this.mods.delete(id) ? (this.notify(), true) : false;
+  }
 }

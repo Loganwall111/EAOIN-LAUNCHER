@@ -8,6 +8,7 @@ import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import HorizonOS from './ui/HorizonOS';
 import ModsScreen from './ui/ModsScreen';
+import ModEditorScreen from './ui/ModEditorScreen';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
 import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
@@ -66,7 +67,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'mods' | 'options' | 'marketplace' | 'editor' | 'guide';
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
   // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
   // forced before you could reach the menu. Boot now runs first and hands off
   // to the title screen; sign-in is reached only by pressing the button there.
@@ -378,6 +379,17 @@ export default function App() {
             revision={modRevision}
             onToggle={toggleMod}
             onBack={() => setAppPhase('title')}
+            onOpenEditor={() => setAppPhase('modeditor')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'modeditor') {
+      return (
+        <div className={shellClass}>
+          <ModEditorScreen
+            registry={modRegistry}
+            onBack={() => setAppPhase('mods')}
           />
         </div>
       );

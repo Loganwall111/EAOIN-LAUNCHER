@@ -16,9 +16,11 @@ export interface ModsScreenProps {
   /** Bumped by the parent whenever the registry changes, to force a re-read. */
   revision: number;
   onToggle: (id: ModDefinition['id']) => void;
+  /** Open the in-game mod editor. */
+  onOpenEditor?: () => void;
 }
 
-export default function ModsScreen({ registry, onBack, revision, onToggle }: ModsScreenProps) {
+export default function ModsScreen({ registry, onBack, revision, onToggle, onOpenEditor }: ModsScreenProps) {
   const [category, setCategory] = useState<ModDefinition['category'] | 'all'>('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,6 +44,9 @@ export default function ModsScreen({ registry, onBack, revision, onToggle }: Mod
       subtitle={`${registry.list().length} installed • ${enabledCount} enabled`}
       backdrop={UI_ASSETS.bgMods}
       onBack={onBack}
+      actions={onOpenEditor ? (
+        <button className="seg" onClick={onOpenEditor}>🧩 Build a Mod</button>
+      ) : undefined}
     >
       <div className="split-2">
         <section className="ui-panel list-pane">
