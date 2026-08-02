@@ -79,6 +79,7 @@ export default function WorldLoadingScreen({
 
   const percent = Math.max(0, Math.min(100, loadingProgress?.percent ?? 0));
   const stageLabel = loadingProgress?.label ?? 'Waiting for renderer…';
+  const ready = Boolean(loadingProgress?.ready);
   const elapsedSeconds = Math.max(0, Math.floor((loadingProgress?.elapsedMs ?? 0) / 1000));
   const chunkDetail = loadingProgress?.loadedChunks !== undefined && loadingProgress.totalChunks !== undefined
     ? `${loadingProgress.loadedChunks}/${loadingProgress.totalChunks} chunks`
@@ -115,16 +116,12 @@ export default function WorldLoadingScreen({
 
   return (
     <div className="world-loading" role="status" aria-live="polite">
-      {/* The world type's own palette, so the screen previews the destination. */}
-      <div className="wl-scene" style={{ background: type.preview }} />
-      {/* Cosmos warp: drifting nebula glows + a neuron field streaming past,
-          like falling through a wormhole while the world boots. */}
+      {/* Full-screen cosmos warp: the camera is "falling through a wormhole".
+          Nebula glows + a streaming neuron field + colourful warp dots. */}
       <div className="wl-nebula" aria-hidden="true" />
       <div className="wl-neuron" aria-hidden="true" />
-      {/* Warp-tunnel galaxy backdrop: colourful dots streaming toward the
-          player like flying through a warp tunnel while the world boots. */}
       <div className="wl-warp" aria-hidden="true">
-        {Array.from({ length: 90 }, (_, i) => (
+        {Array.from({ length: 120 }, (_, i) => (
           <span key={i} className="wl-warp-dot" style={{
             left: `${(i * 37) % 100}%`,
             top: `${(i * 53 + 11) % 100}%`,
@@ -135,37 +132,33 @@ export default function WorldLoadingScreen({
           } as CSSProperties} />
         ))}
       </div>
-      <div className="wl-dirt" aria-hidden="true" />
+      <div className="wl-scene" style={{ background: type.preview }} />
       <div className="wl-vignette" aria-hidden="true" />
 
+      {/* White flash when the world finishes booting, then the wake-up begins. */}
+      {ready && <div className="wl-flash" aria-hidden="true" />}
+
+      {/* Minimal center readout so the warp is the star. */}
       <div className="wl-content">
-        <div className="wl-header">
-          <div className="wl-world-name">{worldName}</div>
-          <div className="wl-world-meta">
-            <span className="wl-type-badge">{type.name}</span>
-            <span className="wl-seed">Seed: {seed}</span>
-          </div>
-        </div>
+        <div className="wl-world-name">{worldName}</div>
+        <div className="wl-seed">Seed: {seed}</div>
+        <div className="wl-stage">{stageLabel}</div>
 
-        <p className="wl-type-detail">{type.detail}</p>
-
+        {/* Purple loading bar pinned to the bottom of the screen. */}
         <div className="wl-bar-block">
           <div className="wl-bar-row">
-            <span className="wl-stage">{stageLabel}</span>
+            <span className="wl-stage-small">{chunkDetail ?? 'Loading terrain'}</span>
             <span className="wl-pct">{Math.round(percent)}%</span>
           </div>
-
-          {/* Chunky segmented bar, Minecraft-style. */}
           <div className="wl-bar-track" aria-label={`World loading ${Math.round(percent)} percent`}>
             <div className="wl-bar-fill" style={{ width: `${percent}%` }} />
             <div className="wl-bar-segments" aria-hidden="true">
               {Array.from({ length: 20 }, (_, i) => <span key={i} />)}
             </div>
           </div>
-
           <div className="wl-load-detail">
-            <span>{chunkDetail ?? 'Real startup progress from renderer and world generator'}</span>
-            <span>{elapsedSeconds}s / 20s max</span>
+            <span>Entering the cosmos…</span>
+            <span>{elapsedSeconds}s</span>
           </div>
         </div>
 

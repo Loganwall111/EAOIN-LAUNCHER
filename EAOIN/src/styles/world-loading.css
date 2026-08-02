@@ -7,10 +7,48 @@
   position: fixed;
   inset: 0;
   z-index: 950;
-  display: grid;
-  place-items: center;
   overflow: hidden;
-  background: #05070b;
+  background: #02030a;
+}
+
+/* White flash as the warp completes and the wake-up begins. */
+.wl-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: wl-flash-fade 0.7s ease-out forwards;
+  z-index: 20;
+}
+@keyframes wl-flash-fade {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* The scene + warp fill the whole screen; the content is overlaid. */
+.wl-scene {
+  position: absolute;
+  inset: -12%;
+  filter: saturate(1.05) blur(2px) brightness(0.7);
+  animation: wl-drift 26s ease-in-out infinite alternate;
+  opacity: 0.85;
+  z-index: 1;
+}
+.wl-vignette { z-index: 2; }
+
+.wl-content {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 88vw);
+  text-align: center;
+  color: #fff;
+  z-index: 5;
+  text-shadow: 0 0 24px rgba(120, 80, 255, 0.8);
+  background: none;
+  border: none;
+  box-shadow: none;
 }
 
 /* The selected world type's own gradient, slowly drifting. */
@@ -102,7 +140,16 @@
 
 /* ------------------------------ the bar --------------------------------- */
 
-.wl-bar-block { display: grid; gap: 9px; }
+.wl-bar-block {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  width: min(720px, 90vw);
+  display: grid;
+  gap: 6px;
+  z-index: 6;
+}
 
 .wl-bar-row {
   display: flex;

@@ -123,6 +123,16 @@ export default function SpawnAwakening({
       <div className="wake-blur" />
       <div className="wake-vignette" />
 
+      {/* Third-person self lying sideways on the ground, then pushing up. */}
+      <div className="wake-body">
+        <div className="wake-body-head" />
+        <div className="wake-body-torso" />
+        <div className="wake-body-arm wake-body-arm-l" />
+        <div className="wake-body-arm wake-body-arm-r" />
+        <div className="wake-body-leg wake-body-leg-l" />
+        <div className="wake-body-leg wake-body-leg-r" />
+      </div>
+
       {/* First-person hands, planted on the ground then raised into view. */}
       <div className="wake-hands">
         <div className="wake-hand wake-hand-left" />
