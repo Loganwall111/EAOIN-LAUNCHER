@@ -207,6 +207,7 @@ const BLOCK = {
   LAVA: 227,
   CHERRY_PETAL: 104,
   GRASS_PATH: 275,
+  PLANKS: 57,
   FARMLAND: 279,
   MUD: 105,
   CLAY: 4,
@@ -2021,7 +2022,8 @@ export class CavesAndCliffsTerrainGenerator {
         this.featureAnchor(wx, wz, 420, 'monolith')
         || this.featureAnchor(wx, wz, 340, 'ruin-fragment')
         || this.featureAnchor(wx, wz, 96, 'geode')
-        || this.featureAnchor(wx, wz, 120, 'fossil');
+        || this.featureAnchor(wx, wz, 120, 'fossil')
+        || this.featureAnchor(wx, wz, 700, 'village');
       if (!needsSurface && !(this.config.volcanoes && this.featureAnchor(wx, wz, 900, 'volcano'))) return;
 
       const surface = this.findSkyExposedSurface(chunk, lx, lz);
@@ -2036,6 +2038,11 @@ export class CavesAndCliffsTerrainGenerator {
       if (this.featureAnchor(wx, wz, 340, 'ruin-fragment')) {
         if (isNaturalGround(chunk.getBlock(lx, surface, lz))) {
           this.placeRuinFragment(chunk, wx, surface, wz);
+        }
+      }
+      if (this.featureAnchor(wx, wz, 700, 'village')) {
+        if (isNaturalGround(chunk.getBlock(lx, surface, lz))) {
+          this.placeVillage(chunk, wx, surface, wz);
         }
       }
 
@@ -2079,6 +2086,56 @@ export class CavesAndCliffsTerrainGenerator {
       this.setBlockIfInChunk(chunk, wx + dx, surface + 1, wz, BLOCK.MOSSY_BRICKS);
       this.setBlockIfInChunk(chunk, wx + dx, surface + 2, wz, Math.abs(dx) === 2 ? BLOCK.MOSSY_BRICKS : BLOCK.AIR);
     }
+  }
+
+  /**
+   * A block-built village house: stone-brick walls, a plank roof, a wooden door,
+   * and a window. Every block is a real voxel, so it meshes with the terrain and
+   * can be broken/built on like anything else.
+   */
+  private placeVillageHouse(chunk: Chunk, wx: number, surface: number, wz: number, facing: 'x' | 'z'): void {
+    const size = 4; // 4x4 footprint, 3 tall
+    const wall = BLOCK.STONE_BRICKS;
+    const roof = BLOCK.PLANKS;
+    const door = BLOCK.WOOD_DOOR;
+    for (let dx = 0; dx <= size; dx++) {
+      for (let dz = 0; dz <= size; dz++) {
+        const onEdge = dx === 0 || dx === size || dz === 0 || dz === size;
+        const top = 3;
+        for (let y = 1; y <= top; y++) {
+          const absX = wx + dx;
+          const absZ = wz + dz;
+          if (!onEdge && y < top) continue; // hollow interior
+          const isRoof = y === top;
+          this.setBlockIfInChunk(chunk, absX, surface + y, absZ, isRoof ? roof : wall);
+        }
+        // Door on the front edge.
+        const frontDoor = (facing === 'z' && dx === Math.floor(size / 2) && dz === 0)
+          || (facing === 'x' && dz === Math.floor(size / 2) && dx === 0);
+        if (frontDoor) {
+          this.setBlockIfInChunk(chunk, wx + dx, surface + 1, wz + dz, door);
+          this.setBlockIfInChunk(chunk, wx + dx, surface + 2, wz + dz, BLOCK.AIR);
+        }
+      }
+    }
+  }
+
+  /** A small block-built village: a central path and a few houses. */
+  private placeVillage(chunk: Chunk, wx: number, surface: number, wz: number): void {
+    // Path of gravel through the village.
+    for (let p = -6; p <= 6; p++) {
+      this.setBlockIfInChunk(chunk, wx + p, surface + 1, wz, BLOCK.GRAVEL);
+    }
+    // Houses either side, in a small cluster.
+    const houses: Array<[number, number, 'x' | 'z']> = [
+      [-4, 4, 'x'], [3, 4, 'x'], [-5, -4, 'x'], [4, -4, 'x'],
+    ];
+    for (const [hx, hz, facing] of houses) {
+      this.placeVillageHouse(chunk, wx + hx, surface, wz + hz, facing);
+    }
+    // A well at the centre.
+    for (let dy = 1; dy <= 2; dy++) this.setBlockIfInChunk(chunk, wx, surface + dy, wz, BLOCK.COBBLESTONE);
+    this.setBlockIfInChunk(chunk, wx, surface + 3, wz, BLOCK.WATER);
   }
 
   private placeVolcano(chunk: Chunk, wx: number, wz: number): void {
