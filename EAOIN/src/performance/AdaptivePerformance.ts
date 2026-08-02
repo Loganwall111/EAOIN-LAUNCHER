@@ -327,10 +327,10 @@ const EFFECT_SETTINGS: Record<EffectTier, EffectSettings> = {
     ssaoEnabled: false, particleScale: 0.45, cloudScale: 0.55, samples: 1, creatureScale: 0.7,
   },
   medium: {
-    // Dynamic shadows duplicate-draw every terrain mesh into a shadow map.
-    // Reserve that cost for explicit High/Ultra; directional + hemispheric
-    // lighting still gives Balanced clear Minecraft-style face shading.
-    shadowsEnabled: false, shadowMapSize: 1024, bloomEnabled: true, depthOfFieldEnabled: false,
+    // Shadows on from Medium up so the world always has directional shading
+    // (not just High/Ultra). The shadow map stays modest to protect the frame
+    // rate; the tuner can still disable them on Low/Minimal.
+    shadowsEnabled: true, shadowMapSize: 1024, bloomEnabled: true, depthOfFieldEnabled: false,
     ssaoEnabled: false, particleScale: 0.75, cloudScale: 0.8, samples: 1, creatureScale: 1.0,
   },
   high: {

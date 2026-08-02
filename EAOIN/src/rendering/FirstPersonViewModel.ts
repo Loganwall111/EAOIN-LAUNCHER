@@ -88,7 +88,9 @@ export class FirstPersonViewModel {
     this.root = new TransformNode('first_person_root', scene);
     this.root.parent = camera;
     // Lower-right of the screen, angled inward, like every FPS view model.
-    this.root.position = new Vector3(0.44, -0.28, 0.68);
+    // Bring the arm fully into view at rest (not just during a swing): closer
+    // to the camera and slightly lower so sleeve + hand + held item all read.
+    this.root.position = new Vector3(0.40, -0.32, 0.58);
 
     this.shoulder = new TransformNode('first_person_shoulder', scene);
     this.shoulder.parent = this.root;
