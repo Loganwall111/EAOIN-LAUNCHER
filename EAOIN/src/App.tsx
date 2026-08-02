@@ -7,6 +7,8 @@ import HowToPlayGuide from './ui/HowToPlayGuide';
 import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import HorizonOS from './ui/HorizonOS';
+import ServerLobbyWorld from './ui/ServerLobbyWorld';
+import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
 import ModEditorScreen from './ui/ModEditorScreen';
 import OptionsScreen from './ui/OptionsScreen';
@@ -60,6 +62,7 @@ export default function App() {
   const [nextGenWakeUp, setNextGenWakeUp] = useState(false);
   /** Shows the world-creation loading screen before the world appears. */
   const [worldLoading, setWorldLoading] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<ServerEntry | null>(null);
   const [worldLoadProgress, setWorldLoadProgress] = useState<WorldLoadProgress>({ percent: 0, label: 'Preparing world', ready: false, elapsedMs: 0 });
   /** Remounts GameCanvas when startup fails and the player chooses Retry. */
   const [worldAttempt, setWorldAttempt] = useState(0);
@@ -67,7 +70,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
   // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
   // forced before you could reach the menu. Boot now runs first and hands off
   // to the title screen; sign-in is reached only by pressing the button there.
@@ -360,10 +363,15 @@ export default function App() {
         <div className={shellClass}>
           <MultiplayerScreen
             onBack={() => setAppPhase('title')}
-            onJoin={() => setAppPhase('worlds')}
+            onJoin={(server) => { setSelectedServer(server); setAppPhase('serverlobby'); }}
             onHorizonOS={() => setAppPhase('horizonos')}
           />
         </div>
+      );
+    }
+    if (appPhase === 'serverlobby' && selectedServer) {
+      return (
+        <ServerLobbyWorld server={selectedServer} onExit={() => setAppPhase('multiplayer')} />
       );
     }
     if (appPhase === 'horizonos') {
