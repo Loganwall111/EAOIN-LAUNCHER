@@ -200,6 +200,21 @@ export class DimensionTerrainGenerator {
               chunk.setBlock(lx, y, lz, id);
             }
           }
+          // The Humorous: floating isle landmarks — crystal spires and glowing
+          // particle-garden clusters rising from the isle tops.
+          if (this.archetype === 'void' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 10) {
+            const r = this.noise.hash(wx, 9, wz);
+            if (r > 0.985) {
+              const h = 5 + Math.floor(this.noise.hash(wx, 10, wz) * 4);
+              for (let y = surfaceClamped + 1; y <= surfaceClamped + h; y++) {
+                chunk.setBlock(lx, y, lz, B.CRYSTAL);
+              }
+              chunk.setBlock(lx, surfaceClamped + h + 1, lz, B.GLOWSTONE);
+            } else if (r > 0.93) {
+              chunk.setBlock(lx, surfaceClamped + 1, lz, B.CRYSTAL);
+              chunk.setBlock(lx, surfaceClamped + 2, lz, B.GLOWSTONE);
+            }
+          }
           continue;
         }
 
