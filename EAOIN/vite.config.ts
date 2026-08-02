@@ -1,10 +1,13 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 
-// GitHub Pages serves project sites from a subpath (`/<repo>/`). Vite needs
-// `base` set to that subpath so the built assets resolve correctly there.
-// Local `npm run dev` and `vite build` keep the default `/`.
-const BASE_PATH = process.env.BASE_PATH || '/';
+// GitHub Pages serves project sites from a subpath (`/<repo>/`). The deploy
+// workflow used to hard-code the old repo path here, which broke the site after
+// the repo was renamed to EAOIN-LAUNCHER (blank/white page — assets 404'd).
+// Using a RELATIVE base path (`./`) makes every asset resolve correctly no
+// matter what the repo is named, so we don't depend on the workflow's BASE_PATH
+// env (which we can't edit — the bot lacks `workflows` permission).
+const BASE_PATH = './';
 
 export default defineConfig({
   root: '.',
