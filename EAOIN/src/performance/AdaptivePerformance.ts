@@ -76,25 +76,25 @@ export const BUDGET_PRESETS: Record<string, PerformanceBudget> = {
   performance: {
     targetFps: 60,
     minRenderScale: 0.5, maxRenderScale: 1.0,
-    minRenderDistance: 4, maxRenderDistance: 8,
+    minRenderDistance: 6, maxRenderDistance: 12,
     minEffectTier: 'minimal', maxEffectTier: 'high',
   },
   balanced: {
     targetFps: 60,
     minRenderScale: 0.62, maxRenderScale: 1.0,
-    minRenderDistance: 6, maxRenderDistance: 10,
+    minRenderDistance: 10, maxRenderDistance: 16,
     minEffectTier: 'low', maxEffectTier: 'high',
   },
   quality: {
     targetFps: 50,
     minRenderScale: 0.72, maxRenderScale: 1.0,
-    minRenderDistance: 8, maxRenderDistance: 12,
+    minRenderDistance: 14, maxRenderDistance: 22,
     minEffectTier: 'medium', maxEffectTier: 'ultra',
   },
   cinematic: {
     targetFps: 40,
     minRenderScale: 0.8, maxRenderScale: 1.0,
-    minRenderDistance: 10, maxRenderDistance: 16,
+    minRenderDistance: 18, maxRenderDistance: 28,
     minEffectTier: 'high', maxEffectTier: 'ultra',
   },
 };

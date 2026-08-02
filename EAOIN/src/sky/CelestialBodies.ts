@@ -105,6 +105,8 @@ export class CelestialBodies {
 
   private planets: DriftingPlanet[] = [];
   private elapsed = 0;
+  /** True while a solar eclipse is actively dimming the sun. */
+  private eclipseActive = false;
   private disposed = false;
 
   constructor(scene: Scene) {
@@ -558,16 +560,27 @@ export class CelestialBodies {
     // Peaks at dawn and dusk, zero at noon and midnight.
     const horizonFactor = Math.max(0, 1 - Math.abs(Math.sin(sunAngle)) * 3.2);
 
-    this.updateSun(u, sunPos, dayFactor, horizonFactor);
+    // Solar eclipse: on a slow deterministic cadence the moon crosses the sun
+    // around midday, briefly dimming daylight like a shadow rolling over the
+    // world. The sun's corona is shown at full strength while its disc dims.
+    const eclipseCycle = (this.elapsed * 0.0008) % 1; // roughly every ~20 min
+    this.eclipseActive = eclipseCycle > 0.30 && eclipseCycle < 0.36
+      && dayFactor > 0.4;
+    const eclipseStrength = this.eclipseActive
+      ? 1 - Math.abs((eclipseCycle - 0.33) * 16) // ramps in and out
+      : 0;
+    const eclipseDayFactor = dayFactor * (1 - Math.max(0, eclipseStrength) * 0.82);
+
+    this.updateSun(u, sunPos, eclipseDayFactor, horizonFactor, eclipseStrength);
     this.updateMoon(sunPos, nightFactor);
     this.updateDeepSpace(u, nightFactor);
     this.updatePlanets(u, nightFactor);
 
     const sunDirection = sunPos.clone().normalize().scale(-1);
-    return { sunDirection, dayFactor, nightFactor };
+    return { sunDirection, dayFactor: eclipseDayFactor, nightFactor };
   }
 
-  private updateSun(u: CelestialUpdate, sunPos: Vector3, dayFactor: number, horizonFactor: number): void {
+  private updateSun(u: CelestialUpdate, sunPos: Vector3, dayFactor: number, horizonFactor: number, eclipseStrength = 0): void {
     const visible = u.hasSun;
     for (const mesh of [this.sun, this.sunCorona, this.sunGlow]) {
       if (mesh) mesh.setEnabled(visible);
@@ -580,11 +593,25 @@ export class CelestialBodies {
     this.sun.rotation.y = this.elapsed * 0.07;
     this.sun.rotation.x = this.elapsed * 0.035;
 
+    // During an eclipse the sun disc dims to a dark ring while the corona
+    // flares bright, so it reads as the moon crossing the sun.
+    const eclipseTint = Color3.Lerp(
+      u.sunTint,
+      new Color3(0.12, 0.12, 0.22),
+      Math.max(0, eclipseStrength)
+    );
     // Warm the sun towards deep orange as it approaches the horizon — this is
     // what makes the "crazy sunsets" land.
-    const sunsetTint = Color3.Lerp(u.sunTint, new Color3(1.0, 0.38, 0.12), horizonFactor);
+    const sunsetTint = Color3.Lerp(eclipseTint, new Color3(1.0, 0.38, 0.12), horizonFactor);
     const sunMat = this.sun.material as StandardMaterial;
-    if (sunMat) sunMat.emissiveColor = sunsetTint;
+    if (sunMat) {
+      sunMat.emissiveColor = sunsetTint;
+      // The corona ring is brightest during an eclipse.
+      if (this.sunCorona) {
+        const cm = this.sunCorona.material as StandardMaterial;
+        if (cm) cm.alpha = Math.max(cm.alpha, eclipseStrength);
+      }
+    }
 
     if (this.sunCorona) {
       this.sunCorona.position.copyFrom(sunPos);
@@ -604,21 +631,24 @@ export class CelestialBodies {
       this.sunGlow.position.copyFrom(sunPos);
       const m = this.sunGlow.material as StandardMaterial;
       if (m) {
-        m.alpha = 0.06 + horizonFactor * 0.20 + dayFactor * 0.05;
-        m.emissiveColor = Color3.Lerp(new Color3(1.0, 0.56, 0.20), new Color3(1.0, 0.24, 0.10), horizonFactor);
+        // Brighter, more striking glare so the sun blooms across water and
+        // sky at dawn/dusk and stands out even at midday.
+        m.alpha = Math.min(1, 0.10 + horizonFactor * 0.26 + dayFactor * 0.07 + eclipseStrength * 0.5);
+        m.emissiveColor = Color3.Lerp(new Color3(1.0, 0.60, 0.22), new Color3(1.0, 0.28, 0.10), horizonFactor);
       }
     }
 
-    // God rays fan out and brighten at low sun angles.
-    const rayAlpha = 0.02 + horizonFactor * 0.13 + dayFactor * 0.015;
+    // God rays fan out and brighten at low sun angles (and flare during an
+    // eclipse). Strengthened so shafts of light are clearly visible.
+    const rayAlpha = Math.min(0.5, 0.03 + horizonFactor * 0.20 + dayFactor * 0.02 + eclipseStrength * 0.3);
     this.godRays.forEach((ray, i) => {
       ray.position.copyFrom(sunPos);
       // Always face the player, then spin the fan about the view axis.
       ray.lookAt(this.root.position);
       ray.addRotation(0, 0, (i / this.godRays.length) * Math.PI + this.elapsed * 0.05);
       const m = ray.material as StandardMaterial;
-      if (m) m.alpha = rayAlpha * (0.6 + 0.4 * Math.sin(this.elapsed * 0.7 + i));
-      const stretch = 1 + horizonFactor * 0.9;
+      if (m) m.alpha = rayAlpha * (0.65 + 0.35 * Math.sin(this.elapsed * 0.7 + i));
+      const stretch = 1 + horizonFactor * 1.1;
       ray.scaling.set(1, stretch, 1);
     });
   }

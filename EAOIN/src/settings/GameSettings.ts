@@ -128,10 +128,10 @@ export function qualityRenderDistance(preset: QualityPreset): number {
   // Chunk count grows with the square of radius. These generous browser
   // distances let terrain render far into the distance so the world no longer
   // looks like an empty void grid around the player.
-  if (preset === 'performance') return 6;
-  if (preset === 'quality') return 10;
-  if (preset === 'cinematic') return 14;
-  return 8;
+  if (preset === 'performance') return 10;
+  if (preset === 'quality') return 16;
+  if (preset === 'cinematic') return 22;
+  return 12;
 }
 
 export function qualityCreatureMultiplier(preset: QualityPreset): number {

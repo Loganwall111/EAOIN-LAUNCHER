@@ -150,7 +150,7 @@ const PLAYER_FOOTPRINT: ReadonlyArray<readonly [number, number]> = [
 /** Chunks meshed synchronously before the first frame is presented. */
 const INITIAL_CHUNK_RADIUS = 1;
 /** Chunks generated + meshed per ordinary streaming frame. */
-const CHUNKS_PER_FRAME = 4;
+const CHUNKS_PER_FRAME = 8;
 /**
  * Keep one fully meshed chunk ring beyond the advertised render distance.
  *
@@ -166,7 +166,7 @@ const CHUNK_PREFETCH_RADIUS = 1;
  * a short catch-up burst. Correct, visible terrain wins over a few temporary
  * frame-time spikes; the adaptive sampler excludes these known work frames.
  */
-const COVERAGE_RECOVERY_CHUNKS_PER_FRAME = 8;
+const COVERAGE_RECOVERY_CHUNKS_PER_FRAME = 16;
 /**
  * Wall-clock budget for ordinary chunk streaming, in ms.
  *
@@ -398,7 +398,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       scene.activeCameras = [camera];
       camera.attachControl(canvas, true);
       camera.setTarget(new Vector3(spawn.x + 8, safeSpawnY - 0.35, spawn.z + 8));
-      camera.minZ = 0.1; camera.maxZ = 1500;
+      camera.minZ = 0.1; camera.maxZ = 5000;
       camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
       camera.inertia = 0; camera.angularSensibility = 900; camera.applyGravity = false; camera.checkCollisions = true;
       camera.ellipsoid = new Vector3(0.32, PLAYER_HALF_HEIGHT, 0.32);
