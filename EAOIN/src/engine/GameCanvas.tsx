@@ -52,6 +52,7 @@ import { WeatherEffects } from '../effects/WeatherEffects';
 import { MoonEvents } from '../effects/MoonEvents';
 import { SpecialEvents } from '../events/SpecialEvents';
 import { AncientCityRift } from '../events/AncientCityRift';
+import { aiReply, npcPersona } from '../ai/AIAssistant';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -263,6 +264,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const deathActionRef = useRef<{ respawn: () => void; ghost: () => void }>({ respawn: () => {}, ghost: () => {} });
   /** Set by the scene; summons a boss by id. Used by `/boss` and the B key. */
   const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
+  /** AI NPC spawn bridge (set inside the scene, called from chat). */
+  const aiNpcRef = useRef<((name: string, x: number, y: number, z: number) => void) | null>(null);
+  /** Latest player world position, kept fresh each frame for the chat/AI. */
+  const playerPosRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   /** Live boss state, drives the on-screen boss health bar. */
   const [bossState, setBossState] = useState<BossState | null>(null);
   const [commandText, setCommandText] = useState('/help');
@@ -1157,6 +1162,14 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       let padBtn8 = false, padBtn9 = false;
 
       /** Cycle the hotbar selection by a signed step (controller bumpers / touch). */
+      // NPC spawn bridge for the AI assistant (chat lives outside this scope).
+      aiNpcRef.current = (name: string, x: number, y: number, z: number): void => {
+        try {
+          creatureManager.spawnNear(new Vector3(x, y, z), 'villager');
+          showActionMessage(`🧑 ${name} (NPC) spawned nearby`);
+        } catch { /* NPC spawn is best-effort */ }
+      };
+
       const cycleHotbar = (dir: number): void => {
         const cur = HOTBAR_BLOCKS.indexOf(selectedBlockRef.current as (typeof HOTBAR_BLOCKS)[number]);
         const next = HOTBAR_BLOCKS[(cur + dir + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length];
@@ -2017,6 +2030,9 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             });
           }
         }
+        playerPosRef.current.x = camera.position.x;
+        playerPosRef.current.y = camera.position.y;
+        playerPosRef.current.z = camera.position.z;
         lastCameraPosition.copyFrom(camera.position);
       });
 
@@ -2565,6 +2581,21 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const submitChat = (): void => {
     const t = chatText.trim(); if (!t) { setChatOpen(false); return; }
     if (t.startsWith('/')) {
+      // AI assistant: /ai build / mod / teleport / summon / help
+      if (t.toLowerCase().startsWith('/ai')) {
+        const ai = aiReply(t);
+        if (ai.effect?.kind === 'teleport') {
+          commandEffectRef.current?.({ kind: 'teleport', x: ai.effect.x, z: ai.effect.z });
+        }
+        if (ai.npcSpawn) {
+          const persona = npcPersona(ai.npcSpawn);
+          aiNpcRef.current?.(persona.name, Math.round(playerPosRef.current.x + 3), Math.round(playerPosRef.current.y), Math.round(playerPosRef.current.z));
+        }
+        setChatMessages(m => [...m, { text: `> ${t}`, system: false }, { text: ai.message, system: true }].slice(-20));
+        setActionMessage(ai.message);
+        setChatOpen(false); setChatText('');
+        return;
+      }
       const result = runCommand(t, { settings: settingsRef.current, time: worldTimeRef.current, lastMessage: actionMessage, gameMode: gameModeRef.current });
       applyCommandResult(result);
       setChatMessages(m => [...m, { text: `> ${t}`, system: false }, { text: result.lastMessage, system: true }].slice(-20));

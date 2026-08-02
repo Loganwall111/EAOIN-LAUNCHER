@@ -71,7 +71,11 @@ export interface CharacterAppearance {
   shirtColor: string;
   pantsColor: string;
   background: string;
+  /** Cape style id — player variant cosmetics ('' = none). */
+  cape: string;
 }
+
+export const CAPE_STYLES = ['none', 'classic', 'cosmic', 'ember', 'galaxy', 'knight'];
 
 export const DEFAULT_APPEARANCE: CharacterAppearance = {
   name: 'Player',
@@ -83,6 +87,7 @@ export const DEFAULT_APPEARANCE: CharacterAppearance = {
   shirtColor: CLOTHES_COLORS[0],
   pantsColor: '#2f3640',
   background: 'meadows',
+  cape: 'none',
 };
 
 export const CREATOR_TABS = [

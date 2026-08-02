@@ -4,9 +4,9 @@
  * Left: category tabs + option pickers. Centre: live voxel preview on a stone
  * platform with turntable arrows and a name field. Right: background picker.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  CharacterAppearance, CLOTHES_COLORS, CREATOR_BACKGROUNDS, CREATOR_TABS, CreatorTabID,
+  CAPE_STYLES, CharacterAppearance, CLOTHES_COLORS, CREATOR_BACKGROUNDS, CREATOR_TABS, CreatorTabID,
   EYE_COLORS, FACIAL_HAIR_COUNT, HAIR_COLORS, HAIR_STYLE_COUNT, SKIN_TONES, UI_ASSETS,
 } from './theme';
 import VoxelAvatar, { MiniHead } from './VoxelAvatar';
@@ -30,6 +30,22 @@ const PRESETS: Array<{ id: string; label: string; patch: Partial<CharacterAppear
 export default function CharacterCreator({ appearance, onChange, onConfirm, onCancel }: CharacterCreatorProps) {
   const [tab, setTab] = useState<CreatorTabID>('appearance');
   const [rotation, setRotation] = useState(0);
+  const [spinning, setSpinning] = useState(true);
+
+  // Auto-spin the avatar so it reads as a real, spinnable 3D person.
+  useEffect(() => {
+    if (!spinning) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      setRotation((r) => r + (now - last) * 0.04);
+      last = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [spinning]);
 
   const patch = (next: Partial<CharacterAppearance>) => onChange({ ...appearance, ...next });
   const background = CREATOR_BACKGROUNDS.find((b) => b.id === appearance.background) ?? CREATOR_BACKGROUNDS[0];
@@ -138,9 +154,24 @@ export default function CharacterCreator({ appearance, onChange, onConfirm, onCa
 
             {tab === 'accessories' && (
               <div className="option-group">
-                <p className="option-group-label">Accessories</p>
+                <p className="option-group-label">Cape</p>
+                <div className="swatch-row">
+                  {CAPE_STYLES.map((cape) => (
+                    <button
+                      key={cape}
+                      className={`style-cell ${appearance.cape === cape ? 'selected' : ''}`}
+                      onClick={() => patch({ cape })}
+                      aria-label={`Cape ${cape}`}
+                      title={cape}
+                      style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+                    >
+                      <span style={{ fontSize: 16 }}>{cape === 'none' ? '🚫' : '🦸'}</span>
+                      <small style={{ fontSize: 8 }}>{cape}</small>
+                    </button>
+                  ))}
+                </div>
                 <p style={{ font: '400 11px/1.6 var(--ui-font)', color: 'var(--ui-text-dim)' }}>
-                  Backpacks, capes and pets unlock as you progress through the world.
+                  Pick a cape style. Backpacks and pets unlock as you progress through the world.
                 </p>
               </div>
             )}
@@ -170,6 +201,7 @@ export default function CharacterCreator({ appearance, onChange, onConfirm, onCa
         <div className="avatar-platform" />
         <div className="rotate-row">
           <button className="rotate-btn" onClick={() => setRotation((r) => r - 45)} aria-label="Rotate left">↺</button>
+          <button className={`rotate-btn ${spinning ? 'active' : ''}`} onClick={() => setSpinning((s) => !s)} aria-label="Toggle auto-spin" title="Auto-spin">{spinning ? '⏸' : '▶'}</button>
           <div className="name-field ui-panel">
             <input value={appearance.name} maxLength={20} onChange={(e) => patch({ name: e.target.value })} aria-label="Character name" />
             <span style={{ color: 'var(--ui-text-dim)' }}>✎</span>

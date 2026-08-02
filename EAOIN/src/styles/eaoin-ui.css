@@ -601,6 +601,7 @@
 .va-eye.l { left: 46px; }
 .va-eye.r { left: 77px; }
 .va-torso { left: 36px; top: 74px;  width: 60px; height: 84px; }
+.va-cape  { left: 40px; top: 78px;  width: 48px; height: 92px; border-radius: 4px 4px 0 0; box-shadow: inset -6px 0 rgba(0,0,0,0.3); transform-origin: top center; }
 .va-arm   { top: 76px;  width: 20px; height: 78px; }
 .va-arm.l { left: 14px; }
 .va-arm.r { left: 98px; }
@@ -630,6 +631,7 @@
 }
 
 .rotate-btn:hover { background: rgba(255, 255, 255, 0.18); }
+.rotate-btn.active { background: rgba(98, 216, 255, 0.3); border-color: var(--ui-cyan); }
 
 .name-field {
   display: flex;

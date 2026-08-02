@@ -46,6 +46,14 @@ export default function VoxelAvatar({ appearance, rotation = 0, scale = 1 }: Vox
       {/* legs */}
       <div className="va-leg l" style={{ background: appearance.pantsColor, boxShadow: `inset -6px 0 ${shade(appearance.pantsColor, 0.72)}` }} />
       <div className="va-leg r" style={{ background: shade(appearance.pantsColor, 0.88), boxShadow: `inset -6px 0 ${shade(appearance.pantsColor, 0.66)}` }} />
+      {/* cape (rendered behind the torso) */}
+      {appearance.cape && appearance.cape !== 'none' && (
+        <div
+          className="va-cape"
+          style={{ background: capeColor(appearance.cape), opacity: 0.92 }}
+          aria-hidden="true"
+        />
+      )}
       {/* arms */}
       <div className="va-arm l" style={{ background: appearance.shirtColor, boxShadow: `inset -5px 0 ${shade(appearance.shirtColor, 0.7)}` }} />
       <div className="va-arm r" style={{ background: shade(appearance.shirtColor, 0.9), boxShadow: `inset -5px 0 ${shade(appearance.shirtColor, 0.66)}` }} />
@@ -78,6 +86,18 @@ export default function VoxelAvatar({ appearance, rotation = 0, scale = 1 }: Vox
       <div className="va-eye r" style={{ background: appearance.eyeColor }} />
     </div>
   );
+}
+
+/** Cape colour palette by style id. */
+function capeColor(cape: string): string {
+  switch (cape) {
+    case 'classic': return 'linear-gradient(180deg,#4a9,#2a6)';
+    case 'cosmic': return 'linear-gradient(180deg,#6a4dff,#2a1a6a)';
+    case 'ember': return 'linear-gradient(180deg,#ff8a3a,#b83a1a)';
+    case 'galaxy': return 'linear-gradient(180deg,#2a4dff,#7a1a8a)';
+    case 'knight': return 'linear-gradient(180deg,#5a6a7a,#2a3a4a)';
+    default: return '#333';
+  }
 }
 
 /** Compact square portrait used in the HUD and title-screen player cards. */
