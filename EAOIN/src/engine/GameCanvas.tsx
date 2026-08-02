@@ -1460,6 +1460,13 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           tempRiftPull.set(riftPull.x * deltaSeconds, riftPull.y * deltaSeconds, riftPull.z * deltaSeconds);
           camera.position.addInPlace(tempRiftPull);
         }
+        // Celestial black-hole suction: at night the black hole in the sky pulls
+        // the player toward it, so flying near it feels like falling in.
+        const bhPull = atmosphere.celestial.pullFromBlackHole(camera.position);
+        if (bhPull) {
+          tempRiftPull.set(bhPull.x * deltaSeconds, bhPull.y * deltaSeconds, bhPull.z * deltaSeconds);
+          camera.position.addInPlace(tempRiftPull);
+        }
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);

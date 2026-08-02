@@ -765,6 +765,25 @@ export class CelestialBodies {
     }
   }
 
+  /**
+   * World-space suction toward the celestial black hole, if it is currently
+   * visible. The player is drawn in when close, giving the black hole a real
+   * gravitational pull like the endgame encounter. Returns a world-space
+   * acceleration, or null when the black hole isn't showing.
+   */
+  pullFromBlackHole(playerPos: Vector3): Vector3 | null {
+    if (!this.blackHole || !this.blackHole.isEnabled()) return null;
+    const holePos = this.blackHole.getAbsolutePosition();
+    const to = holePos.subtract(playerPos);
+    const dist = to.length();
+    if (dist < 2) return null;
+    // Only meaningful pull within ~260 units; weak far away, strong up close.
+    if (dist > 260) return null;
+    const strength = Math.min(1.4, (240 - dist) * 0.012);
+    to.normalize().scaleInPlace(Math.max(0, strength));
+    return to;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
