@@ -51,7 +51,7 @@ import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/Expl
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
 import { RuntimeStatus } from '../runtime/RuntimeStatus';
-import { GameSettings, qualityRenderDistance, clampSettings } from '../settings/GameSettings';
+import { GameSettings, qualityRenderDistance, effectiveRenderDistance, clampSettings } from '../settings/GameSettings';
 import { TerrainGenerator } from '../world/TerrainGenerator';
 import AdvancedTerrainGenerator, { FLOATING_ISLANDS_CONFIG } from '../world/AdvancedTerrainGenerator';
 import { CHUNK_HEIGHT } from '../world/Chunk';
@@ -460,7 +460,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       // the target framerate. See performance/AdaptivePerformance.ts.
       const perfBudget = adaptiveBudgetForSettings(settingsRef.current);
       let lastAdaptiveBudgetSignature = adaptiveBudgetKey(settingsRef.current);
-      const baseRenderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+      const baseRenderRadius = effectiveRenderDistance(settingsRef.current);
       const perf = new AdaptivePerformance(perfBudget, {
         renderScale: settingsRef.current.renderScale,
         renderDistance: baseRenderRadius,
@@ -1189,7 +1189,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             effectTier = manualEffectTier;
             applyEffectTier(effectTier);
           }
-          const manualRenderRadius = qualityRenderDistance(settingsRef.current.qualityPreset);
+          const manualRenderRadius = effectiveRenderDistance(settingsRef.current);
           if (manualRenderRadius !== renderRadius) {
             renderRadius = manualRenderRadius;
             invalidateRenderSnapshot(engine);
@@ -1393,6 +1393,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           if (chunkSource.hasOwnTerrain(targetDimension) || chunkSource.hasOwnTerrain(prevDim)) {
             renderer.clearAll();
             invalidateRenderSnapshot(engine);
+            const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
+            camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
             streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
             renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
           }
@@ -1991,6 +1993,8 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             if (chunkSource.hasOwnTerrain(activePortal.dimension) || chunkSource.hasOwnTerrain(prevDim)) {
               renderer.clearAll();
               invalidateRenderSnapshot(engine);
+              const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
+              camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
               streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
               renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
             }
@@ -2001,7 +2005,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
             publishRuntimeStatus();
             return;
           }
-          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const prevDim = chunkSource.getDimension(); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); chunkSource.setDimension(dim.id); if (chunkSource.hasOwnTerrain(dim.id) || chunkSource.hasOwnTerrain(prevDim)) { renderer.clearAll(); invalidateRenderSnapshot(engine); streamCenter = toChunkCoordinate(camera.position.x, camera.position.z); renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk); } authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
+          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const prevDim = chunkSource.getDimension(); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); chunkSource.setDimension(dim.id); if (chunkSource.hasOwnTerrain(dim.id) || chunkSource.hasOwnTerrain(prevDim)) { renderer.clearAll(); invalidateRenderSnapshot(engine); const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z); camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT; streamCenter = toChunkCoordinate(camera.position.x, camera.position.z); renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk); } authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
         }
         if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameModeRef.current === 'creative' || gameModeRef.current === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'c') { event.preventDefault(); showActionMessage(nextGenRuntime.startCredits()); publishRuntimeStatus(); return; }
@@ -2083,7 +2087,12 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
           // Drop the player onto solid ground in the destination.
           if (dimensionId === 'aether') camera.position.set(8, 96, 8);
           else if (dimensionId === 'backrooms') camera.position.set(3, 16, 3);
-          else camera.position.y = 64 + 1.62;
+          else {
+            // Land on the destination dimension's real surface (not a hard-coded
+            // y=64 which buried the player underground in most dimensions).
+            const surfaceY = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
+            camera.position.y = surfaceY >= 1 ? surfaceY + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
+          }
           streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
           renderer.updateVisibleChunks(
             streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS,

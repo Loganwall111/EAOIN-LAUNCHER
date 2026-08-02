@@ -126,6 +126,19 @@
   flex-direction: column;
 }
 
+.cosmic-girl {
+  width: 260px;
+  height: 300px;
+  object-fit: cover;
+  border-radius: 16px;
+  box-shadow:
+    0 0 60px rgba(80, 210, 255, 0.6),
+    0 0 140px rgba(40, 120, 255, 0.5);
+  filter: saturate(1.15) brightness(1.05);
+  animation: ladyPulse 4s ease-in-out infinite;
+  margin-bottom: 40px;
+}
+
 .purple-glow-lady {
   width: 180px;
   height: 180px;

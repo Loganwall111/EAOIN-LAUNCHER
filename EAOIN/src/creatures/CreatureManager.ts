@@ -408,6 +408,22 @@ export class CreatureManager {
   }
 
   /**
+   * Resolve the biome id string at a world column. The full terrain generator's
+   * getBiomeAt returns a BiomeDefinition object, so `String(...)` yields
+   * "[object Object]" which never matches any species biome tag — that was why
+   * no mobs spawned. Extract `.id` when present, else fall back to a string.
+   */
+  private biomeIdAt(worldX: number, worldZ: number): string {
+    const raw = this.terrain.getBiomeAt(worldX, worldZ);
+    if (typeof raw === 'string') return raw;
+    if (raw && typeof raw === 'object') {
+      const def = raw as { id?: unknown; name?: unknown };
+      return String(def.id ?? def.name ?? '');
+    }
+    return String(raw);
+  }
+
+  /**
    * Spawn an aquatic creature in an ocean/water cell. The land spawner never
    * placed water-habitat species (cod, shark, whale, squid, octopus, jellyfish,
    * anglerfish, sea snakes, dolphins, turtles) because it requires a solid,
@@ -420,7 +436,7 @@ export class CreatureManager {
 
     const worldX = cellX * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`aq-x:${id}`) * (SPAWN_CELL_SIZE - 4));
     const worldZ = cellZ * SPAWN_CELL_SIZE + 2 + Math.floor(this.hashToUnit(`aq-z:${id}`) * (SPAWN_CELL_SIZE - 4));
-    const biome = String(this.terrain.getBiomeAt(worldX, worldZ));
+    const biome = this.biomeIdAt(worldX, worldZ);
     const isNight = this.timeOfDay < 6 || this.timeOfDay >= 19;
     const candidates = speciesForBiome(biome, { habitat: 'water', isNight })
       .filter((s) => s.habitat === 'water');
@@ -466,7 +482,7 @@ export class CreatureManager {
 
     // Pick from everything the registry allows here, rather than a hard-coded
     // four-way switch. Land habitats only: aquatic species need water volumes.
-    const biome = String(this.terrain.getBiomeAt(worldX, worldZ));
+    const biome = this.biomeIdAt(worldX, worldZ);
     const isNight = this.timeOfDay < 6 || this.timeOfDay >= 19;
     const candidates = speciesForBiome(biome, { habitat: 'land', isNight })
       .filter((s) => s.habitat === 'land' || s.habitat === 'amphibious');

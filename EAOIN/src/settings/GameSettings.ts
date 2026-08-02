@@ -41,6 +41,13 @@ export interface GameSettings {
   /** Show the live performance overlay (frame time, triangles, backend). */
   showPerformanceOverlay: boolean;
   /**
+   * "Extreme Distance" — Distant-Horizons style. Pushes the chunk render
+   * radius far past the normal presets (up to ~120 chunks) so you can see
+   * distant mountains from anywhere. Expensive; the adaptive tuner keeps it
+   * playable by lowering resolution/effects as needed.
+   */
+  extremeDistance: boolean;
+  /**
    * Screen-space ray tracing quality. This is real per-pixel ray marching
    * against the depth buffer — not hardware RT, which WebGPU cannot expose.
    * See `rendering/ScreenSpaceRayTracing.ts` for the honest limitations.
@@ -88,6 +95,7 @@ export function createDefaultSettings(): GameSettings {
     rayTracedReflections: true,
     rayTracedShadows: true,
     rayTracedAO: true,
+    extremeDistance: false,
   };
 }
 
@@ -116,6 +124,7 @@ export function clampSettings(settings: GameSettings): GameSettings {
     targetFps: Math.max(30, Math.min(240, settings.targetFps ?? 60)),
     greedyMeshing: settings.greedyMeshing ?? true,
     showPerformanceOverlay: settings.showPerformanceOverlay ?? false,
+    extremeDistance: settings.extremeDistance ?? false,
     rayTracingQuality: (['off', 'low', 'medium', 'high', 'ultra'] as const)
       .includes(settings.rayTracingQuality) ? settings.rayTracingQuality : 'off',
     rayTracedReflections: settings.rayTracedReflections ?? true,
@@ -132,6 +141,21 @@ export function qualityRenderDistance(preset: QualityPreset): number {
   if (preset === 'quality') return 16;
   if (preset === 'cinematic') return 22;
   return 12;
+}
+
+/**
+ * Effective render radius in chunks. With `extremeDistance` on, the radius is
+ * pushed to Distant-Horizons proportions (80-130 chunks) so you can see distant
+ * mountains from anywhere; the adaptive tuner keeps it playable by scaling
+ * resolution/effects as needed.
+ */
+export function effectiveRenderDistance(settings: Pick<GameSettings, 'qualityPreset' | 'extremeDistance'>): number {
+  const base = qualityRenderDistance(settings.qualityPreset);
+  if (!settings.extremeDistance) return base;
+  if (settings.qualityPreset === 'performance') return 80;
+  if (settings.qualityPreset === 'quality') return 110;
+  if (settings.qualityPreset === 'cinematic') return 130;
+  return 96;
 }
 
 export function qualityCreatureMultiplier(preset: QualityPreset): number {

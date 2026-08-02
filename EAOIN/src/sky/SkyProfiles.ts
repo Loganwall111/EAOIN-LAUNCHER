@@ -86,11 +86,14 @@ function c(r: number, g: number, b: number): Color3 {
 export const OVERWORLD_SKY: SkyProfile = {
   id: 'overworld',
   label: 'Overworld',
-  zenithDay: c(0.18, 0.40, 0.78),
-  horizonDay: c(0.62, 0.79, 0.95),
+  zenithDay: c(0.16, 0.38, 0.80),
+  horizonDay: c(0.60, 0.78, 0.96),
   zenithNight: c(0.015, 0.022, 0.075),
   horizonNight: c(0.05, 0.07, 0.16),
-  sunsetGlow: c(1.0, 0.48, 0.20),
+  // Sunset/sunrise: a warm orange base that blooms into pink-purple as the sun
+  // nears the horizon, giving dusk that purplish-pink cast and dawn a warm
+  // orange-blue gradient rising into the sky.
+  sunsetGlow: c(1.0, 0.42, 0.55),
   fogDay: c(0.63, 0.76, 0.92),
   fogNight: c(0.05, 0.07, 0.14),
   fogDensity: FOG_LOW,
@@ -99,7 +102,7 @@ export const OVERWORLD_SKY: SkyProfile = {
   auroraStrength: 0.25,
   starDensity: 1,
   ambientScale: 1,
-  sunTint: c(1.0, 0.95, 0.82),
+  sunTint: c(1.0, 0.80, 0.55),
   weather: 'clear',
   showDeepSpace: true,
   hasSun: true,

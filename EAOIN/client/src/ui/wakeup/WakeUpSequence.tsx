@@ -115,14 +115,19 @@ export default function WakeUpSequence({ onComplete }: WakeUpSequenceProps) {
         </div>
       )}
 
-      {/* Dream sequence with purple glowing lady */}
+      {/* Dream sequence with the neon-blue Cosmic Girl (real face, not a dot) */}
       {phase === 'DREAM' && (
         <div className="dream-sequence">
-          <div className="purple-glow-lady" />
+          <img
+            className="cosmic-girl"
+            src={`${import.meta.env.BASE_URL}textures/cosmic_girl.png`}
+            alt="The Cosmic Girl"
+            draggable={false}
+          />
           <div className="dream-text">
             {DREAM_LINES[dreamLineIndex]}
           </div>
-          <div className="dream-subtitle">The Lady in Violet</div>
+          <div className="dream-subtitle">The Cosmic Girl</div>
         </div>
       )}
 

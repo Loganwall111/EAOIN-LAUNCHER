@@ -4,10 +4,12 @@
  * Every control writes through clampSettings, so the same validation the rest
  * of the game relies on applies here too.
  */
-import { useState } from 'react';
-import { clampSettings, GameSettings, qualityRenderDistance } from '../settings/GameSettings';
+import { useCallback, useState, useSyncExternalStore } from 'react';
+import { clampSettings, GameSettings, effectiveRenderDistance } from '../settings/GameSettings';
 import { UI_ASSETS } from './theme';
 import MenuScreen from './MenuScreen';
+import { DeveloperGate } from './DeveloperAppPanel';
+import { developerAccess } from '../dev/DeveloperAccess';
 
 export interface OptionsScreenProps {
   settings: GameSettings;
@@ -53,6 +55,15 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
   const [section, setSection] = useState<Section>('video');
   const patch = (next: Partial<GameSettings>) => onChange(clampSettings({ ...settings, ...next }));
 
+  // Developer Settings entrance at the bottom of Options.
+  const devAccess = useSyncExternalStore(
+    useCallback((listener) => developerAccess.subscribe(listener), []),
+    useCallback(() => developerAccess.get(), [])
+  );
+  const openDevGate = () => {
+    developerAccess.trigger(); // toggles panel if granted, else opens the lock gate
+  };
+
   return (
     <MenuScreen
       title="Options"
@@ -78,13 +89,19 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
           <div className="opt-list">
             {section === 'video' && (
               <>
-                <Row label="Quality preset" hint={`Render distance ${qualityRenderDistance(settings.qualityPreset)} chunks`}>
+                <Row label="Quality preset" hint={settings.extremeDistance ? `Render distance ${effectiveRenderDistance(settings)} chunks (Extreme)` : `Render distance ${effectiveRenderDistance(settings)} chunks`}>
                   <select className="ui-input" value={settings.qualityPreset} onChange={(e) => patch({ qualityPreset: e.target.value as GameSettings['qualityPreset'] })}>
                     <option value="performance">Performance</option>
                     <option value="balanced">Balanced</option>
                     <option value="quality">Quality</option>
                     <option value="cinematic">Cinematic</option>
                   </select>
+                </Row>
+                <Row
+                  label="Extreme Distance"
+                  hint={`Distant-Horizons style. Pushes render distance to ${effectiveRenderDistance({ qualityPreset: settings.qualityPreset, extremeDistance: true })} chunks so you can see mountains from anywhere. Heavy on performance — lowers resolution/effects automatically to keep the frame rate.`}
+                >
+                  <Toggle checked={settings.extremeDistance} onChange={(v) => patch({ extremeDistance: v })} label="Extreme Distance" />
                 </Row>
                 <Row label="Renderer" hint="Vulkan uses WebGPU, which is Vulkan-backed on Windows/Linux. Falls back to WebGL automatically.">
                   <select className="ui-input" value={settings.rendererPreference} onChange={(e) => patch({ rendererPreference: e.target.value as GameSettings['rendererPreference'] })}>
@@ -221,6 +238,24 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                 </Row>
               </>
             )}
+
+            {/* Developer Settings entrance, pinned to the bottom of Options. */}
+            <div className="opt-dev-entry">
+              <div className="opt-subhead">Developer</div>
+              <Row
+                label="Developer Settings"
+                hint={devAccess.granted ? 'Access granted — opens the developer app panel' : 'Unlock the developer app (terrain, time, lighting tuning)'}
+              >
+                <button type="button" className="btn-primary" onClick={openDevGate}>
+                  {devAccess.granted ? 'Open Developer App' : 'Enter Code'}
+                </button>
+              </Row>
+              {devAccess.gateOpen && !devAccess.granted && (
+                <div className="dev-gate-inline">
+                  <DeveloperGate error={devAccess.lastError} />
+                </div>
+              )}
+            </div>
           </div>
         </section>
       </div>

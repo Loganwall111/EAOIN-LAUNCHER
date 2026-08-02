@@ -87,7 +87,7 @@ function DevSlider({
 }
 
 /** The lock gate shown to anyone who triggers the panel without a grant. */
-function DeveloperGate({ error }: { error: string | null }) {
+export function DeveloperGate({ error }: { error: string | null }) {
   const [code, setCode] = useState('');
   const submit = (event: FormEvent) => {
     event.preventDefault();

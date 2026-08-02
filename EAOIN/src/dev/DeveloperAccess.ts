@@ -25,7 +25,9 @@
 export const ALPHA_ACCESS_LOCKDOWN = true;
 
 /** The developer unlock code. Shared out-of-band with the team, never in UI. */
-export const DEVELOPER_UNLOCK_CODE = 'EAOIN-118-DEV';
+export const DEVELOPER_UNLOCK_CODE = 'Logan1234';
+/** Legacy unlock code still accepted for existing developers. */
+export const LEGACY_DEVELOPER_UNLOCK_CODE = 'EAOIN-118-DEV';
 
 /** localStorage key that remembers a granted machine between sessions. */
 export const DEVELOPER_ACCESS_STORAGE_KEY = 'eaoin.developerAccess';
@@ -115,8 +117,10 @@ export class DeveloperAccessController {
       this.mutate({ lastError: 'Enter the developer unlock code.' });
       return false;
     }
-    if (normalized !== DEVELOPER_UNLOCK_CODE.toUpperCase()) {
-      this.mutate({ lastError: 'Access denied — this build is locked to developers during Alpha Access.' });
+    const valid = normalized === DEVELOPER_UNLOCK_CODE.toUpperCase()
+      || normalized === LEGACY_DEVELOPER_UNLOCK_CODE.toUpperCase();
+    if (!valid) {
+      this.mutate({ lastError: 'Access denied — incorrect developer code.' });
       return false;
     }
     this.persistGrant();

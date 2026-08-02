@@ -30,13 +30,15 @@ function withStubbedStorage<T>(run: () => T): T {
 }
 
 describe('GameSettings defaults', () => {
-  it('uses the safe WebGL baseline', () => {
+  it('uses the safe WebGL baseline with modern visuals enabled', () => {
     const defaults = createDefaultSettings();
     expect(defaults.rendererPreference).toBe('webgl');
     expect(defaults.experimentalVulkanMode).toBe(false);
-    expect(defaults.experimentalShaders).toBe(false);
-    expect(defaults.postProcessEnabled).toBe(false);
-    expect(defaults.qualityPreset).toBe('balanced');
+    // Modern visual defaults (safe on WebGL): post-processing and ray tracing
+    // are on, and the quality preset is 'quality'.
+    expect(defaults.experimentalShaders).toBe(true);
+    expect(defaults.postProcessEnabled).toBe(true);
+    expect(defaults.qualityPreset).toBe('quality');
   });
 });
 
@@ -53,7 +55,7 @@ describe('SettingsSave migration', () => {
     expect(settings.experimentalVulkanMode).toBe(false);
   });
 
-  it('migrates legacy WebGPU/Vulkan settings to the safe baseline', () => {
+  it('migrates legacy WebGPU/Vulkan settings to the safe WebGL renderer', () => {
     const migrated = withStubbedStorage(() => {
       window.localStorage.setItem(
         STORAGE_KEY,
@@ -70,11 +72,12 @@ describe('SettingsSave migration', () => {
       return result.settings;
     });
 
+    // The renderer is always reset to safe WebGL, but the modern visual
+    // defaults (post-processing, shaders) are preserved.
     expect(migrated.rendererPreference).toBe('webgl');
     expect(migrated.experimentalVulkanMode).toBe(false);
-    expect(migrated.experimentalShaders).toBe(false);
-    expect(migrated.postProcessEnabled).toBe(false);
-    expect(migrated.qualityPreset).toBe('balanced');
+    expect(migrated.postProcessEnabled).toBe(true);
+    expect(migrated.experimentalShaders).toBe(true);
   });
 
   it('persists the schema version after migration', () => {

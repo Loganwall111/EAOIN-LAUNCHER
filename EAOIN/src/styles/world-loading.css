@@ -204,3 +204,41 @@
   100% { transform: translate3d(calc(var(--mx, 60) * -1vw), calc(var(--my, 40) * -1vh), 0) scale(2.6); opacity: 0; }
 }
 .reduced-motion .wl-warp { display: none; }
+
+/* ------------------------------------------------------------------ *
+ * Cosmos warp: drifting nebula glows + a neuron field streaming past,
+ * so loading into a world feels like falling through a wormhole.
+ * ------------------------------------------------------------------ */
+.wl-nebula {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(120, 60, 255, 0.30) 0%, transparent 55%),
+    radial-gradient(circle at 82% 22%, rgba(255, 70, 140, 0.26) 0%, transparent 55%),
+    radial-gradient(circle at 70% 78%, rgba(60, 200, 255, 0.26) 0%, transparent 55%),
+    radial-gradient(circle at 30% 82%, rgba(255, 190, 60, 0.22) 0%, transparent 55%);
+  animation: wl-nebula-drift 18s ease-in-out infinite alternate;
+}
+@keyframes wl-nebula-drift {
+  from { transform: scale(1) translate(0, 0); }
+  to   { transform: scale(1.15) translate(-1.5vw, -1vh); }
+}
+.wl-neuron {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(transparent, rgba(140, 110, 255, 0.10) 45%, transparent),
+    repeating-linear-gradient(115deg, transparent 0 22px, rgba(170, 140, 255, 0.10) 23px);
+  animation: wl-neuron-pulse 3.5s ease-in-out infinite;
+}
+@keyframes wl-neuron-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+.wl-warp-dot {
+  width: 4px;
+  height: 4px;
+  box-shadow: 0 0 10px hsl(var(--hue, 260) 90% 70%), 0 0 20px hsl(var(--hue, 260) 90% 60%);
+}

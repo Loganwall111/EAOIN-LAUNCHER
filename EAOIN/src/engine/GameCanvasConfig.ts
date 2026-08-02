@@ -9,14 +9,22 @@ export function effectTierForQualityPreset(qualityPreset: GameSettings['qualityP
 }
 
 export function adaptiveBudgetForSettings(settings: GameSettings): PerformanceBudget {
-  return {
+  const budget = {
     ...(BUDGET_PRESETS[settings.qualityPreset] ?? BUDGET_PRESETS.balanced),
     targetFps: settings.targetFps || 60,
   };
+  // Extreme Distance: never let the adaptive tuner shrink the render radius
+  // back below the Distant-Horizons target. It still lowers resolution/effects
+  // to keep the frame rate, but the distant terrain stays loaded.
+  if (settings.extremeDistance) {
+    budget.minRenderDistance = 60;
+    budget.maxRenderDistance = 132;
+  }
+  return budget;
 }
 
 export function adaptiveBudgetKey(settings: GameSettings): string {
-  return `${settings.qualityPreset}:${settings.targetFps}`;
+  return `${settings.qualityPreset}:${settings.targetFps}:${settings.extremeDistance ? 'x' : 'n'}`;
 }
 
 export function shouldEnableAtmosphereParticles(settings: GameSettings, effectTier: EffectTier): boolean {

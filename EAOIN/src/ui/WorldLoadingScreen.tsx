@@ -117,15 +117,21 @@ export default function WorldLoadingScreen({
     <div className="world-loading" role="status" aria-live="polite">
       {/* The world type's own palette, so the screen previews the destination. */}
       <div className="wl-scene" style={{ background: type.preview }} />
+      {/* Cosmos warp: drifting nebula glows + a neuron field streaming past,
+          like falling through a wormhole while the world boots. */}
+      <div className="wl-nebula" aria-hidden="true" />
+      <div className="wl-neuron" aria-hidden="true" />
       {/* Warp-tunnel galaxy backdrop: colourful dots streaming toward the
           player like flying through a warp tunnel while the world boots. */}
       <div className="wl-warp" aria-hidden="true">
-        {Array.from({ length: 60 }, (_, i) => (
+        {Array.from({ length: 90 }, (_, i) => (
           <span key={i} className="wl-warp-dot" style={{
             left: `${(i * 37) % 100}%`,
             top: `${(i * 53 + 11) % 100}%`,
             '--d': `${(i % 12) * 0.5}s`,
             '--hue': `${(i * 47) % 360}`,
+            '--mx': `${(i % 5) * 14 + 30}`,
+            '--my': `${(i % 4) * 18 + 20}`,
           } as CSSProperties} />
         ))}
       </div>

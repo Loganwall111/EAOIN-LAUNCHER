@@ -91,27 +91,25 @@ export function resetPersistedSettings(): GameSettings {
 }
 
 function migrateSettings(stored: Partial<GameSettings>): GameSettings {
-  // Older saves may have forced the experimental WebGPU/Vulkan pipeline. Those
-  // are unsafe on the current BabylonJS release, so we always reset them to
-  // the safe WebGL baseline regardless of what the user previously chose.
+  // Older saves may have forced the experimental WebGPU/Vulkan pipeline. We
+  // always reset the renderer to the safe WebGL baseline (WebGPU crashes are
+  // the risk), but we keep the modern visual defaults (post-processing, ray
+  // tracing, shaders) which are safe on WebGL and which the game ships with.
   const defaults = createDefaultSettings();
   return clampSettings({
     ...defaults,
     ...stored,
     rendererPreference: 'webgl',
     experimentalVulkanMode: false,
-    experimentalShaders: false,
-    postProcessEnabled: false,
-    qualityPreset: stored.qualityPreset && stored.qualityPreset !== 'cinematic' ? stored.qualityPreset : 'balanced',
   });
 }
 
 function isLegacyExperimentalBundle(stored: Partial<GameSettings>): boolean {
+  // Only the unsafe WebGPU/Vulkan renderer path needs migration. Post-processing
+  // and shaders are safe WebGL defaults now and must not trip the detector.
   return (
     stored.rendererPreference === 'webgpu' ||
-    stored.experimentalVulkanMode === true ||
-    stored.experimentalShaders === true ||
-    stored.postProcessEnabled === true
+    stored.experimentalVulkanMode === true
   );
 }
 

@@ -1,4 +1,4 @@
-import { Chunk } from '../world/Chunk';
+import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../world/Chunk';
 import { AetherTerrain, BackroomsTerrain } from '../dimensions/terrain/AetherBackroomsTerrain';
 import { DimensionTerrainGenerator, dimensionArchetype } from '../dimensions/terrain/DimensionTerrain';
 
@@ -76,4 +76,23 @@ export class DimensionChunkSource {
 
     return this.overworld.generateChunk(cx, cz);
   };
+
+  /**
+   * Find the highest solid, non-fluid surface Y in the ACTIVE dimension at a
+   * world column, so the player can be dropped onto the real ground instead of
+   * spawning buried underground. Returns -1 when there is no solid ground.
+   */
+  getSurfaceHeightAt(worldX: number, worldZ: number): number {
+    const cx = Math.floor(worldX / CHUNK_SIZE);
+    const cz = Math.floor(worldZ / CHUNK_SIZE);
+    const lx = worldX - cx * CHUNK_SIZE;
+    const lz = worldZ - cz * CHUNK_SIZE;
+    const chunk = this.generateChunk(cx, cz);
+    for (let y = CHUNK_HEIGHT - 1; y >= 1; y--) {
+      const id = chunk.getBlock(lx, y, lz);
+      // Skip air and fluids (water/lava/toxic) to land on solid ground.
+      if (id !== 0 && id !== 5 && id !== 227 && id !== 226) return y;
+    }
+    return -1;
+  }
 }
