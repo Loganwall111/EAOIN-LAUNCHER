@@ -495,18 +495,17 @@
   font: 900 clamp(58px, 15vw, 200px)/0.85 var(--ui-font, sans-serif);
   letter-spacing: 0.1em;
   text-indent: 0.1em;
-  color: var(--cb-white);
-  background: linear-gradient(180deg, #ffffff 0%, #eaf6ff 42%, #9fd4ff 60%, #5f7fff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 44px rgba(98, 216, 255, 0.35)) drop-shadow(0 12px 30px rgba(0, 0, 0, 0.65));
+  color: #ffffff;
+  text-shadow:
+    0 0 22px rgba(120, 190, 255, 0.85),
+    0 0 46px rgba(98, 216, 255, 0.5),
+    0 12px 30px rgba(0, 0, 0, 0.7);
   animation: cbStudioZoom 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes cbStudioZoom {
-  from { transform: scale(2.6); opacity: 0; filter: blur(20px) drop-shadow(0 0 44px rgba(98,216,255,0.4)); }
+  from { transform: scale(2.6); opacity: 0; filter: blur(20px); }
   40%  { opacity: 1; }
-  to   { transform: scale(1); opacity: 1; filter: blur(0) drop-shadow(0 0 44px rgba(98,216,255,0.35)); }
+  to   { transform: scale(1); opacity: 1; filter: blur(0); }
 }
 
 .cb-studio-rule {
