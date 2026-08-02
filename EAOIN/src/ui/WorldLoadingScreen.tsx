@@ -7,8 +7,8 @@
  * here is driven by GameCanvas' real loading reports instead of a fake timer.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { getWorldType, WorldTypeID } from '../world/WorldTypes';
+import WarpTunnel3D from './WarpTunnel3D';
 
 interface LoadingProgressSnapshot {
   percent: number;
@@ -116,31 +116,15 @@ export default function WorldLoadingScreen({
 
   return (
     <div className="world-loading" role="status" aria-live="polite">
-      {/* Full-screen cosmos warp: the camera is "falling through a wormhole".
-          Nebula glows + a streaming neuron field + colourful warp dots. */}
-      <div className="wl-nebula" aria-hidden="true" />
-      <div className="wl-neuron" aria-hidden="true" />
-      <div className="wl-warp" aria-hidden="true">
-        {Array.from({ length: 120 }, (_, i) => (
-          <span key={i} className="wl-warp-dot" style={{
-            left: `${(i * 37) % 100}%`,
-            top: `${(i * 53 + 11) % 100}%`,
-            '--d': `${(i % 12) * 0.5}s`,
-            '--hue': `${(i * 47) % 360}`,
-            '--mx': `${(i % 5) * 14 + 30}`,
-            '--my': `${(i % 4) * 18 + 20}`,
-          } as CSSProperties} />
-        ))}
-      </div>
-      <div className="wl-scene" style={{ background: type.preview }} />
-      <div className="wl-vignette" aria-hidden="true" />
-
-      {/* White flash when the world finishes booting, then the wake-up begins. */}
-      {ready && <div className="wl-flash" aria-hidden="true" />}
+      {/* Real 3D warp tunnel: neon tube corridor + hyperdrive starfield +
+          neuron fibres + fresnel Cosmic Entity, driven by the loading %.
+          This fully replaces the old flat CSS particle 'snowstorm'. */}
+      <WarpTunnel3D progress={percent} ready={ready} />
 
       {/* Minimal center readout so the warp is the star. */}
       <div className="wl-content">
         <div className="wl-world-name">{worldName}</div>
+        <div className="wl-world-type">{type.name}</div>
         <div className="wl-seed">Seed: {seed}</div>
         <div className="wl-stage">{stageLabel}</div>
 
