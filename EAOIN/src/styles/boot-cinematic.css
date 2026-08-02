@@ -46,7 +46,7 @@
 .cb-world-backdrop {
   z-index: -8;
   inset: -3%;
-  background: url('/ui/menu-panorama.jpg') center 48% / cover no-repeat;
+  background: var(--cb-panorama, url('/ui/menu-panorama.jpg')) center 48% / cover no-repeat;
   filter: saturate(0.7) contrast(1.08) brightness(0.45);
   opacity: 0;
   transform: scale(1.06);
@@ -65,19 +65,19 @@
 
 /* Next-Gen Cinematic Reboot – New phase-specific backgrounds */
 .cb-phase-credits .cb-world-backdrop {
-  background-image: linear-gradient(rgba(5,8,13,0.65), rgba(2,4,7,0.85)), url('/ui/menu-panorama.jpg');
+  background-image: linear-gradient(rgba(5,8,13,0.65), rgba(2,4,7,0.85)), var(--cb-panorama, url('/ui/menu-panorama.jpg'));
   background-position: center 38%;
   filter: saturate(0.6) contrast(1.15) brightness(0.38);
 }
 
 .cb-phase-engine .cb-world-backdrop {
-  background-image: linear-gradient(rgba(8,14,22,0.7), rgba(3,6,10,0.9)), url('/ui/menu-panorama.jpg');
+  background-image: linear-gradient(rgba(8,14,22,0.7), rgba(3,6,10,0.9)), var(--cb-panorama, url('/ui/menu-panorama.jpg'));
   background-position: center 55%;
   filter: saturate(1.1) contrast(1.25) brightness(0.45);
 }
 
 .cb-phase-studio .cb-world-backdrop {
-  background-image: linear-gradient(rgba(12,18,26,0.55), rgba(4,8,13,0.82)), url('/ui/menu-panorama.jpg');
+  background-image: linear-gradient(rgba(12,18,26,0.55), rgba(4,8,13,0.82)), var(--cb-panorama, url('/ui/menu-panorama.jpg'));
   background-position: center 42%;
   filter: saturate(0.75) contrast(1.05) brightness(0.48);
 }
@@ -449,8 +449,15 @@
 .cb-studio-scene {
   align-content: center;
   gap: clamp(22px, 4vh, 44px);
-  animation: cbSceneBeat 3s ease both;
   text-align: center;
+  /* Dedicated staying-visible fade-in. `cbSceneBeat` fades OUT to opacity 0 at
+     the end, which with fill-mode `both` left the studio card black for most
+     of its phase. This one lands at opacity 1 and stays. */
+  animation: cbStudioSceneIn 1.4s ease-out both;
+}
+@keyframes cbStudioSceneIn {
+  from { opacity: 0; transform: translateY(16px); filter: blur(4px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
 }
 
 /* Soft full-screen glow behind the studio card so it reads as a big moment. */
@@ -495,17 +502,18 @@
   font: 900 clamp(58px, 15vw, 200px)/0.85 var(--ui-font, sans-serif);
   letter-spacing: 0.1em;
   text-indent: 0.1em;
+  /* Base is fully visible — never hidden by a fill-mode `from` keyframe. */
   color: #ffffff;
+  opacity: 1;
   text-shadow:
     0 0 22px rgba(120, 190, 255, 0.85),
     0 0 46px rgba(98, 216, 255, 0.5),
     0 12px 30px rgba(0, 0, 0, 0.7);
-  animation: cbStudioZoom 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: cbStudioZoom 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) ease-out;
 }
 @keyframes cbStudioZoom {
-  from { transform: scale(2.6); opacity: 0; filter: blur(20px); }
-  40%  { opacity: 1; }
-  to   { transform: scale(1); opacity: 1; filter: blur(0); }
+  from { transform: scale(1.25); opacity: 0.4; }
+  to   { transform: scale(1); opacity: 1; }
 }
 
 .cb-studio-rule {
@@ -537,12 +545,13 @@
   letter-spacing: 0.9em;
   text-indent: 0.9em;
   color: #cfe2ff;
+  opacity: 1;
   text-shadow: 0 0 30px rgba(120, 160, 255, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6);
-  animation: cbTaglineIn 1.2s 0.5s ease both;
+  animation: cbTaglineIn 1.2s 0.4s ease-out;
 }
 @keyframes cbTaglineIn {
-  from { opacity: 0; letter-spacing: 1.4em; }
-  to   { opacity: 1; letter-spacing: 0.9em; }
+  from { letter-spacing: 1.4em; opacity: 0.3; }
+  to   { letter-spacing: 0.9em; opacity: 1; }
 }
 
 /* ---------------------------------------------------------------- credits */
