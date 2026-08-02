@@ -247,6 +247,72 @@ export class PortalSystem {
     return inst;
   }
 
+  /**
+   * Detect a Minecraft-style buildable obsidian portal frame around a just-placed
+   * block (obsidian = id 12). A valid frame is a 4-wide × 5-tall ring of obsidian
+   * with a 2×3 air interior, oriented along X or Z. Returns the dimension + world
+   * position of the portal centre, or null if no complete frame encloses this block.
+   */
+  findBuildablePortalFrame(
+    worldX: number,
+    worldY: number,
+    worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    const OBSIDIAN = 12;
+    const AIR = 0;
+    const isObsidian = (x: number, y: number, z: number) => getBlock(x, y, z) === OBSIDIAN;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === AIR;
+
+    // The frame is 4 wide × 5 tall, interior opening 2 wide × 3 tall.
+    // Frame: (dx in 0..4, dy in 0..4). Interior: dx 1..3, dy 1..3.
+    // orientX = true  → frame spans X, width along X; single row in Z.
+    // orientX = false → frame spans Z, width along Z; single column in X.
+    const frames: Array<{ baseX: number; baseY: number; baseZ: number; orientX: boolean }> = [];
+    for (let orientX = 0; orientX <= 1; orientX++) {
+      const isX = orientX === 1;
+      // The frame's base corner must be within 4 blocks of the placed block.
+      for (let bx = worldX - 4; bx <= worldX; bx++) {
+        for (let bz = worldZ - 4; bz <= worldZ; bz++) {
+          // bottom-left of frame at (bx, baseY, bz); height 5 -> baseY = worldY - 4 .. worldY
+          for (let by = worldY - 4; by <= worldY; by++) {
+            let complete = true;
+            for (let dx = 0; dx <= 4 && complete; dx++) {
+              for (let dy = 0; dy <= 4 && complete; dy++) {
+                const interior = dx >= 1 && dx <= 3 && dy >= 1 && dy <= 3;
+                const wx = bx + (isX ? dx : 0);
+                const wz = bz + (isX ? 0 : dx);
+                const wy = by + dy;
+                if (interior) {
+                  if (!isAir(wx, wy, wz)) { complete = false; break; }
+                } else {
+                  if (!isObsidian(wx, wy, wz)) { complete = false; break; }
+                }
+              }
+            }
+            if (complete) frames.push({ baseX: bx, baseY: by, baseZ: bz, orientX: isX });
+          }
+        }
+      }
+    }
+    if (frames.length === 0) return null;
+
+    // Prefer the frame that actually touches the placed block (the placed block
+    // is one of the ring's obsidian cells). Otherwise fall back to the first.
+    const placedOnFrame = frames.find((f) => {
+      const onRing =
+        (worldX === f.baseX || worldX === f.baseX + 4 || worldX === f.baseX + 1 || worldX === f.baseX + 3)
+        || (worldZ === f.baseZ || worldZ === f.baseZ + 4 || worldZ === f.baseZ + 1 || worldZ === f.baseZ + 3);
+      return onRing;
+    });
+    const frame = placedOnFrame ?? frames[0];
+    const cx = frame.baseX + 2;
+    const cz = frame.baseZ + 2;
+    const cy = frame.baseY + 2;
+    // Classic obsidian frame leads to the Nether.
+    return { dimension: 'nether', x: cx, y: cy, z: cz };
+  }
+
   update(dt: number, camera: Vector3): void {
     this.time += dt;
     for (const p of this.portals) if (p.alive) p.update(dt, camera);

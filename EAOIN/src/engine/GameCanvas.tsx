@@ -1896,6 +1896,21 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
         if (blockToPlace === 5) flowWater(terrain, placeTarget.x, placeTarget.y, placeTarget.z);
         authorityRuntime.recordAction(); if (!creativeNow) publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
         onGameplayEvent('blocksPlaced'); audio.play('place', settingsRef.current); rebuildEditedBlock(placeTarget); saveWorldEdits();
+
+        // Buildable portals: placing an obsidian block that completes a 4×5
+        // obsidian frame lights up a portal to that dimension (classic Nether).
+        if (blockToPlace === 12) {
+          const frame = portalSystem.findBuildablePortalFrame(
+            placeTarget.x, placeTarget.y, placeTarget.z,
+            (x, y, z) => terrain.getBlockAt(x, y, z)
+          );
+          if (frame) {
+            portalSystem.spawnForDimension(frame.dimension, new Vector3(frame.x, frame.y, frame.z));
+            forceTerrainCoverage = true;
+            showActionMessage(`🔥 Portal activated — ${dimensionRuntime.getDefinition().name}`);
+            audio.play('ui', settingsRef.current);
+          }
+        }
         // TNT: fuse briefly, then detonate with a real voxel blast + fire.
         if (blockToPlace === 167) {
           showActionMessage('TNT armed — stand back!');
