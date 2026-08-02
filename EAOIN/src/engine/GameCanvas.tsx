@@ -720,7 +720,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       commandBlockSystem.placeBlock(spawn.x + 7, spawn.y, spawn.z, 'chain', 'give @p 22 1', false, true);
       // Do not auto-place a repeating `time set day` block: it spammed the
       // action rail and kept the sky locked to a bright midday look.
-      const creatureManager = new CreatureManager(scene, terrain, seed);
+      // Route the spawner through the dimension-aware chunk source so creatures
+      // land on (and spawn in) the ACTIVE dimension's real terrain, not the
+      // overworld's (which buried them underground in other dimensions).
+      const creatureManager = new CreatureManager(scene, chunkSource, seed);
       // Hostile wildlife can now actually hurt the player. Damage funnels into
       // the same survival stats as everything else, so the death check covers it.
       creatureManager.onPlayerDamage = ({ amount, source }) => {
@@ -1489,7 +1492,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             renderer.clearAll();
             invalidateRenderSnapshot(engine);
             const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
-            camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
+            camera.position.y = sy >= 1 ? sy + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
             streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
             renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
           }
@@ -2129,7 +2132,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
               renderer.clearAll();
               invalidateRenderSnapshot(engine);
               const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
-              camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
+              camera.position.y = sy >= 1 ? sy + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
               streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
               renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
             }
@@ -2140,7 +2143,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             publishRuntimeStatus();
             return;
           }
-          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const prevDim = chunkSource.getDimension(); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); chunkSource.setDimension(dim.id); if (chunkSource.hasOwnTerrain(dim.id) || chunkSource.hasOwnTerrain(prevDim)) { renderer.clearAll(); invalidateRenderSnapshot(engine); const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z); camera.position.y = sy >= 1 ? sy + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT; streamCenter = toChunkCoordinate(camera.position.x, camera.position.z); renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk); } authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
+          const used = hasNearbyBlock(terrain, camera.position, 15, 5); const prevDim = chunkSource.getDimension(); const dim = dimensionRuntime.cycle(); dimensionRuntime.triggerTransitionEffect(camera.position, used); atmosphere.setDimension(dim.id); chunkSource.setDimension(dim.id); if (chunkSource.hasOwnTerrain(dim.id) || chunkSource.hasOwnTerrain(prevDim)) { renderer.clearAll(); invalidateRenderSnapshot(engine); const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z); camera.position.y = sy >= 1 ? sy + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT; streamCenter = toChunkCoordinate(camera.position.x, camera.position.z); renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk); } authorityRuntime.recordAction(); audio.play('ui', settingsRef.current); showActionMessage(`${used ? 'Portal Core' : 'Portal monument'} — ${dim.message}`); publishRuntimeStatus(); return;
         }
         if (event.key.toLowerCase() === 'n') { event.preventDefault(); showActionMessage(nextGenRuntime.damageFinalBoss(gameModeRef.current === 'creative' || gameModeRef.current === 'incredible' ? 160 : 45)); audio.play('hit', settingsRef.current); publishRuntimeStatus(); return; }
         if (event.key.toLowerCase() === 'c') { event.preventDefault(); showActionMessage(nextGenRuntime.startCredits()); publishRuntimeStatus(); return; }
@@ -2226,7 +2229,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             // Land on the destination dimension's real surface (not a hard-coded
             // y=64 which buried the player underground in most dimensions).
             const surfaceY = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
-            camera.position.y = surfaceY >= 1 ? surfaceY + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
+            camera.position.y = surfaceY >= 1 ? surfaceY + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT;
           }
           streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
           renderer.updateVisibleChunks(
@@ -2257,8 +2260,33 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       // stable enough to record safely.
       enableSnapshotRenderingWhenReady(engine, scene, settingsRef.current);
 
+      // --- awakening first-person camera tilt ------------------------------
+      // The spawn-awakening overlay tells us how far the player has risen
+      // (progress 0..1). We ease the real camera pitch from looking down at the
+      // ground (as if face-down on the dirt) up to level/slightly up, so the
+      // camera itself "pulls itself off the ground and looks back up" instead
+      // of a flat head-on view. We only ever add the *change* so we never fight
+      // or accumulate against the mouse-look pitch.
+      let awakeningTiltTarget = -0.9;   // start looking down at the ground
+      let awakeningTiltApplied = 0;
+      const handleAwakeningTilt = (event: Event): void => {
+        const progress = (event as CustomEvent<{ progress?: number }>).detail?.progress;
+        const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? (progress as number) : 0));
+        // Lerp from ~looking-down (negative pitch) to slightly-up (positive).
+        awakeningTiltTarget = -0.9 + p * 1.05;
+      };
+      window.addEventListener('eaoin-awakening-tilt', handleAwakeningTilt);
+
       engine.runRenderLoop(() => {
         try {
+          // Ease the applied tilt toward the target and add only the delta to
+          // the camera's existing (mouse-set) pitch, so we never accumulate or
+          // fight the mouse-look.
+          const eased = awakeningTiltApplied + (awakeningTiltTarget - awakeningTiltApplied) * 0.09;
+          if (Math.abs(eased - awakeningTiltApplied) > 0.0001) {
+            camera.rotation.x += eased - awakeningTiltApplied;
+            awakeningTiltApplied = eased;
+          }
           scene.render();
         } catch (error) {
           console.error('[Render] Scene render failed.', error);
@@ -2270,6 +2298,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
+        window.removeEventListener('eaoin-awakening-tilt', handleAwakeningTilt);
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();

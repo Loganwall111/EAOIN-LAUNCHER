@@ -95,4 +95,43 @@ export class DimensionChunkSource {
     }
     return -1;
   }
+
+  /** Alias used by the creature spawner (CreatureTerrainSource interface). */
+  getSurfaceHeight(worldX: number, worldZ: number): number {
+    return this.getSurfaceHeightAt(worldX, worldZ);
+  }
+
+  /**
+   * Voxel read in the ACTIVE dimension. This mirrors the overworld terrain's
+   * `getBlockAt` so callers (creature spawning, raycasts) can treat every
+   * dimension interchangeably instead of querying the overworld and burying
+   * entities underground in a dimension with its own terrain.
+   */
+  getBlockAt(worldX: number, y: number, worldZ: number): number {
+    const cx = Math.floor(worldX / CHUNK_SIZE);
+    const cz = Math.floor(worldZ / CHUNK_SIZE);
+    if (y < 0 || y >= CHUNK_HEIGHT) return 0;
+    const lx = worldX - cx * CHUNK_SIZE;
+    const lz = worldZ - cz * CHUNK_SIZE;
+    return this.generateChunk(cx, cz).getBlock(lx, y, lz);
+  }
+
+  /**
+   * Biome id in the ACTIVE dimension. Overworld delegates to the overworld
+   * terrain; a dimension with its own terrain reports the dimension id itself
+   * (so species tagged 'humorous', 'void', 'nether', etc. can spawn there).
+   */
+  getBiomeAt(worldX: number, worldZ: number): string {
+    const dim = this.activeDimension;
+    if (!this.hasOwnTerrain(dim)) {
+      const raw = (this.overworld as unknown as { getBiomeAt?: (x: number, z: number) => unknown }).getBiomeAt?.(worldX, worldZ);
+      if (typeof raw === 'string') return raw;
+      if (raw && typeof raw === 'object') {
+        const def = raw as { id?: unknown; name?: unknown };
+        return String(def.id ?? def.name ?? 'plains');
+      }
+      return 'plains';
+    }
+    return dim;
+  }
 }

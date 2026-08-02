@@ -35,7 +35,18 @@ import {
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
-import { TerrainGenerator } from '../world/TerrainGenerator';
+/**
+ * The surface/voxel/biome queries the spawner needs. Abstracted so the manager
+ * can be pointed at the dimension-aware `DimensionChunkSource` (which reads the
+ * ACTIVE dimension's real terrain) instead of always the overworld. Previously
+ * creatures queried the overworld even inside a dimension, so they spawned
+ * buried under that dimension's ground.
+ */
+export interface CreatureTerrainSource {
+  getSurfaceHeight(x: number, z: number): number;
+  getBlockAt(x: number, y: number, z: number): number;
+  getBiomeAt(x: number, z: number): unknown;
+}
 import {
   buildMobEmissiveMask,
   buildMobTextureFromPalette,
@@ -255,7 +266,7 @@ export class CreatureManager {
 
   constructor(
     private readonly scene: Scene,
-    private readonly terrain: TerrainGenerator,
+    private readonly terrain: CreatureTerrainSource,
     private readonly seed: string
   ) {}
 

@@ -85,6 +85,18 @@ export default function SpawnAwakening({
     return () => window.clearTimeout(timer);
   }, [beat, reducedMotion, finish]);
 
+  /* Drive the real in-game camera tilt as the player wakes: it starts looking
+     down at the ground (face-down) and rises to look up, instead of the old
+     flat third-person face figure. progress 0 = prone, 1 = on your feet. */
+  useEffect(() => {
+    const progressByBeat: Record<AwakeningBeat, number> = {
+      BLACK: 0, BLINK: 0.1, GROUND: 0.3, PUSH: 0.6, LOOK: 0.85, HANDS: 1, DONE: 1,
+    };
+    window.dispatchEvent(new CustomEvent('eaoin-awakening-tilt', {
+      detail: { progress: progressByBeat[beat] ?? 0 },
+    }));
+  }, [beat]);
+
   // Failsafe: never let the waking up sequence trap the player on a black screen
   // if a browser timer is delayed or interrupted.
   useEffect(() => {
@@ -123,17 +135,9 @@ export default function SpawnAwakening({
       <div className="wake-blur" />
       <div className="wake-vignette" />
 
-      {/* Third-person self lying sideways on the ground, then pushing up. */}
-      <div className="wake-body">
-        <div className="wake-body-head" />
-        <div className="wake-body-torso" />
-        <div className="wake-body-arm wake-body-arm-l" />
-        <div className="wake-body-arm wake-body-arm-r" />
-        <div className="wake-body-leg wake-body-leg-l" />
-        <div className="wake-body-leg wake-body-leg-r" />
-      </div>
-
-      {/* First-person hands, planted on the ground then raised into view. */}
+      {/* First-person hands, planted on the ground then raised into view.
+          (The old third-person body figure with its tilting face was removed —
+          the actual camera now tilts up as the player rises.) */}
       <div className="wake-hands">
         <div className="wake-hand wake-hand-left" />
         <div className="wake-hand wake-hand-right" />
