@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { BUILD_STAMP } from './version';
 import './styles/global.css';
 import './styles/aaa-menu.css';
 import './styles/eaoin-ui.css';
@@ -12,7 +13,7 @@ import './styles/launcher.css';
 // and resolves the overlaps between the older HUD stylesheets.
 import './styles/hud-layout.css';
 
-console.log('EAOIN Ultimate Sandbox Engine v0.01 — Boot Sequence Initiated');
+console.log(`EAOIN Ultimate Sandbox Engine v0.01 — Boot Sequence Initiated (build ${BUILD_STAMP})`);
 console.log('Engine Architecture: ECS + Chunk Streaming + Deferred Rendering');
 console.log('Target: Production-quality voxel sandbox RPG');
 
