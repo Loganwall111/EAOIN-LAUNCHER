@@ -1003,23 +1003,43 @@ export class CreatureManager {
     }
 
     if (creature.moving) {
-      creature.walkPhase += distance / Math.max(0.2, plan.legHeight * creature.variant.scale * 1.6);
-      const swing = Math.sin(creature.walkPhase * Math.PI * 2) * 0.7;
+      // Speed-reactive gait: faster animals take longer, weightier strides.
+      const gait = Math.max(0.35, Math.min(1.4, creature.species.speed / 1.5));
+      creature.walkPhase += distance / Math.max(0.2, plan.legHeight * creature.variant.scale * 1.4) * gait;
+      const swing = Math.sin(creature.walkPhase * Math.PI * 2) * 0.72;
       creature.limbs.forEach((leg, index) => {
         // Diagonal pairs, which is how quadrupeds actually walk.
         leg.rotation.x = swing * (index === 0 || index === 3 ? 1 : -1);
+        // Legs flex at the ground-strike for a planted feel.
+        leg.position.y = Math.abs(Math.sin(creature.walkPhase * Math.PI * 2 - index * 0.5)) * 0.04;
       });
+      // Bounce + subtle body roll so running reads as alive, not sliding.
       creature.root.position.y +=
-        Math.abs(Math.sin(creature.walkPhase * Math.PI * 2)) * plan.legHeight * creature.variant.scale * 0.06;
-      if (creature.head) creature.head.rotation.x = 0.06;
+        Math.abs(Math.sin(creature.walkPhase * Math.PI * 2)) * plan.legHeight * creature.variant.scale * 0.07;
+      creature.root.rotation.z = Math.sin(creature.walkPhase * Math.PI) * 0.03;
+      if (creature.head) {
+        creature.head.rotation.x = 0.06 + Math.sin(creature.walkPhase * Math.PI) * 0.04;
+        // Head looks along the direction of travel.
+        creature.head.rotation.y = 0;
+      }
+      // Body ripples forward through the spine while running.
+      if (creature.meshes.length > 0) creature.meshes[0].rotation.z = Math.sin(creature.walkPhase * Math.PI) * 0.02;
     } else {
       for (const leg of creature.limbs) {
         leg.rotation.x += (0 - leg.rotation.x) * Math.min(1, deltaSeconds * 8);
       }
-      // Grazing: dip the head on a slow cycle, offset per animal.
+      // Idle breathing: the chest scales gently and the head scans.
+      const breath = 1 + Math.sin(now * 0.002 + creature.randomState * 0.002) * 0.015;
+      if (creature.meshes.length > 0) {
+        const body = creature.meshes[0];
+        body.scaling.x = breath;
+        body.scaling.z = breath;
+      }
       if (creature.head) {
         const graze = Math.sin(now * 0.0011 + creature.randomState * 0.001);
-        creature.head.rotation.x = graze > 0.4 ? 0.62 : 0.06;
+        creature.head.rotation.x = graze > 0.4 ? 0.62 : 0.05;
+        // Slow, curious head-scan.
+        creature.head.rotation.y = Math.sin(now * 0.0007 + creature.randomState * 0.003) * 0.4;
       }
     }
   }
