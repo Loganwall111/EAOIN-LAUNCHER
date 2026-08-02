@@ -465,6 +465,14 @@ const BIRDS: SpeciesDefinition[] = [
 const EAOIN_NATIVES: SpeciesDefinition[] = [
   /* ---- Overworld night ---- */
   {
+    id: 'villager', name: 'Villager', emoji: '🧑‍🌾', bodyPlan: 'biped', habitat: 'land', temperament: 'passive',
+    palette: { body: '#c98d6a', head: '#e0b08a', limb: '#3a6a8a', accent: '#f0e0c0' },
+    scale: 1.0, health: 30, speed: 0.9, damage: 0,
+    biomes: ['plain', 'meadow', 'savanna', 'taiga', 'desert'], weight: 6,
+    loot: [],
+    description: 'A friendly villager NPC. They trade, wander, and add life to the world.',
+  },
+  {
     id: 'husk_wanderer', name: 'Husk Wanderer', emoji: '🧟', bodyPlan: 'biped', habitat: 'land', temperament: 'hostile',
     palette: { body: '#5a6a4a', head: '#6a7a58', limb: '#3a4a30', accent: '#2a3020' },
     scale: 1.0, health: 34, speed: 1.15, damage: 6,

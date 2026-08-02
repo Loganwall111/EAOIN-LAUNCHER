@@ -16,6 +16,8 @@ export interface OptionsScreenProps {
   settings: GameSettings;
   onChange: (next: GameSettings) => void;
   onBack: () => void;
+  /** Open the deep "Super Settings" panel. */
+  onOpenSuperSettings?: () => void;
 }
 
 type Section = 'video' | 'audio' | 'gameplay' | 'accessibility';
@@ -52,7 +54,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-export default function OptionsScreen({ settings, onChange, onBack }: OptionsScreenProps) {
+export default function OptionsScreen({ settings, onChange, onBack, onOpenSuperSettings }: OptionsScreenProps) {
   const [section, setSection] = useState<Section>('video');
   const patch = (next: Partial<GameSettings>) => onChange(clampSettings({ ...settings, ...next }));
 
@@ -235,6 +237,11 @@ export default function OptionsScreen({ settings, onChange, onBack }: OptionsScr
                 </Row>
                 <Row label="Touch controls" hint="On-screen mobile buttons (virtual joystick, mine/place/fly/jump/inventory/chat/pause). Off by default.">
                   <Toggle checked={settings.touchControls} onChange={(v) => patch({ touchControls: v })} label="Touch controls" />
+                </Row>
+                <Row label="Super Settings" hint="The deep config layer — coloured lighting, cameras, ray tracing, debug & more.">
+                  {onOpenSuperSettings
+                    ? <button className="confirm-btn wide" style={{ margin: 0 }} onClick={onOpenSuperSettings}>⚡ Open Super Settings</button>
+                    : <Toggle checked={false} onChange={() => {}} label="Super Settings (unavailable here)" />}
                 </Row>
               </>
             )}

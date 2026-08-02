@@ -21,11 +21,23 @@ export interface AIResult {
   npcSpawn?: string;
 }
 
-const NPC_PERSONAS: Array<{ id: string; name: string; style: string; cape: string }> = [
-  { id: 'alex', name: 'Alex', style: 'explorer', cape: 'classic' },
-  { id: 'aria', name: 'Aria', style: 'builder', cape: 'cosmic' },
-  { id: 'zed', name: 'Zed', style: 'knight', cape: 'ember' },
-  { id: 'nova', name: 'Nova', style: 'ranger', cape: 'galaxy' },
+export interface NpcPersona {
+  id: string;
+  name: string;
+  style: string;
+  cape: string;
+  /** Shirt / hair / skin colours so each NPC has a unique look. */
+  shirt: string;
+  hair: string;
+  skin: string;
+  pants: string;
+}
+
+export const NPC_PERSONAS: NpcPersona[] = [
+  { id: 'alex', name: 'Alex', style: 'explorer', cape: 'classic', shirt: '#2080d0', hair: '#5a3a1a', skin: '#c98d6a', pants: '#2f3640' },
+  { id: 'aria', name: 'Aria', style: 'builder', cape: 'cosmic', shirt: '#d04aa0', hair: '#c870a0', skin: '#e0b08a', pants: '#3a3050' },
+  { id: 'zed', name: 'Zed', style: 'knight', cape: 'ember', shirt: '#8a5a3a', hair: '#3a3a3a', skin: '#a87050', pants: '#6a4a2a' },
+  { id: 'nova', name: 'Nova', style: 'ranger', cape: 'galaxy', shirt: '#4a8a4a', hair: '#2a5a8a', skin: '#c09a70', pants: '#2a4a3a' },
 ];
 
 export function aiReply(raw: string): AIResult {

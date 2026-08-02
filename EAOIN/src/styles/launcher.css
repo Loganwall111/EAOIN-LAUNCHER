@@ -270,3 +270,19 @@
 .patch-date { font-size: 10px; color: rgba(200,215,238,0.6); margin-left: auto; }
 .patch-body { margin: 0; padding: 0 4px 12px 18px; color: rgba(215,230,250,0.85); font-size: 12px; }
 .patch-body li { margin-bottom: 4px; }
+
+/* Launcher AI chat */
+.launcher-ai-toggle {
+  width: 100%; margin-top: 10px; padding: 9px; text-align: left;
+  background: rgba(120,160,255,0.12); border: 1px solid rgba(120,160,255,0.4);
+  border-radius: 8px; color: #bfd8ff; cursor: pointer; font-weight: 700;
+}
+.launcher-ai { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.launcher-ai-log {
+  height: 120px; overflow-y: auto; padding: 8px; border-radius: 8px;
+  background: rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 6px; font-size: 12px;
+}
+.launcher-ai-msg b { color: #ffd166; }
+.launcher-ai-msg.ai { color: #cfe0ff; }
+.launcher-ai-msg.you { color: #9fe0b0; }
+.launcher-ai-input input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(120,160,255,0.4); background: rgba(0,0,0,0.4); color: #fff; }

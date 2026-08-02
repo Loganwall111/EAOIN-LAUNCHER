@@ -402,6 +402,21 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   312: { id: 312, name: 'Sulphur Ore', shortName: 'SO', category: 'ore', solid: true, transparent: false, hardness: 2.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#a8a220', accentColor: '#c8c22a' },
   313: { id: 313, name: 'Rift Stone', shortName: 'RS', category: 'building', solid: true, transparent: false, hardness: 2.4, lightLevel: 0, emissive: false, stackSize: 64, color: '#3a2a5a', accentColor: '#7c4dff' },
   314: { id: 314, name: 'Sculk', shortName: 'SC', category: 'nature', solid: true, transparent: false, hardness: 0.6, lightLevel: 0, emissive: false, stackSize: 64, color: '#0e2438', accentColor: '#5fd0ff' },
+  315: { id: 315, name: 'MCP Player Block', shortName: 'MP', category: 'functional', solid: true, transparent: false, hardness: 1.5, lightLevel: 0, emissive: false, stackSize: 64, color: '#4a8a4a', accentColor: '#8ac88a' },
+  316: { id: 316, name: 'Coloured Lamp (Red)', shortName: 'LR', category: 'building', solid: true, transparent: false, hardness: 0.5, lightLevel: 14, emissive: true, stackSize: 64, color: '#ff4a4a', accentColor: '#ffd0d0' },
+  317: { id: 317, name: 'Coloured Lamp (Blue)', shortName: 'LB', category: 'building', solid: true, transparent: false, hardness: 0.5, lightLevel: 14, emissive: true, stackSize: 64, color: '#4a8aff', accentColor: '#c8d8ff' },
+  318: { id: 318, name: 'Coloured Lamp (Green)', shortName: 'LG', category: 'building', solid: true, transparent: false, hardness: 0.5, lightLevel: 14, emissive: true, stackSize: 64, color: '#4aff6a', accentColor: '#c0ffd0' },
+  319: { id: 319, name: 'Torch (White)', shortName: 'TW', category: 'building', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#ffd8a0', accentColor: '#fff0d8' },
+  320: { id: 320, name: 'Torch (Purple)', shortName: 'TP', category: 'building', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#c88aff', accentColor: '#e8d0ff' },
+  321: { id: 321, name: 'Torch (Cyan)', shortName: 'TC', category: 'building', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#7ad8ff', accentColor: '#d0f0ff' },
+  322: { id: 322, name: 'Glow Glass', shortName: 'GG', category: 'building', solid: true, transparent: true, hardness: 0.3, lightLevel: 10, emissive: true, stackSize: 64, color: '#aad8ff', accentColor: '#ffffff' },
+  323: { id: 323, name: 'Chair', shortName: 'CH', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#b07c4d', accentColor: '#6b4a2a' },
+  324: { id: 324, name: 'Table', shortName: 'TB', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#c8a06a', accentColor: '#8a6a3a' },
+  325: { id: 325, name: 'Sofa', shortName: 'SO', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#6a8ab0', accentColor: '#a8c0d8' },
+  326: { id: 326, name: 'TV Screen', shortName: 'TV', category: 'functional', solid: true, transparent: false, hardness: 1.2, lightLevel: 8, emissive: true, stackSize: 64, color: '#22222a', accentColor: '#6aa0ff' },
+  327: { id: 327, name: 'Computer', shortName: 'PC', category: 'functional', solid: true, transparent: false, hardness: 1.2, lightLevel: 8, emissive: true, stackSize: 64, color: '#3a3a44', accentColor: '#8ad0ff' },
+  328: { id: 328, name: 'Shelf', shortName: 'SH', category: 'decoration', solid: true, transparent: false, hardness: 1.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#8a6a3a', accentColor: '#b08a4a' },
+  329: { id: 329, name: 'Lamp (Fancy)', shortName: 'LF', category: 'decoration', solid: true, transparent: false, hardness: 0.5, lightLevel: 13, emissive: true, stackSize: 64, color: '#f0d878', accentColor: '#fff0c0' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */

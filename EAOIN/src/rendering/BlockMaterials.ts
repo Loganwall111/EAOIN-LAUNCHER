@@ -135,10 +135,19 @@ function createMaterial(
   material.ambientTexture = texture;
   material.diffuseColor = new Color3(1, 1, 1);
   material.ambientColor = new Color3(1, 1, 1);
-  material.emissiveColor = fallbackColor;
   material.specularColor = new Color3(0.04, 0.04, 0.04);
   material.specularPower = 96;
   material.backFaceCulling = false;
+
+  // Part 4 — coloured lighting: emissive/glowing blocks glow in their own
+  // colour (coloured lamps, torches, glow glass, fancy lamps). Emissive blocks
+  // keep a strong tint; regular blocks get a faint base so they read in the
+  // dark without washing out.
+  if (block.emissive) {
+    material.emissiveColor = fallbackColor;
+  } else {
+    material.emissiveColor = fallbackColor.scale(0.05);
+  }
 
   if (opaque) {
     configureOpaqueMaterial(material, texture);

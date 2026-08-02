@@ -11,6 +11,8 @@ import ServerLobbyWorld from './ui/ServerLobbyWorld';
 import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
 import ModEditorScreen from './ui/ModEditorScreen';
+import SuperSettingsPanel from './ui/SuperSettingsPanel';
+import { SuperSettings, loadSuperSettings, saveSuperSettings } from './settings/SuperSettings';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
 import { CharacterAppearance, DEFAULT_APPEARANCE } from './ui/theme';
@@ -56,6 +58,10 @@ export default function App() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
+  /** Super Settings (Part 4) — the deep configurable layer. */
+  const [superSettings, setSuperSettings] = useState<SuperSettings>(() => loadSuperSettings());
+  const [superSettingsOpen, setSuperSettingsOpen] = useState(false);
+  useEffect(() => { saveSuperSettings(superSettings); }, [superSettings]);
   const [craftingMessage, setCraftingMessage] = useState('Crafting ready');
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(() => createDefaultRuntimeStatus());
@@ -454,6 +460,7 @@ export default function App() {
             settings={settings}
             onChange={setSettings}
             onBack={() => setAppPhase('title')}
+            onOpenSuperSettings={() => setSuperSettingsOpen(true)}
           />
         </div>
       );
@@ -529,6 +536,7 @@ export default function App() {
           onOpenCharacter={() => { exitToMenu(); setAppPhase('creator'); }}
           onExitToLauncher={() => { exitToMenu(); setAppPhase('launcher'); }}
           appearance={appearance}
+          superSettings={superSettings}
         />
         <HudFrame
           appearance={appearance}
@@ -578,6 +586,16 @@ export default function App() {
           onTravelToDimension={travelToDimension}
         />
       </Suspense>
+      {superSettingsOpen && !worldLoading && (
+        <SuperSettingsPanel
+          settings={superSettings}
+          onChange={setSuperSettings}
+          onCapture={(mode) => window.dispatchEvent(new CustomEvent('eaoin-capture', { detail: { mode } }))}
+          onOpenModEditor={() => { setSuperSettingsOpen(false); setAppPhase('modeditor'); }}
+          onOpenWorldEditor={() => { setSuperSettingsOpen(false); setAppPhase('editor'); }}
+          onClose={() => setSuperSettingsOpen(false)}
+        />
+      )}
       {worldLoading && (
         <WorldLoadingScreen
           key={`loading:${worldSeed}:${worldAttempt}`}

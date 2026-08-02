@@ -15,6 +15,7 @@ import {
   LauncherChannel, LauncherDebugSettings, LauncherState, latestOfChannel,
 } from '../launcher/LauncherRuntime';
 import { PatchNotesList } from './PatchNotes';
+import { aiReply } from '../ai/AIAssistant';
 
 interface LauncherScreenProps {
   state: LauncherState;
@@ -39,6 +40,11 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [debug, setDebug] = useState<LauncherDebugSettings>(() => defaultDebugSettings());
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLog, setAiLog] = useState<Array<{ who: 'you' | 'ai'; text: string }>>([
+    { who: 'ai', text: '🤖 AI Assistant ready. Ask me to build a world, draft a mod, or plan a feature.' },
+  ]);
 
   const builds = useMemo(() => buildsForChannel(channel), [channel]);
   const selected = getBuild(state.selectedId);
@@ -197,6 +203,34 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
               <div className="launcher-actions">
                 <button className="launcher-play" onClick={() => { onLaunch(); onBoot(); }}>▶ Play</button>
               </div>
+
+              <button className="launcher-ai-toggle" onClick={() => setAiChatOpen((o) => !o)}>
+                🤖 AI Chat {aiChatOpen ? '▾' : '▸'}
+              </button>
+              {aiChatOpen && (
+                <div className="launcher-ai">
+                  <div className="launcher-ai-log">
+                    {aiLog.map((m, i) => (
+                      <div key={i} className={`launcher-ai-msg ${m.who}`}><b>{m.who === 'you' ? 'You' : 'AI'}:</b> {m.text}</div>
+                    ))}
+                  </div>
+                  <div className="launcher-ai-input">
+                    <input
+                      value={aiInput}
+                      placeholder="e.g. build a castle / mod add a ruby block / plan a world"
+                      onChange={(e) => setAiInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && aiInput.trim()) {
+                          const t = aiInput.trim();
+                          setAiLog((l) => [...l, { who: 'you', text: t }]);
+                          setAiLog((l) => [...l, { who: 'ai', text: aiReply(`/ai ${t}`).message }]);
+                          setAiInput('');
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <details className="launcher-patches" open={false}>
                 <summary>📜 Patch Notes</summary>

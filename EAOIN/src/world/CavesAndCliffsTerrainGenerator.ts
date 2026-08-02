@@ -2125,6 +2125,13 @@ export class CavesAndCliffsTerrainGenerator {
         }
       }
     }
+    // Interior furniture (Part 4): a chair, a table and a fancy lamp so the
+    // house feels lived-in instead of a hollow box.
+    const cx = wx + Math.floor(size / 2);
+    const cz = wz + Math.floor(size / 2);
+    this.setBlockIfInChunk(chunk, cx, surface + 1, cz, 323);       // chair
+    this.setBlockIfInChunk(chunk, cx + 1, surface + 1, cz, 324);   // table
+    this.setBlockIfInChunk(chunk, cx, surface + 2, cz + 1, 329);   // lamp
   }
 
   /** A small block-built village: a central path and a few houses. */
@@ -2206,6 +2213,27 @@ export class CavesAndCliffsTerrainGenerator {
     }
     this.setBlockIfInChunk(chunk, wx, surface + 2, wz, BLOCK.WATER);
     this.setBlockIfInChunk(chunk, wx, surface + 1, wz, BLOCK.WATER);
+
+    // A small movie theatre with a TV screen (Part 4) on one side.
+    this.placeMovieTheatre(chunk, wx + 9, surface, wz - 2);
+  }
+
+  /** A mini cinema: a raised stage with a big TV screen and sofa seats. */
+  private placeMovieTheatre(chunk: Chunk, wx: number, surface: number, wz: number): void {
+    // Stage platform.
+    for (let dx = 0; dx < 6; dx++) for (let dz = 0; dz < 4; dz++) {
+      this.setBlockIfInChunk(chunk, wx + dx, surface + 1, wz + dz, BLOCK.STONE_BRICKS);
+    }
+    // The TV screen on the back wall (id 326).
+    for (let dz = 0; dz < 3; dz++) this.setBlockIfInChunk(chunk, wx + 2, surface + 3, wz + dz, 326);
+    // Sofas (id 325) facing the screen.
+    for (let dz = 0; dz < 3; dz++) {
+      this.setBlockIfInChunk(chunk, wx - 2, surface + 1, wz + dz, 325);
+      this.setBlockIfInChunk(chunk, wx - 3, surface + 1, wz + dz, 325);
+    }
+    // A couple of coloured lamps for ambience.
+    this.setBlockIfInChunk(chunk, wx + 6, surface + 2, wz, 316);
+    this.setBlockIfInChunk(chunk, wx + 6, surface + 2, wz + 3, 317);
   }
 
   private placeVolcano(chunk: Chunk, wx: number, wz: number): void {

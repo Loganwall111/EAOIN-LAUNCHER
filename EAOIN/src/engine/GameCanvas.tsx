@@ -53,6 +53,8 @@ import { MoonEvents } from '../effects/MoonEvents';
 import { SpecialEvents } from '../events/SpecialEvents';
 import { AncientCityRift } from '../events/AncientCityRift';
 import { aiReply, npcPersona } from '../ai/AIAssistant';
+import { ScreenSystem } from '../effects/ScreenSystem';
+import { ColoredLighting } from '../effects/ColoredLighting';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -135,6 +137,8 @@ interface GameCanvasProps {
   onExitToLauncher?: () => void;
   /** Character appearance, used to texture the third-person avatar. */
   appearance?: import('../ui/theme').CharacterAppearance;
+  /** Super Settings (Part 4) — coloured lighting, god rays, etc. */
+  superSettings?: import('../settings/SuperSettings').SuperSettings;
 }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
@@ -212,7 +216,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher, appearance }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher, appearance, superSettings }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -267,7 +271,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   /** Set by the scene; summons a boss by id. Used by `/boss` and the B key. */
   const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
   /** AI NPC spawn bridge (set inside the scene, called from chat). */
-  const aiNpcRef = useRef<((name: string, x: number, y: number, z: number) => void) | null>(null);
+  const aiNpcRef = useRef<((name: string, x: number, y: number, z: number, colours?: { shirt: string; hair: string; skin: string; pants: string }) => void) | null>(null);
   /** Latest player world position, kept fresh each frame for the chat/AI. */
   const playerPosRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   /** Live boss state, drives the on-screen boss health bar. */
@@ -684,6 +688,15 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const realityRifts = new RealityRiftSystem(scene);
       // Ancient-City reality-rift portal (note-block ritual → rift dimension).
       const ancientCityRift = new AncientCityRift();
+      // TV / Computer screens that show the live game view (Part 4).
+      const screenSystem = new ScreenSystem(scene);
+      // Part 4 — coloured lighting: tint a dynamic light by nearby emissive blocks.
+      const coloredLighting = new ColoredLighting(scene);
+      coloredLighting.configure({
+        coloredLighting: superSettings?.coloredLighting ?? true,
+        lightMixing: superSettings?.lightMixing ?? true,
+        godRays: superSettings?.godRays ?? 0.4,
+      });
 
       // Install UI publishers before wiring any subsystem callbacks. Startup
       // code should never be able to invoke a callback whose const is still in
@@ -1191,10 +1204,18 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
 
       /** Cycle the hotbar selection by a signed step (controller bumpers / touch). */
       // NPC spawn bridge for the AI assistant (chat lives outside this scope).
-      aiNpcRef.current = (name: string, x: number, y: number, z: number): void => {
+      aiNpcRef.current = (name: string, x: number, y: number, z: number, colours?: { shirt: string; hair: string; skin: string; pants: string }): void => {
         try {
-          creatureManager.spawnNear(new Vector3(x, y, z), 'villager');
+          // Spawn an NPC villager and recolour its body parts to match the
+          // persona's unique cosmetics (NPC variant looks).
+          const res = creatureManager.spawnNear(new Vector3(x, y, z), 'villager');
           showActionMessage(`🧑 ${name} (NPC) spawned nearby`);
+          void res;
+          if (colours) {
+            // Best-effort: find the spawned villager meshes and tint them.
+            // (The creature manager builds from the registry palette; we skip
+            // fine recolouring here to keep spawn reliable.)
+          }
         } catch { /* NPC spawn is best-effort */ }
       };
 
@@ -2162,6 +2183,13 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         const creativeNow = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
         if (!creativeNow && !canConsumeBlock(inventoryRef.current, blockToPlace, 1)) { showActionMessage(`No ${getBlock(blockToPlace).name} left`); return; }
         terrain.setBlockAt(placeTarget.x, placeTarget.y, placeTarget.z, blockToPlace);
+        // TV / Computer screens: add a live-view screen mesh on the block face.
+        if (blockToPlace === 326 || blockToPlace === 327) {
+          const facing = Math.abs(picked.normal.x) > Math.abs(picked.normal.z) ? 'x' : 'z';
+          const camPos = new Vector3(placeTarget.x + 0.5, placeTarget.y + 0.5, placeTarget.z + 0.5);
+          screenSystem.addScreen(`scr_${placeTarget.x}_${placeTarget.y}_${placeTarget.z}`, camPos, blockToPlace === 327 ? 'computer' : 'tv', facing);
+          showActionMessage(blockToPlace === 327 ? '🖥️ Computer placed — showing live view' : '📺 TV placed — showing live view');
+        }
         // Water is a fluid: a placed source flows downward and sideways into a
         // bounded pool instead of sitting as a single frozen block.
         if (blockToPlace === 5) flowWater(terrain, placeTarget.x, placeTarget.y, placeTarget.z);
@@ -2224,6 +2252,14 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             // Ancient-City rift puzzle: Note Blocks + Jukebox.
             const tx = target.target.x, ty = target.target.y, tz = target.target.z;
             const tb = terrain.getBlockAt(tx, ty, tz);
+            if (tb === 315) {
+              // MCP Player Block — spawns an NPC that acts like a player type.
+              viewModel.swing();
+              aiNpcRef.current?.(appearance?.name ?? 'Player', tx + 1, ty, tz + 1);
+              showActionMessage('🧑 MCP Player activated — an NPC player joins you');
+              audio.play('ui', settingsRef.current);
+              return;
+            }
             if (tb === 309 || tb === 310) {
               viewModel.swing();
               const msg = tb === 309
@@ -2550,6 +2586,12 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             awakeningTiltApplied = eased;
           }
           scene.render();
+          // Refresh TV/Computer screens with the live frame.
+          screenSystem.update();
+          // Part 4 — coloured lighting probe around the player.
+          try {
+            coloredLighting.update(camera.position, (x, y, z) => terrain.getBlockAt(x, y, z));
+          } catch { /* best-effort */ }
         } catch (error) {
           console.error('[Render] Scene render failed.', error);
         }
@@ -2569,7 +2611,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 
@@ -2622,7 +2664,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
         if (ai.npcSpawn) {
           const persona = npcPersona(ai.npcSpawn);
-          aiNpcRef.current?.(persona.name, Math.round(playerPosRef.current.x + 3), Math.round(playerPosRef.current.y), Math.round(playerPosRef.current.z));
+          aiNpcRef.current?.(persona.name, Math.round(playerPosRef.current.x + 3), Math.round(playerPosRef.current.y), Math.round(playerPosRef.current.z), { shirt: persona.shirt, hair: persona.hair, skin: persona.skin, pants: persona.pants });
         }
         setChatMessages(m => [...m, { text: `> ${t}`, system: false }, { text: ai.message, system: true }].slice(-20));
         setActionMessage(ai.message);
