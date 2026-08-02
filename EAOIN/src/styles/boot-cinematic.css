@@ -455,6 +455,10 @@
      of its phase. This one lands at opacity 1 and stays. */
   animation: cbStudioSceneIn 1.4s ease-out both;
 }
+/* The 3D emblem canvas fills the scene; the lockup + burst float above it. */
+.cb-studio-scene .studio-3d-canvas { z-index: 1; }
+.cb-studio-scene .cb-studio-burst { z-index: 2; }
+.cb-studio-scene .cb-studio-lockup { position: relative; z-index: 3; }
 @keyframes cbStudioSceneIn {
   from { opacity: 0; transform: translateY(16px); filter: blur(4px); }
   to   { opacity: 1; transform: none; filter: blur(0); }

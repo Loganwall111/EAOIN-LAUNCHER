@@ -1,18 +1,17 @@
 /**
  * WarpTunnel3D — a real 3D Babylon hyper-speed wormhole for world loading.
  *
- * Replaces the flat CSS particle "snowstorm" overlay with a genuine 3D scene:
+ * Unlike a static tube, the CAMERA actually flies forward along the wormhole
+ * for the whole loading duration, exactly like the main-menu warp:
  *
- *   1. A curved neon tube corridor (MeshBuilder.CreateTube) running along -Z,
- *      with a rapidly-panning purple/blue gradient texture on its inner walls.
- *   2. A hyperdrive starfield — bright white point meshes spawned deep along
- *      -Z that accelerate and fly past the camera.
- *   3. Glowing neuron fibre strands (MeshBuilder.CreateLines) linking points
- *      around the tunnel rim.
- *   4. As `progress` nears 95% the pan/star speed ramps to peak; at 99% a full
- *      white alpha overlay blinds the screen.
- *   5. A pulsing 3D fresnel-glow "Cosmic Entity" sphere materializes at the end
- *      of the tunnel instead of a flat 2D portrait.
+ *   - The camera travels down a wavy neon tube corridor, accelerating as
+ *     `progress` climbs, so it genuinely "zooms" rather than sitting still.
+ *   - A galaxy of glowing dots (stars/motes) streams past the camera.
+ *   - Neuron fibre strands and glowing ring cross-sections sweep past as you
+ *     fly through them.
+ *   - A vortex of coloured motes swirls around the tunnel.
+ *   - Near the end a pulsing fresnel "Cosmic Entity" materializes dead ahead,
+ *     and the whole thing zooms all the way in until it flashes to white.
  *
  * Self-contained (owns its own Engine/Scene/canvas) so it mounts and unmounts
  * cleanly with the loading overlay.
@@ -41,13 +40,27 @@ export interface WarpTunnel3DProps {
   ready: boolean;
 }
 
-/** Number of star meshes in the hyperdrive field. */
-const STAR_COUNT = 180;
-/** Neuron strand count around the tunnel rim. */
-const NEURON_COUNT = 14;
-const TUBE_RADIUS = 10;
-const TUBE_LENGTH = 90;
-const TUNNEL_END = -TUBE_LENGTH;
+/** Number of galaxy-dot meshes streaming past. */
+const STAR_COUNT = 240;
+/** Number of neuron fibre strands around the tunnel rim. */
+const NEURON_COUNT = 16;
+/** Number of glowing ring cross-sections the camera flies through. */
+const RING_COUNT = 14;
+/** Wormhole tube dimensions (world units along Z, negative = ahead). */
+const TUBE_RADIUS = 11;
+const TUBE_LENGTH = 170;
+const CAM_START = 34;   // camera begins here (behind the tube mouth)
+const CAM_END = -TUBE_LENGTH + 26; // and ends here, at the white-flash entity
+
+/** Where a point on the tube's centre line sits at a given Z. */
+function tubeCentre(z: number): Vector3 {
+  const t = Math.max(0, Math.min(1, -z / TUBE_LENGTH)); // 0 at z=0 … 1 at end
+  return new Vector3(
+    Math.sin(t * Math.PI * 0.6) * 1.4,
+    Math.sin(t * Math.PI * 0.4 + 1.3) * 1.1,
+    z,
+  );
+}
 
 export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,27 +84,20 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
     const scene = new Scene(engine);
     scene.clearColor = new Color4(0.005, 0.004, 0.02, 1);
 
-    const camera = new FreeCamera('warp_cam', new Vector3(0, 0, 4), scene);
-    camera.fov = 1.2;
-    camera.setTarget(new Vector3(0, 0, -40));
+    const camera = new FreeCamera('warp_cam', new Vector3(0, 0, CAM_START), scene);
+    camera.fov = 1.25;
+    camera.minZ = 0.1;
 
-    // --- 1. Neon tube corridor -------------------------------------------
+    // --- 1. Neon tube corridor (wavy, runs along -Z) ----------------------
+    const steps = 96;
     const tubePath: Vector3[] = [];
-    const steps = 48;
     for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      tubePath.push(new Vector3(
-        Math.sin(t * Math.PI * 0.6) * 1.2,
-        Math.sin(t * Math.PI * 0.4 + 1.3) * 1.0,
-        -t * TUBE_LENGTH,
-      ));
+      const z = CAM_START - (i / steps) * (CAM_START - (CAM_END - 8));
+      tubePath.push(tubeCentre(z));
     }
     const tube = MeshBuilder.CreateTube('warp_tube', {
-      path: tubePath,
-      radius: TUBE_RADIUS,
-      tessellation: 48,
-      updatable: true,
-      sideOrientation: Mesh.BACKSIDE,
+      path: tubePath, radius: TUBE_RADIUS, tessellation: 48,
+      updatable: true, sideOrientation: Mesh.BACKSIDE,
     }, scene);
     const tubeMat = new StandardMaterial('warp_tube_mat', scene);
     tubeMat.emissiveColor = new Color3(0.5, 0.25, 1);
@@ -115,38 +121,40 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
     inner.material = innerMat;
     inner.freezeWorldMatrix();
 
-    // --- 2. Hyperdrive starfield -----------------------------------------
-    const stars: Array<{ mesh: Mesh; speed: number; z: number }> = [];
+    // --- 2. Galaxy dot field (streams past the flying camera) -------------
+    const stars: Array<{ mesh: Mesh; z: number }> = [];
     for (let i = 0; i < STAR_COUNT; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const r = TUBE_RADIUS * (0.3 + Math.random() * 0.55);
+      const r = TUBE_RADIUS * (0.2 + Math.random() * 0.8);
       const s = MeshBuilder.CreateSphere(`warp_star_${i}`, { diameter: 0.22, segments: 4 }, scene);
       const sm = new StandardMaterial(`warp_star_mat_${i}`, scene);
-      // Colour the hyperdrive stars so the tunnel is full of moving light, not
-      // just white specks.
       const hue = Math.random() * 360;
-      sm.emissiveColor = Color3.FromHSV(hue, 0.65, 1);
+      sm.emissiveColor = Color3.FromHSV(hue, 0.7, 1);
       sm.diffuseColor = new Color3(1, 1, 1);
       s.material = sm;
-      s.position.set(Math.cos(ang) * r, Math.sin(ang) * r, -Math.random() * TUBE_LENGTH);
+      s.position.set(
+        Math.cos(ang) * r,
+        Math.sin(ang) * r,
+        CAM_START + 8 - Math.random() * (CAM_START + 8 - CAM_END),
+      );
       s.isPickable = false;
-      stars.push({ mesh: s, speed: 20 + Math.random() * 40, z: s.position.z });
+      stars.push({ mesh: s, z: s.position.z });
     }
 
-    // --- 3. Neuron fibre strands ------------------------------------------
+    // --- 3. Neuron fibre strands sweeping along the tunnel -----------------
     const neurons: Mesh[] = [];
     const neuronMat = new StandardMaterial('warp_neuron_mat', scene);
     neuronMat.emissiveColor = new Color3(0.4, 1, 0.9);
-    neuronMat.alpha = 0.6;
+    neuronMat.alpha = 0.55;
     for (let i = 0; i < NEURON_COUNT; i++) {
       const ang0 = (i / NEURON_COUNT) * Math.PI * 2;
       const pts: Vector3[] = [];
-      for (let k = 0; k <= 20; k++) {
-        const z = -k * 4.5;
-        const wob = Math.sin(z * 0.1 + i) * 1.2;
+      for (let k = 0; k <= 26; k++) {
+        const z = CAM_START + 6 - k * ((CAM_START + 6 - CAM_END) / 26);
+        const wob = Math.sin(z * 0.12 + i) * 1.2;
         pts.push(new Vector3(
-          Math.cos(ang0) * (TUBE_RADIUS - 0.6) + wob * 0.3,
-          Math.sin(ang0) * (TUBE_RADIUS - 0.6) + wob * 0.3,
+          Math.cos(ang0) * (TUBE_RADIUS - 0.7) + wob * 0.4,
+          Math.sin(ang0) * (TUBE_RADIUS - 0.7) + wob * 0.4,
           z,
         ));
       }
@@ -156,21 +164,38 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       neurons.push(line);
     }
 
+    // --- 4. Glowing ring cross-sections the camera flies through -----------
+    const rings: Array<{ mesh: Mesh; z: number }> = [];
+    const ringMat = new StandardMaterial('warp_ring_mat', scene);
+    ringMat.emissiveColor = new Color3(0.6, 0.3, 1);
+    ringMat.diffuseColor = Color3.Black();
+    ringMat.specularColor = Color3.Black();
+    for (let i = 0; i < RING_COUNT; i++) {
+      const z = CAM_START - 4 - (i / RING_COUNT) * (CAM_START - 4 - CAM_END);
+      const ring = MeshBuilder.CreateTorus(`warp_ring_${i}`, {
+        diameter: TUBE_RADIUS * 1.55, thickness: 0.28, tessellation: 32,
+      }, scene);
+      ring.material = ringMat;
+      ring.position.copyFrom(tubeCentre(z));
+      ring.rotation.x = Math.PI / 2;
+      ring.isPickable = false;
+      rings.push({ mesh: ring, z });
+    }
+
     // Pulsing rim lights.
     const rimLights: PointLight[] = [];
     for (let i = 0; i < 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
-      const pl = new PointLight(`warp_rim_${i}`, new Vector3(Math.cos(ang) * 6, Math.sin(ang) * 6, -20), scene);
+      const pl = new PointLight(`warp_rim_${i}`, new Vector3(Math.cos(ang) * 6, Math.sin(ang) * 6, CAM_END + 30), scene);
       pl.diffuse = new Color3(0.6, 0.3, 1);
       pl.intensity = 2;
-      pl.range = 40;
+      pl.range = 80;
       rimLights.push(pl);
     }
 
-    // Vortex ring: dozens of glowing motes that swirl around the tunnel while
-    // you fly, giving the wormhole a living, rotating core.
+    // Vortex ring: coloured motes that swirl around the tunnel while you fly.
     const vortex: Mesh[] = [];
-    const VORTEX_COUNT = 64;
+    const VORTEX_COUNT = 70;
     for (let i = 0; i < VORTEX_COUNT; i++) {
       const ang = (i / VORTEX_COUNT) * Math.PI * 2;
       const r = TUBE_RADIUS * (0.35 + Math.random() * 0.45);
@@ -182,20 +207,23 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       vm.diffuseColor = c;
       vm.specularColor = Color3.Black();
       v.material = vm;
-      v.position.set(Math.cos(ang) * r, Math.sin(ang) * r, -Math.random() * TUBE_LENGTH);
+      v.position.set(
+        Math.cos(ang) * r, Math.sin(ang) * r,
+        CAM_START + 8 - Math.random() * (CAM_START + 8 - CAM_END),
+      );
       v.isPickable = false;
       vortex.push(v);
     }
 
     // A bright beacon light at the far end that swells as you arrive.
-    const beacon = new PointLight('warp_beacon', new Vector3(0, 0, TUNNEL_END + 22), scene);
+    const beacon = new PointLight('warp_beacon', new Vector3(0, 0, CAM_END + 20), scene);
     beacon.diffuse = new Color3(0.55, 0.3, 1);
     beacon.intensity = 0;
-    beacon.range = 220;
+    beacon.range = 240;
 
-    // --- 5. Cosmic Entity (3D fresnel sphere) ----------------------------
+    // --- 5. Cosmic Entity (3D fresnel sphere) at the far end ----------------
     const entity = new TransformNode('warp_entity', scene);
-    const core = MeshBuilder.CreateSphere('warp_entity_core', { diameter: 3.2, segments: 32 }, scene);
+    const core = MeshBuilder.CreateSphere('warp_entity_core', { diameter: 3.4, segments: 32 }, scene);
     core.parent = entity;
     const coreMat = new StandardMaterial('warp_entity_core_mat', scene);
     coreMat.emissiveColor = new Color3(0.6, 0.3, 1);
@@ -208,7 +236,7 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
     });
     core.material = coreMat;
     core.isPickable = false;
-    const halo = MeshBuilder.CreateSphere('warp_entity_halo', { diameter: 5.4, segments: 24 }, scene);
+    const halo = MeshBuilder.CreateSphere('warp_entity_halo', { diameter: 5.6, segments: 24 }, scene);
     halo.parent = entity;
     const haloMat = new StandardMaterial('warp_entity_halo_mat', scene);
     haloMat.emissiveColor = new Color3(0.3, 0.1, 0.7);
@@ -219,17 +247,17 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
     });
     halo.material = haloMat;
     halo.isPickable = false;
-    entity.position.set(0, 0, TUNNEL_END + 20);
+    entity.position.copyFrom(tubeCentre(CAM_END + 14));
     entity.setEnabled(false);
 
-    // Full-screen white overlay.
+    // Full-screen white overlay (the zoom-to-white climax).
     const white = document.createElement('div');
     white.style.position = 'absolute';
     white.style.inset = '0';
     white.style.background = '#ffffff';
     white.style.opacity = '0';
     white.style.pointerEvents = 'none';
-    white.style.transition = 'opacity 0.35s ease-in';
+    white.style.transition = 'opacity 0.3s ease-in';
     white.style.zIndex = '50';
     canvas.parentElement?.appendChild(white);
 
@@ -239,42 +267,62 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       const p = progressRef.current;
       const isReady = readyRef.current;
 
-      // Speed ramps as we approach the end.
-      const target = p >= 99 ? 6 : p >= 95 ? 5 : p >= 80 ? 3.2 : 1;
-      starSpeed += (target - starSpeed) * 0.08;
+      // ---- Camera flies forward down the tunnel, accelerating with progress.
+      // Ease so it starts slow and zooms fast near the end (the "warp" feel).
+      const t = Math.max(0, Math.min(1, p / 100));
+      const eased = t * t * (3 - 2 * t); // smoothstep
+      const camZ = CAM_START + (CAM_END - CAM_START) * eased;
+      camera.position.copyFrom(tubeCentre(camZ));
+      camera.setTarget(tubeCentre(camZ - 60));
 
-      // Advance stars.
+      // Speed multiplier for the streaming elements.
+      const targetSpeed = p >= 99 ? 7 : p >= 95 ? 6 : p >= 80 ? 4 : 1 + eased * 2;
+      starSpeed += (targetSpeed - starSpeed) * 0.06;
+
+      // ---- Galaxy dots stream past (they also wrap behind the camera).
+      const delta = engine.getDeltaTime() * 0.001;
       for (const st of stars) {
-        st.z += st.speed * starSpeed * engine.getDeltaTime() * 0.06;
-        if (st.z > 2) { st.z = TUNNEL_END; }
+        st.z += (40 + starSpeed * 30) * delta;
+        if (st.z > camZ + 30) st.z = camZ - 190;
         st.mesh.position.z = st.z;
-        // Scale up as they approach the camera.
-        const d = Math.max(0.5, (st.z + 90) / 90);
-        st.mesh.scaling.setAll(0.6 + (1 - d) * 1.6);
+        // Scale up as they fly past the camera.
+        const dist = st.z - camZ;
+        st.mesh.scaling.setAll(Math.max(0.4, 1.4 - dist * 0.02));
       }
 
-      // Pan tube texture (offset along V for longitudinal motion).
-      const offset = (performance.now() * 0.0004 * starSpeed) % 1;
-      if (tubeMat.emissiveTexture) (tubeMat.emissiveTexture as DynamicTexture).vOffset = offset;
-      if (innerMat.emissiveTexture) (innerMat.emissiveTexture as DynamicTexture).vOffset = -offset * 1.4;
-
-      // Hue-shift the tube walls so the wormhole breathes through colour.
-      const hueT = (performance.now() * 0.00004) % 1;
-      tubeMat.emissiveColor = Color3.FromHSV(hueT * 360, 0.85, 0.9);
-
-      // Spin the vortex ring around the tunnel's long axis.
+      // ---- Vortex motes swirl around the tunnel axis.
       for (const v of vortex) {
         const r = Math.hypot(v.position.x, v.position.y);
         if (r <= 0.001) continue;
         const a = Math.atan2(v.position.y, v.position.x) + 0.02 * starSpeed;
         v.position.x = Math.cos(a) * r;
         v.position.y = Math.sin(a) * r;
+        v.position.z += (30 + starSpeed * 20) * delta;
+        if (v.position.z > camZ + 26) v.position.z = camZ - 180;
+      }
+
+      // ---- Pan the tube texture for longitudinal motion.
+      const offset = (performance.now() * 0.0005 * starSpeed) % 1;
+      if (tubeMat.emissiveTexture) (tubeMat.emissiveTexture as DynamicTexture).vOffset = offset;
+      if (innerMat.emissiveTexture) (innerMat.emissiveTexture as DynamicTexture).vOffset = -offset * 1.4;
+
+      // Hue-shift the tube so the wormhole breathes through colour.
+      const hueT = (performance.now() * 0.00005) % 1;
+      tubeMat.emissiveColor = Color3.FromHSV(hueT * 360, 0.85, 0.9);
+
+      // ---- Rings glow brighter as the camera approaches, then pass.
+      for (const ring of rings) {
+        const d = ring.z - camZ;
+        const glow = Math.max(0, 1 - Math.abs(d) / 40);
+        (ring.mesh.material as StandardMaterial).emissiveColor =
+          Color3.FromHSV(280, 0.8, 0.4 + glow * 0.6);
+        ring.mesh.scaling.setAll(1 + glow * 0.3);
       }
 
       // Pulse the entity.
       if (entity.isEnabled()) {
-        const t = performance.now() * 0.001;
-        const pulse = 1 + Math.sin(t * 3) * 0.08;
+        const tSec = performance.now() * 0.001;
+        const pulse = 1 + Math.sin(tSec * 3) * 0.08;
         core.scaling.setAll(pulse);
         halo.scaling.setAll(pulse * 1.15);
         halo.rotation.y += 0.01;
@@ -287,18 +335,20 @@ export default function WarpTunnel3D({ progress, ready }: WarpTunnel3DProps) {
       });
 
       // Beacon swells as we approach the end.
-      beacon.intensity = p >= 95 ? 60 + Math.sin(performance.now() * 0.01) * 20 : p * 0.2;
+      beacon.intensity = p >= 95 ? 70 + Math.sin(performance.now() * 0.012) * 20 : p * 0.2;
 
-      // Subtle camera roll for a disorienting warp feel.
-      camera.rotation.z = Math.sin(performance.now() * 0.0006) * 0.05;
+      // Subtle camera roll + head-bob for a disorienting warp feel.
+      const bob = Math.sin(performance.now() * 0.0005) * 0.25 * (0.5 + starSpeed * 0.1);
+      camera.position.y = tubeCentre(camZ).y + bob;
+      camera.rotation.z = Math.sin(performance.now() * 0.0008) * 0.06;
 
       // Materialize the Cosmic Entity as we near the end.
-      if (p >= 99 && !entity.isEnabled()) entity.setEnabled(true);
+      if (p >= 96 && !entity.isEnabled()) entity.setEnabled(true);
 
-      // Blind to white near/at completion.
+      // Zoom to white at the end.
       const targetOpacity = isReady ? 1 : p >= 99 ? 1 : p >= 95 ? 0.35 : 0;
       const cur = parseFloat(white.style.opacity) || 0;
-      white.style.opacity = String(Math.min(1, cur + (targetOpacity - cur) * 0.25));
+      white.style.opacity = String(Math.min(1, cur + (targetOpacity - cur) * 0.28));
 
       scene.render();
     });

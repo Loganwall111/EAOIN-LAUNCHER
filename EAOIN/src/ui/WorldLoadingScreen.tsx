@@ -121,13 +121,8 @@ export default function WorldLoadingScreen({
           This fully replaces the old flat CSS particle 'snowstorm'. */}
       <WarpTunnel3D progress={percent} ready={ready} />
 
-      {/* Transparent overlay readout (no box) so the warp is the star. */}
+      {/* Centered overlay stays minimal so the warp is the star. */}
       <div className="wl-content">
-        <div className="wl-world-name">{worldName}</div>
-        <div className="wl-world-type">{type.name}</div>
-        <div className="wl-seed">Seed: {seed}</div>
-        <div className="wl-stage">{stageLabel}</div>
-
         {(loadingProgress?.error || timedOut) && (
           <div className="wl-startup-error" role="alert">
             <strong>{loadingProgress?.error ? 'WORLD STARTUP FAILED' : 'WORLD STARTUP IS TAKING TOO LONG'}</strong>
@@ -146,6 +141,19 @@ export default function WorldLoadingScreen({
         <div className="wl-tip">
           <span className="wl-tip-label">TIP</span>
           <span className="wl-tip-text">{TIPS[tipIndex]}</span>
+        </div>
+      </div>
+
+      {/* Bottom readout: tiny world info tucked right above the purple bar. */}
+      <div className="wl-bottom">
+        <div className="wl-world-meta-tiny">
+          <span className="wl-world-name-tiny">{worldName}</span>
+          <span className="wl-dot">•</span>
+          <span>{type.name}</span>
+          <span className="wl-dot">•</span>
+          <span className="wl-seed-tiny">Seed {seed}</span>
+          <span className="wl-dot">•</span>
+          <span className="wl-stage-tiny">{stageLabel}</span>
         </div>
       </div>
 

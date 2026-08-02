@@ -107,6 +107,35 @@
 .wl-startup-error { pointer-events: auto; }
 .wl-tip { pointer-events: auto; }
 
+/* Tiny world info line tucked just above the purple loading bar. */
+.wl-bottom {
+  position: fixed;
+  left: 50%;
+  bottom: 86px;
+  transform: translateX(-50%);
+  width: min(760px, 92vw);
+  display: flex;
+  justify-content: center;
+  z-index: 6;
+  pointer-events: none;
+}
+.wl-world-meta-tiny {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 9px var(--eaoin-pixel-font, monospace);
+  letter-spacing: 0.06em;
+  color: rgba(200, 215, 238, 0.55);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+}
+.wl-world-name-tiny { color: rgba(235, 242, 252, 0.82); font-weight: 800; }
+.wl-seed-tiny { color: rgba(180, 205, 235, 0.5); }
+.wl-stage-tiny { color: rgba(140, 200, 255, 0.6); }
+.wl-dot { color: rgba(150, 120, 255, 0.7); opacity: 0.8; }
+
 .wl-header { display: grid; gap: 9px; text-align: center; }
 
 .wl-world-name {

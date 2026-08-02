@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BootChime } from '../audio/BootChime';
+import StudioIntro3D from './StudioIntro3D';
 
 interface CinematicBootProps {
   onComplete: () => void;
@@ -374,12 +375,10 @@ export default function CinematicBoot({ onComplete, reducedMotion = false }: Cin
 
       {phase === 'STUDIO' && (
         <main className="cb-scene cb-studio-scene" aria-label="Onblockaway Studios">
+          {/* Real 3D cinematic backdrop: rotating voxel emblem, star galaxy,
+              light beams — behind the studio title. */}
+          <StudioIntro3D />
           <div className="cb-studio-burst" aria-hidden="true" />
-          <div className="cb-studio-sigil" aria-hidden="true">
-            <span className="cb-sigil-face cb-sigil-one" />
-            <span className="cb-sigil-face cb-sigil-two" />
-            <span className="cb-sigil-face cb-sigil-three" />
-          </div>
           <div className="cb-studio-lockup">
             <span className="cb-eyebrow">An original production by</span>
             <h1 className="cb-studio-name">ONEBLOCKAWAY</h1>
