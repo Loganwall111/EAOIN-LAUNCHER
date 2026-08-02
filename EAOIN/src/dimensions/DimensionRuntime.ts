@@ -20,6 +20,7 @@ import { SpawnPoint } from '../world/TerrainGenerator';
 
 export type RuntimeDimensionID =
   | 'overworld'
+  | 'humorous'
   | 'nether'
   | 'end'
   | 'frozen_wasteland'
@@ -646,6 +647,25 @@ const DIMENSIONS: RuntimeDimensionDefinition[] = [
     hazards: ['Reality shifts', 'Gravity instability'],
     lore: 'Outside every known dimension. Reality itself is damaged.',
     message: 'UNKNOWN REGION — Reality unstable.',
+  },
+  {
+    id: 'humorous',
+    name: 'The Humorous',
+    emoji: '🪼',
+    description: 'Floating islands over a black void, where giant cosmic jellyfish drift and feed on particles.',
+    sky: new Color4(0.00, 0.00, 0.01, 1),
+    fog: new Color3(0.02, 0.01, 0.05),
+    gravity: new Vector3(0, -0.32, 0),
+    tint: new Color3(0.5, 0.3, 1.0),
+    weather: 'Drifting cosmic particles, jellyfish rain',
+    music: 'Ethereal, deep space choir',
+    exclusiveBlocks: ['void_stone', 'dark_matter', 'jelly_crystal'],
+    exclusiveMobs: ['Cosmic Jelly', 'Void Jelly', 'Particle Moth'],
+    boss: 'The Cosmic Leviathan Jelly',
+    structures: ['Floating Isle Village', 'Particle Garden', 'Void Spire'],
+    hazards: ['Falling into the void', 'Jelly sting', 'Gravity flux'],
+    lore: 'The Humorous is what the void laughs like. Endless islands drift, and the jellyfish that eat the light watch you back.',
+    message: 'Entered The Humorous — floating isles under a cosmic jelly',
   },
 ];
 

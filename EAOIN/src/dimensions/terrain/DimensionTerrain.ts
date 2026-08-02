@@ -105,7 +105,7 @@ export function dimensionArchetype(dimensionId: string): DimensionArchetype {
     case 'machine_dimension': return 'machine';
     case 'shadow_realm': case 'spirit_realm': case 'undead_realm': case 'chaos_dimension':
       return 'dark';
-    case 'cosmic_void': case 'astral_plane': case 'dream_realm': return 'void';
+    case 'cosmic_void': case 'astral_plane': case 'dream_realm': case 'humorous': return 'void';
     case 'corrupted_lands': case 'ancient_civilization': return 'corrupt';
     default: return 'hills';
   }

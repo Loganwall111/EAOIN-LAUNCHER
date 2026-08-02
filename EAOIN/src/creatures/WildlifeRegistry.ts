@@ -332,6 +332,22 @@ const OCEAN: SpeciesDefinition[] = [
     description: 'Drifts. Stings anything it touches.',
   },
   {
+    id: 'cosmic_jelly', name: 'Cosmic Jelly', emoji: '🪼', bodyPlan: 'marine', habitat: 'air', temperament: 'neutral',
+    palette: { body: '#7a4dd0', head: '#9a6af0', limb: '#5a30a8', accent: '#c8a8ff' },
+    scale: 2.2, health: 60, speed: 1.1, damage: 8,
+    biomes: ['humorous', 'void'], weight: 6, nocturnal: false,
+    loot: [{ blockId: 16, amount: 2 }],
+    description: 'A giant cosmic jelly that drifts between the floating isles, feeding on particles of light.',
+  },
+  {
+    id: 'particle_moth', name: 'Particle Moth', emoji: '🦋', bodyPlan: 'bird', habitat: 'air', temperament: 'passive',
+    palette: { body: '#a8d8ff', head: '#c8f0ff', limb: '#7ab0e0', accent: '#ffffff' },
+    scale: 0.8, health: 12, speed: 1.8, damage: 0,
+    biomes: ['humorous', 'void'], weight: 8, nocturnal: false,
+    loot: [{ blockId: 301, amount: 1 }],
+    description: 'Eats the cosmic particles that illuminate The Humorous.',
+  },
+  {
     id: 'anglerfish', name: 'Anglerfish', emoji: '🐡', bodyPlan: 'fish', habitat: 'water', temperament: 'hostile',
     palette: { body: '#1a1a24', head: '#24242e', limb: '#101018', accent: '#f0e070' },
     scale: 0.6, health: 18, speed: 1.1, damage: 8,
