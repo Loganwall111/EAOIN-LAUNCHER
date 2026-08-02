@@ -6,6 +6,7 @@ import TitleScreen from './ui/TitleScreen';
 import HowToPlayGuide from './ui/HowToPlayGuide';
 import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
+import HorizonOS from './ui/HorizonOS';
 import ModsScreen from './ui/ModsScreen';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
@@ -65,7 +66,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: sign-in → cinematic boot → title screen → game ---- */
-  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'mods' | 'options' | 'marketplace' | 'editor' | 'guide';
+  type AppPhase = 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'mods' | 'options' | 'marketplace' | 'editor' | 'guide';
   // BUGFIX 2.0: the app used to open on the sign-in screen, so signing in was
   // forced before you could reach the menu. Boot now runs first and hands off
   // to the title screen; sign-in is reached only by pressing the button there.
@@ -359,8 +360,14 @@ export default function App() {
           <MultiplayerScreen
             onBack={() => setAppPhase('title')}
             onJoin={() => setAppPhase('worlds')}
+            onHorizonOS={() => setAppPhase('horizonos')}
           />
         </div>
+      );
+    }
+    if (appPhase === 'horizonos') {
+      return (
+        <HorizonOS onExit={() => setAppPhase('multiplayer')} />
       );
     }
     if (appPhase === 'mods') {

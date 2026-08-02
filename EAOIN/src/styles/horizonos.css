@@ -1,0 +1,53 @@
+/* HorizonOS — in-game Windows-7-style virtual desktop. */
+.hzos {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+
+/* Boot terminal */
+.hzos-boot { background: #000; display: flex; align-items: center; justify-content: center; }
+.hzos-terminal { width: min(720px, 90vw); background: #0a0a0f; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+.hzos-term-head { background: #1a1a24; color: #cfe; padding: 8px 12px; font-weight: 600; font-size: 13px; border-bottom: 1px solid #333; }
+.hzos-term-body { padding: 14px 16px; color: #9fe09a; font-family: 'Consolas', monospace; font-size: 15px; min-height: 200px; }
+.hzos-term-line { white-space: pre-wrap; }
+.hzos-term-ok { color: #7ff; }
+.hzos-cursor { display: inline-block; animation: hzos-blink 1s step-start infinite; }
+@keyframes hzos-blink { 50% { opacity: 0; } }
+
+/* Login */
+.hzos-login { background: linear-gradient(180deg, #1a4fa0 0%, #3f9ad6 40%, #0a2a4a 100%); display: flex; align-items: center; justify-content: center; }
+.hzos-login-card { width: min(360px, 90vw); background: rgba(230, 238, 250, 0.96); border-radius: 10px; padding: 28px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+.hzos-logo { font-size: 26px; font-weight: 700; color: #123f6b; margin-bottom: 6px; }
+.hzos-tag { color: #555; margin-bottom: 18px; }
+.hzos-account { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; margin: 6px 0; background: #fff; border: 1px solid #9aaec9; border-radius: 6px; cursor: pointer; font-size: 15px; }
+.hzos-account:hover { background: #e8f0fb; }
+.hzos-avatar { font-size: 26px; }
+.hzos-exit { margin-top: 12px; background: none; border: none; color: #446; cursor: pointer; text-decoration: underline; }
+.hzos-error { color: #c33; font-size: 13px; margin: 8px 0; }
+
+/* Desktop */
+.hzos-desktop { background: #3a6ea5; }
+.hzos-wallpaper { position: absolute; inset: 0; background: radial-gradient(circle at 60% 20%, #5b92c9, #2a5a8a 60%, #122a44); }
+.hzos-icons { position: absolute; top: 12px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 110px; }
+.hzos-icon { width: 96px; padding: 8px 4px; background: none; border: none; color: #fff; text-shadow: 0 1px 2px #000; font-size: 12px; text-align: center; cursor: pointer; }
+.hzos-icon:hover { background: rgba(255,255,255,0.12); outline: 1px solid rgba(255,255,255,0.3); }
+.hzos-icon-img { display: block; font-size: 34px; }
+
+/* Windows */
+.hzos-window { position: absolute; width: min(520px, 78vw); background: #f0f0f0; border: 1px solid #8a94a5; border-radius: 6px 6px 0 0; box-shadow: 4px 6px 18px rgba(0,0,0,0.4); display: flex; flex-direction: column; }
+.hzos-window-head { background: linear-gradient(180deg, #3a6ea5, #2a5590); color: #fff; padding: 6px 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; cursor: move; border-radius: 5px 5px 0 0; }
+.hzos-window-actions button { background: none; border: none; color: #fff; cursor: pointer; font-weight: 700; padding: 0 5px; }
+.hzos-window-body { padding: 12px 14px; min-height: 140px; max-height: 60vh; overflow: auto; color: #222; }
+.hzos-list { display: flex; flex-direction: column; gap: 8px; }
+.hzos-row { font-size: 13px; }
+.hzos-note { font-size: 13px; margin: 0; }
+
+/* Taskbar */
+.hzos-taskbar { position: absolute; bottom: 0; left: 0; right: 0; height: 44px; background: linear-gradient(180deg, #2a3f5a, #15202f); display: flex; align-items: center; gap: 4px; padding: 0 6px; }
+.hzos-start, .hzos-task { background: linear-gradient(180deg, #4a6f9a, #2a4a70); color: #fff; border: 1px solid #000; border-radius: 3px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+.hzos-task.active { outline: 2px solid #8ad0ff; }
+.hzos-clock { margin-left: auto; color: #fff; font-size: 12px; padding-right: 8px; }
+.hzos-hint { position: absolute; bottom: 54px; left: 50%; transform: translateX(-50%); color: #fff; text-shadow: 0 1px 3px #000; font-size: 13px; opacity: 0.8; }

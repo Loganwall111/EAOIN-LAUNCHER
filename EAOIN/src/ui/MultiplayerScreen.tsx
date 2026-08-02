@@ -12,6 +12,8 @@ import MenuScreen from './MenuScreen';
 export interface MultiplayerScreenProps {
   onBack: () => void;
   onJoin: (server: ServerEntry) => void;
+  /** Open HorizonOS (the in-game virtual desktop). */
+  onHorizonOS?: () => void;
 }
 
 type Tab = 'servers' | 'friends' | 'guilds';
@@ -30,7 +32,7 @@ function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-export default function MultiplayerScreen({ onBack, onJoin }: MultiplayerScreenProps) {
+export default function MultiplayerScreen({ onBack, onJoin, onHorizonOS }: MultiplayerScreenProps) {
   const [tab, setTab] = useState<Tab>('servers');
   const [region, setRegion] = useState<(typeof REGIONS)[number]>('ALL');
   const [query, setQuery] = useState('');
@@ -55,12 +57,15 @@ export default function MultiplayerScreen({ onBack, onJoin }: MultiplayerScreenP
       backdrop={UI_ASSETS.bgMultiplayer}
       onBack={onBack}
       actions={
-        <div className="seg-group">
-          {(['servers', 'friends', 'guilds'] as Tab[]).map((id) => (
-            <button key={id} className={`seg ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-              {id === 'servers' ? 'Servers' : id === 'friends' ? 'Friends' : 'Guilds'}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="seg-group">
+            {(['servers', 'friends', 'guilds'] as Tab[]).map((id) => (
+              <button key={id} className={`seg ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
+                {id === 'servers' ? 'Servers' : id === 'friends' ? 'Friends' : 'Guilds'}
+              </button>
+            ))}
+          </div>
+          <button className="seg" onClick={() => onHorizonOS?.()}>🖥️ HorizonOS</button>
         </div>
       }
     >
