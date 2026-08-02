@@ -14,7 +14,7 @@ import type { HudTelemetry, WorldLoadProgress } from './engine/GameCanvas';
 import { GameMode } from './modes/GameMode';
 import { buildObjectives, createGameplayCounters, GameplayCounterKey, GameplayCounters } from './objectives/ObjectiveTracker';
 import { createDefaultRuntimeStatus, RuntimeStatus } from './runtime/RuntimeStatus';
-import { createStarterInventory, InventoryStacks } from './player/InventoryState';
+import { addToInventory, createStarterInventory, InventoryStacks } from './player/InventoryState';
 import { PlayerSaveManager } from './player/PlayerSave';
 import { createStarterSurvivalStats, SurvivalStats } from './player/SurvivalState';
 import { createStarterToolInventory, isToolUnlocked, ToolID, ToolInventory } from './player/ToolState';
@@ -125,7 +125,15 @@ export default function App() {
     const saved = new PlayerSaveManager(nextSeed).load();
     setSelectedTool(saved?.selectedTool ?? 'hand');
     setToolInventory(saved?.tools ?? createStarterToolInventory());
-    setInventory({ ...createStarterInventory(), ...(saved?.inventory ?? {}) });
+    // Grant the blocks/items that enabled mods add, so toggling a content mod
+    // actually puts its items in your hands instead of being a placeholder.
+    let startInv = createStarterInventory();
+    for (const mod of modRegistry.list()) {
+      if (!mod.enabled) continue;
+      for (const block of mod.adds.blocks ?? []) startInv = addToInventory(startInv, block.id as BlockID, 8);
+      for (const item of mod.adds.items ?? []) startInv = addToInventory(startInv, item as BlockID, 1);
+    }
+    setInventory({ ...startInv, ...(saved?.inventory ?? {}) });
     setSurvivalStats(saved?.survivalStats ?? createStarterSurvivalStats());
     setInventoryOpen(false);
     setSettingsOpen(false);
@@ -426,6 +434,7 @@ export default function App() {
           key={`${worldSeed}:${worldAttempt}`}
           seed={worldSeed}
           gameMode={gameMode}
+          modRegistry={modRegistry}
           onExit={exitToMenu}
           selectedBlock={selectedBlock}
           onSelectedBlockChange={setSelectedBlock}

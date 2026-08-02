@@ -19,6 +19,7 @@ import { ItemDropManager } from '../items/ItemDropManager';
 import { LocalAuthorityRuntime } from '../networking/LocalAuthorityRuntime';
 import { GameMode, isCreativeMode } from '../modes/GameMode';
 import { ModdingRuntime } from '../modding/ModdingRuntime';
+import type { ModPackRegistry } from '../modding/ModPackRegistry';
 import { NextGenRuntime } from '../nextgen/NextGenRuntime';
 import { GameplayCounterKey } from '../objectives/ObjectiveTracker';
 import { createBlockMaterials } from '../rendering/BlockMaterials';
@@ -109,6 +110,8 @@ export interface HudTelemetry {
 
 interface GameCanvasProps {
   seed: string; gameMode: GameMode; onExit: () => void;
+  /** Shared mod registry so enabled mods take effect in-world. */
+  modRegistry?: ModPackRegistry;
   selectedBlock: BlockID; onSelectedBlockChange: (b: BlockID) => void;
   selectedTool: ToolID; onSelectedToolChange: (t: ToolID) => void;
   toolInventory: ToolInventory; inventory: InventoryStacks; onInventoryChange: (i: InventoryStacks) => void;
@@ -199,7 +202,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -489,7 +492,7 @@ export default function GameCanvas({ seed, gameMode, onExit, selectedBlock, onSe
       let forceTerrainCoverage = false;
       const dimensionRuntime = new DimensionRuntime(scene, spawn, seed);
       const worldInteractions = new WorldInteractionRuntime(scene, terrain, spawn, seed);
-      const moddingRuntime = new ModdingRuntime(); moddingRuntime.registerMockPack();
+      const moddingRuntime = new ModdingRuntime(); if (modRegistry) moddingRuntime.attachRegistry(modRegistry); moddingRuntime.registerMockPack();
       const nextGenRuntime = new NextGenRuntime(scene, terrain, seed, gameMode, spawn);
       // Physical, enterable planets: real fixed-coordinate spheres that scale
       // as the player approaches and swap the voxel world when the player
