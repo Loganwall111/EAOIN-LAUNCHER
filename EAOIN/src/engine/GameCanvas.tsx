@@ -128,6 +128,10 @@ interface GameCanvasProps {
   onLoadingProgress?: (progress: WorldLoadProgress) => void;
   /** Live game-mode switching, so `/gamemode creative` works mid-world. */
   onGameModeChange?: (mode: GameMode) => void;
+  /** Open the character creator from the pause menu. */
+  onOpenCharacter?: () => void;
+  /** Quit to the launcher (instead of exiting the app). */
+  onExitToLauncher?: () => void;
 }
 interface BlockCoordinate { x: number; y: number; z: number; }
 interface MiningSession { target: BlockCoordinate; blockId: BlockID; startedAt: number; durationMs: number; canHarvest: boolean; toolName: string; }
@@ -205,7 +209,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -2641,7 +2645,17 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           <button className="world-action" onClick={resetSavedWorld}>RESET</button>
           <button className="world-action danger" onClick={onExit}>EXIT</button>
         </div>
-        {paused && <div className="pause-panel"><h2>Paused — Regular World + Fly Button</h2><p>Spawn clear 26m. Settlement 58m, Rocket 110m, Portal 72m, Clouds moving stunning far away, Render distance up to 8 chunks, Terrain regular Minecraft-like hills, grounded lakes, no default floating islands, Day/night 20 min, Inventory block logos, Hand punch goes towards tree, Cracking overlay, Fog 100-1000 toggle, T chat /day /time /summon.</p><button onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume</button><button onClick={onToggleSettings}>Settings</button><button onClick={onExit}>Exit to Menu</button></div>}
+        {paused && (
+          <div className="pause-panel">
+            <div className="pause-title">EAOIN</div>
+            <div className="pause-subtitle">Game Paused</div>
+            <button className="pause-btn primary" onClick={() => { setPaused(false); canvasRef.current?.requestPointerLock?.(); }}>Resume Game</button>
+            <button className="pause-btn" onClick={onToggleSettings}>Settings</button>
+            <button className="pause-btn" onClick={onToggleInventory}>Inventory</button>
+            <button className="pause-btn" onClick={() => onOpenCharacter?.()}>Character</button>
+            <button className="pause-btn" onClick={() => onExitToLauncher?.()}>Quit to Launcher</button>
+          </div>
+        )}
       </div>
       {/* On-screen mobile controls — only when "Touch controls" is on. */}
       <TouchControls enabled={settings.touchControls} />

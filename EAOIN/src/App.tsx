@@ -374,7 +374,7 @@ export default function App() {
             coinBalance={coinBalance}
             onOpenCoinStore={() => setAppPhase('marketplace')}
             onOptions={() => setAppPhase('options')}
-            onQuit={() => window.close()}
+            onQuit={() => setAppPhase('launcher')}
             onEditCharacter={() => setAppPhase('creator')}
             onOpenNews={() => setAppPhase('worlds')}
             onOpenGuide={() => setAppPhase('guide')}
@@ -526,6 +526,8 @@ export default function App() {
           onTelemetry={setTelemetry}
           onLoadingProgress={handleWorldLoadingProgress}
           onGameModeChange={setGameMode}
+          onOpenCharacter={() => { exitToMenu(); setAppPhase('creator'); }}
+          onExitToLauncher={() => { exitToMenu(); setAppPhase('launcher'); }}
         />
         <HudFrame
           appearance={appearance}

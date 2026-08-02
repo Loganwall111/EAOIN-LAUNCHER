@@ -503,12 +503,14 @@
 
 .cb-studio-name {
   margin: 12px 0 22px;
-  font: 900 clamp(28px, 7vw, 130px)/1.05 var(--ui-font, sans-serif);
-  letter-spacing: 0.04em;
-  /* Never overflow horizontally — the full word must always fit the screen. */
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  font: 900 clamp(26px, 6.4vw, 120px)/1.05 var(--ui-font, sans-serif);
+  letter-spacing: 0.03em;
+  /* ONEBLOCKAWAY always stays on ONE line — it must never wrap (that dropped
+     the trailing Y onto its own line). Size it to fit the viewport width. */
+  max-width: 96vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
   /* Base is fully visible — never hidden by a fill-mode `from` keyframe. */
   color: #ffffff;
   opacity: 1;
@@ -583,9 +585,17 @@
   padding: clamp(28px, 5vw, 62px) clamp(24px, 6vw, 78px);
   text-align: left;
   border-left: 2px solid var(--cb-gold);
-  background: linear-gradient(90deg, rgba(16, 25, 34, 0.84), rgba(12, 19, 27, 0.34) 70%, transparent);
+  background: linear-gradient(90deg, rgba(16, 25, 34, 0.92), rgba(12, 19, 27, 0.5) 70%, rgba(12, 19, 27, 0.2));
   box-shadow: -20px 0 60px rgba(0, 0, 0, 0.18);
-  animation: cbCreditBeat 1.8s cubic-bezier(0.22, 0.68, 0.28, 1) both;
+  /* Fade-in that LANDs at opacity 1 and STAYS — no fade-out to black. The old
+     cbCreditBeat faded to opacity 0 with fill-mode `both`, so each credit card
+     was invisible for most of its time (the "full black" report). */
+  opacity: 1;
+  animation: cbCreditIn 0.7s cubic-bezier(0.22, 0.68, 0.28, 1) ease-out;
+}
+@keyframes cbCreditIn {
+  from { opacity: 0; transform: translateX(26px); filter: blur(5px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
 }
 
 .cb-credit-card h1 {
@@ -857,12 +867,7 @@
   100% { opacity: 0; transform: translateY(-8px); filter: blur(3px); }
 }
 
-@keyframes cbCreditBeat {
-  0% { opacity: 0; transform: translateX(26px); filter: blur(5px); }
-  22% { opacity: 1; transform: none; filter: blur(0); }
-  76% { opacity: 1; transform: none; filter: blur(0); }
-  100% { opacity: 0; transform: translateX(-18px); filter: blur(3px); }
-}
+
 
 @keyframes cbIntroBeat {
   0% { opacity: 0; transform: scale(0.985); filter: blur(7px); }

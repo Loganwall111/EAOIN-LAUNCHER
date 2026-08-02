@@ -14,6 +14,7 @@ import {
   buildsForChannel, defaultDebugSettings, getBuild,
   LauncherChannel, LauncherDebugSettings, LauncherState, latestOfChannel,
 } from '../launcher/LauncherRuntime';
+import { PatchNotesList } from './PatchNotes';
 
 interface LauncherScreenProps {
   state: LauncherState;
@@ -196,6 +197,11 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
               <div className="launcher-actions">
                 <button className="launcher-play" onClick={() => { onLaunch(); onBoot(); }}>▶ Play</button>
               </div>
+
+              <details className="launcher-patches" open={false}>
+                <summary>📜 Patch Notes</summary>
+                <PatchNotesList compact />
+              </details>
             </>
           ) : (
             <p className="lv-empty">Select a build to play.</p>
