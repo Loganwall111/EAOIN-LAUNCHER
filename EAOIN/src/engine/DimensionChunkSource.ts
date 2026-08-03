@@ -120,9 +120,29 @@ export class DimensionChunkSource {
    * Biome id in the ACTIVE dimension. Overworld delegates to the overworld
    * terrain; a dimension with its own terrain reports the dimension id itself
    * (so species tagged 'humorous', 'void', 'nether', etc. can spawn there).
+   *
+   * The Nether reports its sub-biomes so the deeper fauna is genuinely tied to
+   * where it lives: a column that grows a crimson forest (crimson stem/canopy)
+   * → 'crimson_forest', a warped forest (warped stem/canopy) → 'warped_forest',
+   * otherwise → 'nether' (the wastes). We scan the whole column rather than the
+   * surface height because the nether has a solid bedrock roof on top, so the
+   * "highest solid block" is the roof, not the forest floor.
    */
   getBiomeAt(worldX: number, worldZ: number): string {
     const dim = this.activeDimension;
+    if (dim === 'nether') {
+      const cx = Math.floor(worldX / CHUNK_SIZE);
+      const cz = Math.floor(worldZ / CHUNK_SIZE);
+      const lx = worldX - cx * CHUNK_SIZE;
+      const lz = worldZ - cz * CHUNK_SIZE;
+      const chunk = this.generateChunk(cx, cz);
+      for (let y = CHUNK_HEIGHT - 1; y >= 1; y--) {
+        const b = chunk.getBlock(lx, y, lz);
+        if (b === 55) return 'crimson_forest'; // crimson stem / canopy
+        if (b === 56) return 'warped_forest';  // warped stem / canopy
+      }
+      return 'nether';
+    }
     if (!this.hasOwnTerrain(dim)) {
       const raw = (this.overworld as unknown as { getBiomeAt?: (x: number, z: number) => unknown }).getBiomeAt?.(worldX, worldZ);
       if (typeof raw === 'string') return raw;
