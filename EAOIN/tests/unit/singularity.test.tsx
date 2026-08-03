@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import Singularity, { stageFromDist } from '../../src/ui/Singularity';
+import Singularity, { stageFromDist, viewDistForStage } from '../../src/ui/Singularity';
 
 afterEach(() => {
   cleanup();
@@ -39,15 +39,31 @@ describe('Singularity', () => {
 });
 
 describe('stageFromDist — physical zoom mapping', () => {
-  it('maps far distance to the black hole (0)', () => {
+  it('keeps the black hole visible across a wide approach range (does not vanish early)', () => {
+    expect(stageFromDist(40)).toBe(0);
     expect(stageFromDist(11)).toBe(0);
-    expect(stageFromDist(8)).toBe(0);
+    expect(stageFromDist(1.5)).toBe(0);
   });
-  it('maps progressively closer zoom to deeper journey worlds', () => {
-    expect(stageFromDist(7)).toBe(1);  // neural
-    expect(stageFromDist(5)).toBe(2);  // asteroids
-    expect(stageFromDist(4)).toBe(3);  // planet
-    expect(stageFromDist(3)).toBe(4);  // house
-    expect(stageFromDist(2.2)).toBe(5); // monitor
+  it('enters the void interior only when deep inside, then the next worlds open', () => {
+    expect(stageFromDist(1.1)).toBe(6);  // void interior (inside the hole)
+    expect(stageFromDist(0.8)).toBe(1);  // neural (hole opened)
+    expect(stageFromDist(0.65)).toBe(2); // asteroids
+    expect(stageFromDist(0.5)).toBe(3);  // planet
+    expect(stageFromDist(0.4)).toBe(4);  // house
+    expect(stageFromDist(0.2)).toBe(5);  // monitor (deepest)
+  });
+});
+
+describe('viewDistForStage — journey worlds are framed, not too zoomed', () => {
+  it('frames the planet far back so it is visible', () => {
+    expect(viewDistForStage(3)).toBeGreaterThanOrEqual(7);
+  });
+  it('uses a tiny radius for the void interior (inside the horizon)', () => {
+    expect(viewDistForStage(6)).toBeLessThan(1);
+  });
+  it('gives each world a distinct comfortable distance', () => {
+    const planet = viewDistForStage(3);
+    const house = viewDistForStage(4);
+    expect(planet).toBeGreaterThan(house);
   });
 });

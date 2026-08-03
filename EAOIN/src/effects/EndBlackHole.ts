@@ -13,7 +13,7 @@
  *     void you can explore freely. There is no loading screen — it is instant.
  */
 import {
-  Color3, DynamicTexture, Mesh, MeshBuilder, Scene, StandardMaterial, Vector3,
+  Color3, Color4, DynamicTexture, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMaterial, Texture, Vector3,
 } from '@babylonjs/core';
 
 export class EndBlackHole {
@@ -21,6 +21,8 @@ export class EndBlackHole {
   private lens: Mesh | null = null;
   private disc: Mesh | null = null;
   private voidSphere: Mesh | null = null;
+  private stars: ParticleSystem | null = null;
+  private warpRing: Mesh | null = null;
   private active = false;
   /** Distance at which the black hole starts pulling the player (the Edge). */
   private pullRadius = 90;
@@ -36,6 +38,11 @@ export class EndBlackHole {
       this.lens?.setEnabled(active);
       this.disc?.setEnabled(active);
       this.voidSphere?.setEnabled(active);
+      this.warpRing?.setEnabled(active);
+      if (this.stars) {
+        if (active && !this.stars.isStarted()) this.stars.start();
+        if (!active && this.stars.isStarted()) this.stars.stop();
+      }
     }
   }
 
@@ -113,6 +120,53 @@ export class EndBlackHole {
     this.voidSphere.position.copyFrom(position);
     this.voidSphere.isPickable = false;
     this.voidSphere.isVisible = false; // shown only after entering (creative)
+
+    // Starfield swirling around the hole — a cloud of tiny glowing motes that
+    // bend toward the horizon, giving the black hole the same star-warp feel.
+    this.stars = new ParticleSystem('end_black_hole_stars', 400, this.scene);
+    this.stars.particleTexture = this.makeDotTexture();
+    this.stars.emitter = position.clone();
+    this.stars.minSize = 0.6; this.stars.maxSize = 2.2;
+    this.stars.minLifeTime = 6; this.stars.maxLifeTime = 12;
+    this.stars.emitRate = 60;
+    this.stars.direction1 = new Vector3(-1, -1, -1);
+    this.stars.direction2 = new Vector3(1, 1, 1);
+    this.stars.color1 = new Color4(1, 0.95, 0.8, 1);
+    this.stars.color2 = new Color4(0.6, 0.85, 1, 1);
+    this.stars.colorDead = new Color4(0.4, 0.2, 0.1, 1);
+    this.stars.gravity = new Vector3(0, 0, 0);
+    this.stars.minEmitPower = 2; this.stars.maxEmitPower = 14;
+    this.stars.updateSpeed = 0.01;
+
+    // Warp ring — a faint, large distortion halo so the hole visibly warps
+    // the space around it even before the player gets close.
+    this.warpRing = MeshBuilder.CreateTorus('end_black_hole_warp', { diameter: this.horizonRadius * 3.4, thickness: 0.6, tessellation: 64 }, this.scene);
+    const warpMat = new StandardMaterial('end_black_hole_warp_mat', this.scene);
+    warpMat.emissiveColor = new Color3(0.35, 0.55, 0.9);
+    warpMat.diffuseColor = new Color3(0.1, 0.15, 0.3);
+    warpMat.alpha = 0.35;
+    warpMat.disableLighting = true;
+    this.warpRing.material = warpMat;
+    this.warpRing.position.copyFrom(position);
+    this.warpRing.rotation.x = Math.PI / 2;
+    this.warpRing.isPickable = false;
+  }
+
+  private makeDotTexture(): Texture | null {
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = 16;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      const grd = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
+      grd.addColorStop(0, 'rgba(255,255,255,1)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, 16, 16);
+      return Texture.CreateFromBase64String(c.toDataURL(), 'bhStar', this.scene, true, false);
+    } catch {
+      return null;
+    }
   }
 
   /** Spin the lens/disc + pulse the ring. */
@@ -120,11 +174,13 @@ export class EndBlackHole {
     if (!this.active) return;
     if (this.lens) this.lens.rotation.z += deltaSeconds * 0.6;
     if (this.disc) this.disc.rotation.z += deltaSeconds * 0.2;
+    if (this.warpRing) this.warpRing.rotation.z -= deltaSeconds * 0.35;
     if (this.lens) {
       // gentle brightness pulse on the photon ring
       const pulse = 0.9 + 0.1 * Math.sin(time * 0.002);
       (this.lens.material as StandardMaterial).emissiveColor = new Color3(1.0 * pulse, 0.75 * pulse, 0.45 * pulse);
     }
+    if (this.stars) this.stars.start();
   }
 
   /**
@@ -166,7 +222,9 @@ export class EndBlackHole {
 
   dispose(): void {
     this.core?.dispose(); this.lens?.dispose(); this.disc?.dispose(); this.voidSphere?.dispose();
-    this.core = this.lens = this.disc = this.voidSphere = null;
+    this.warpRing?.dispose(); this.stars?.dispose();
+    this.core = this.lens = this.disc = this.voidSphere = this.warpRing = null;
+    this.stars = null;
   }
 }
 

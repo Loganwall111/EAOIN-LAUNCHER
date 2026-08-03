@@ -162,6 +162,27 @@ const FRAG = `
     return mapMonitor(p, mat);
   }
 
+  // Void interior: you are inside the black hole. An endless black void
+  // surrounds you; a faint glow and the accretion ring are visible behind you
+  // (look back out), and a "hole" of light ahead is the way through.
+  vec3 renderVoid(vec3 ro, vec3 rd){
+    vec3 col = vec3(0.0);
+    // Deep near-black gradient.
+    col = vec3(0.004, 0.002, 0.008);
+    // The way back out — a faint accretion-ring glow behind the camera.
+    float back = clamp(dot(rd, vec3(0.0,0.0,1.0)), 0.0, 1.0);
+    col += vec3(1.0, 0.72, 0.38) * back * back * 0.18;
+    // The "hole" ahead — a glowing ring in the forward direction.
+    float fwd = clamp(dot(rd, vec3(0.0,0.0,-1.0)), 0.0, 1.0);
+    vec2 ringP = rd.xy / max(rd.z, 0.001);
+    float ring = smoothstep(0.12, 0.02, abs(length(ringP) - 0.35));
+    col += vec3(0.6, 0.9, 1.0) * fwd * ring * 0.9;
+    // Faint dust / motes drifting in the void.
+    float motes = noise(rd.xy * 14.0 + u_time * 0.1);
+    col += vec3(0.3,0.5,0.7) * motes * 0.05;
+    return col;
+  }
+
   vec3 calcNormal(vec3 p){
     int m;
     vec2 e = vec2(0.001, 0.0);
@@ -253,6 +274,13 @@ const FRAG = `
     float fov = 1.35; // ~1/tan(fov/2); bigger = wider
     vec3 dir = normalize(ndc.x*right + ndc.y*up + fwd*fov);
 
+    // ---- Void interior (stage 6): inside the black hole ----
+    if (u_stage == 6) {
+      vec3 col = renderVoid(u_camPos, dir);
+      col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
+      gl_FragColor = vec4(col, 1.0);
+      return;
+    }
     // ---- Journey worlds: render a distinct scene per stage ----
     if (u_stage >= 1) {
       vec3 col = renderWorld(u_camPos, dir);
@@ -351,12 +379,30 @@ interface Camera {
  *   - zoom out / look back → reverse, seeing everything again.
  */
 export function stageFromDist(dist: number): number {
-  if (dist >= 8) return 0;        // black hole
-  if (dist >= 6.2) return 1;      // neural network
-  if (dist >= 4.6) return 2;      // asteroid field
-  if (dist >= 3.2) return 3;      // Minecraft planet
-  if (dist >= 2.6) return 4;      // house
+  if (dist >= 1.4) return 0;      // black hole — approachable, never vanishes
+  if (dist >= 0.9) return 6;      // void interior — inside the hole, look back out
+  if (dist >= 0.75) return 1;     // neural network (hole opened)
+  if (dist >= 0.6) return 2;      // asteroid field
+  if (dist >= 0.45) return 3;     // Minecraft planet
+  if (dist >= 0.32) return 4;     // house
   return 5;                        // monitor (deepest)
+}
+
+/**
+ * Camera orbit radius used to FRAME each journey world. The black-hole zoom
+ * distance (`dist`) only decides WHICH stage you're on; each world then frames
+ * itself at a comfortable viewing distance so it isn't too zoomed in.
+ */
+export function viewDistForStage(stage: number): number {
+  switch (stage) {
+    case 1: return 9;   // neural lattice
+    case 2: return 13;  // asteroid field
+    case 3: return 8;   // Minecraft planet (planet is big — pull back)
+    case 4: return 6;   // house
+    case 5: return 5;   // monitor
+    case 6: return 0.4; // void interior — inside the horizon
+    default: return 4;  // black hole external
+  }
 }
 
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
@@ -476,13 +522,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const c = camRef.current;
-      c.dist = Math.max(2.2, Math.min(40, c.dist + e.deltaY * 0.02));
+      c.dist = Math.max(0.2, Math.min(40, c.dist + e.deltaY * 0.02));
       applyZoom();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const c = camRef.current;
-      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(2.2, c.dist - 0.6);
-      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.6);
+      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(0.2, c.dist - 0.06);
+      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.06);
       if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
       if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
       applyZoom();
@@ -499,12 +545,14 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       applyZoom(); // keep the stage in sync with camera distance every frame
       const t = (performance.now() - start) / 1000;
       const c = camRef.current;
-      // Orbit camera: yaw around Y, pitch up/down, radius = dist.
+      // Orbit camera: yaw around Y, pitch up/down. The framing radius uses the
+      // current stage's view distance so journey worlds aren't too zoomed in.
+      const viewDist = viewDistForStage(stageRef.current);
       const cp = Math.cos(c.pitch);
       const eye = new Float32Array([
-        Math.sin(c.yaw) * cp * c.dist,
-        Math.sin(c.pitch) * c.dist,
-        Math.cos(c.yaw) * cp * c.dist,
+        Math.sin(c.yaw) * cp * viewDist,
+        Math.sin(c.pitch) * viewDist,
+        Math.cos(c.yaw) * cp * viewDist,
       ]);
       gl.useProgram(prog);
       gl.uniform2f(U.res, gl.canvas.width, gl.canvas.height);
@@ -544,7 +592,9 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     setJourney(stage >= 1);
   };
 
-  const currentStage = JOURNEY_STAGES[Math.max(0, Math.min(stageIdx, JOURNEY_STAGES.length - 1))];
+  const currentStage = stageIdx === 6
+    ? { id: 'void', title: 'The Void', desc: 'Endless blackness. Look back to see the ring you fell through — the light ahead is the way deeper.' }
+    : JOURNEY_STAGES[Math.max(0, Math.min(stageIdx, JOURNEY_STAGES.length - 1))];
 
   const submitPassword = () => {
     const answer = password.trim().toLowerCase();
