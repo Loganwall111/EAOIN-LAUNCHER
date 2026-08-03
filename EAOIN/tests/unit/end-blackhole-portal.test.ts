@@ -77,3 +77,31 @@ describe('EndBlackHole lensing post-process', () => {
     engine.dispose();
   });
 });
+
+describe('EndBlackHole time distortion', () => {
+  it('slows time and red-shifts light as the player approaches', () => {
+    const { engine, scene, hole } = makeHole();
+    // Far away: no distortion.
+    const far = hole.timeDistortion(new Vector3(500, 120, 0));
+    expect(far.timeScale).toBe(1);
+    expect(far.redshift).toBe(0);
+    // Near the axis: strong distortion.
+    const near = hole.timeDistortion(new Vector3(5, 120, 0));
+    expect(near.timeScale).toBeLessThan(1);
+    expect(near.redshift).toBeGreaterThan(0);
+    hole.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it('is strongest at the event horizon and zero far away', () => {
+    const { engine, scene, hole } = makeHole();
+    const horizon = hole.timeDistortion(new Vector3(1, 120, 0));
+    const far = hole.timeDistortion(new Vector3(500, 120, 0));
+    expect(horizon.redshift).toBeGreaterThan(far.redshift);
+    expect(horizon.timeScale).toBeLessThan(far.timeScale);
+    hole.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});

@@ -292,6 +292,23 @@ void main(void){
     return Math.hypot(player.x, player.z) < this.horizonRadius;
   }
 
+  /**
+   * Event-horizon time distortion — gravity dilates time and red-shifts light
+   * as the player approaches the hole. Returns a time-scale multiplier (1 = no
+   * distortion) and a 0..1 redshift amount, based on the player's distance.
+   */
+  timeDistortion(player: Vector3): { timeScale: number; redshift: number } {
+    if (!this.active || !this.core) return { timeScale: 1, redshift: 0 };
+    const dist = Math.hypot(player.x, player.z);
+    // 0 (far) .. 1 (at the horizon). Pull radius is the outer edge of effect.
+    const t = Math.max(0, Math.min(1, 1 - dist / this.pullRadius));
+    // Time slows asymptotically near the horizon.
+    const timeScale = 1 - t * t * 0.6;
+    // Light red-shifts as gravity deepens.
+    const redshift = t * t * 0.9;
+    return { timeScale, redshift };
+  }
+
   /** Centre world position of the hole (used to spawn the void in creative). */
   centre(): Vector3 {
     return this.core ? this.core.position.clone() : Vector3.Zero();

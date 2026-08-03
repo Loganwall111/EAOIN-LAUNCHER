@@ -279,6 +279,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const aiNpcRef = useRef<((name: string, x: number, y: number, z: number, colours?: { shirt: string; hair: string; skin: string; pants: string }) => void) | null>(null);
   /** True once the player has entered the End black hole this session. */
   const enteredBlackHoleRef = useRef(false);
+  /** Event-horizon time-scale multiplier (1 = normal) and redshift target. */
+  const timeScaleRef = useRef(1);
+  const redshiftTarget = useRef(0);
+  const redshiftLastRef = useRef(0);
   /** Latest player world position, kept fresh each frame for the chat/AI. */
   const playerPosRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   /** Live boss state, drives the on-screen boss health bar. */
@@ -290,6 +294,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const [worldTime, setWorldTime] = useState<WorldTimeState>({ timeOfDay: 12, frozen: false });
   const [renderStats, setRenderStats] = useState<RuntimeRenderStats>({ loadedChunks: 0, meshCount: 0, triangleCount: 0, rebuildCount: 0, naiveTriangleCount: 0, meshingSavings: 0, fps: 0, streamCenter: '0,0', creatures: { count: 0, cap: 0, spawned: 0, despawned: 0, species: 0 }, drops: 0, renderer: INITIAL_RENDERER_INFO, frameTimeP95: 0, renderScale: 1, effectTier: 'medium', adaptiveReason: '' });
   const [flightEnabled, setFlightEnabled] = useState(false);
+  /** Event-horizon redshift overlay strength 0..1 (black-hole time distortion). */
+  const [blackHoleRedshift, setBlackHoleRedshift] = useState(0);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   /** Virtual joystick value from the touch controls overlay (-1..1 each axis). */
   const touchStickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -1299,7 +1305,25 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
 
         const rawDeltaMs = engine.getDeltaTime();
-        const deltaSeconds = Math.min(rawDeltaMs / 1000, 0.05);
+        let deltaSeconds = Math.min(rawDeltaMs / 1000, 0.05);
+
+        // --- event-horizon time distortion -----------------------------------
+        // Near a black hole, gravity dilates time (slow-motion) and red-shifts
+        // light. We scale the frame's deltaSeconds and apply a redshift overlay.
+        {
+          const dt = endBlackHole.timeDistortion(camera.position);
+          deltaSeconds *= dt.timeScale;
+          timeScaleRef.current = dt.timeScale;
+          // Smooth the redshift overlay toward its target.
+          redshiftTarget.current = dt.redshift;
+          if (performance.now() - redshiftLastRef.current > 120) {
+            redshiftLastRef.current = performance.now();
+            setBlackHoleRedshift((prev) => {
+              const next = prev + (dt.redshift - prev) * 0.3;
+              return Math.abs(next - dt.redshift) < 0.01 ? dt.redshift : next;
+            });
+          }
+        }
 
         // --- adaptive performance tick --------------------------------------
         // `chunkWorkThisFrame` is set below when chunks were meshed, so those
@@ -2894,6 +2918,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         {miningProgress > 0 && <div className="mining-progress"><div className="mining-label">{miningLabel} — cracking {Math.round(miningProgress * 10)}/10</div><div className="mining-bar"><span style={{ width: `${Math.round(miningProgress * 100)}%` }} /></div></div>}
         {commandOpen && <div className="command-console"><input id="eaoin-command-input" name="eaoinCommand" value={commandText} autoFocus onChange={e => setCommandText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitCommand(); if (e.key === 'Escape') setCommandOpen(false); }} /><button onClick={submitCommand}>Run</button></div>}
         {chatOpen && <div className="chat-panel"><div className="chat-log">{chatMessages.slice(-10).map((m, i) => <div key={i} className={`chat-line ${m.system ? 'system' : ''}`}>{m.text}</div>)}</div><div className="chat-input-row"><input id="eaoin-chat-input" name="eaoinChat" className="chat-input" value={chatText} autoFocus placeholder="Chat or /day /time 12 /summon sheep" onChange={e => setChatText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitChat(); if (e.key === 'Escape') setChatOpen(false); }} /><button className="chat-send" onClick={submitChat}>Send</button></div></div>}
+        {/* Event-horizon redshift overlay — gravity red-shifts light near a black hole */}
+        {blackHoleRedshift > 0.02 && (
+          <div className="blackhole-redshift" style={{ opacity: blackHoleRedshift }} />
+        )}
         <div className="world-action-rail">
           <button className={`world-action fly ${flightEnabled ? 'active' : ''}`} onClick={() => window.dispatchEvent(new Event('eaoin-toggle-flight'))}>FLY [F] {flightEnabled ? 'ON' : 'OFF'}</button>
           <button className="world-action" onClick={resetSavedWorld}>RESET</button>
