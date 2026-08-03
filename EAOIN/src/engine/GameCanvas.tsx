@@ -57,6 +57,7 @@ import { ScreenSystem } from '../effects/ScreenSystem';
 import { ColoredLighting } from '../effects/ColoredLighting';
 import { WorldsEdgeRuntime } from '../effects/WorldsEdgeRuntime';
 import { SevereWeather } from '../effects/SevereWeather';
+import { EndBlackHole } from '../effects/EndBlackHole';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -571,6 +572,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const weatherEffects = new WeatherEffects(scene, lighting.sun, lighting.sky);
       // 2.0 — severe weather: tornadoes, blizzards, sandstorms, meteor showers.
       const severeWeather = new SevereWeather(scene);
+      // 2.0 — End black-hole sky with gravitational lensing (pulls only players).
+      const endBlackHole = new EndBlackHole(scene);
       const moonEvents = new MoonEvents();
       const specialEvents = new SpecialEvents();
       const configureTerrainShadow = (mesh: Mesh): void => {
@@ -1687,6 +1690,19 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           tempRiftPull.set(bhPull.x * deltaSeconds, bhPull.y * deltaSeconds, bhPull.z * deltaSeconds);
           camera.position.addInPlace(tempRiftPull);
         }
+        // 2.0 — End black-hole sky: gravitational-lensing hole above the dragon
+        // island that pulls the player toward the central end portal (never
+        // destroys blocks). Active only in The End.
+        {
+          const inEnd = chunkSource.getDimension() === 'end';
+          endBlackHole.setActive(inEnd);
+          if (inEnd) {
+            endBlackHole.ensure(camera.position.clone().add(new Vector3(0, 120, 0)));
+            endBlackHole.tick(deltaSeconds);
+            endBlackHole.pull(camera.position, tempRiftPull);
+            camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 2));
+          }
+        }
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
         const settlementMessage = settlementRuntime.consumeDiscoveryMessage(); if (settlementMessage) showActionMessage(settlementMessage);
@@ -2701,7 +2717,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); severeWeather.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); severeWeather.dispose(); endBlackHole.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 
