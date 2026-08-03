@@ -3416,3 +3416,13 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-ticket-head { font-weight: 800; letter-spacing: 2px; font-size: 13px; }
 .singularity-ticket-code { font-size: 30px; letter-spacing: 6px; color: #fff; margin: 6px 0; text-shadow: 0 0 14px rgba(255,209,102,0.6); }
 .singularity-ticket-foot { font-size: 10px; color: rgba(255,209,102,0.8); }
+
+/* --- Singularity control sliders (ray-marched simulator) --- */
+.singularity-controls {
+  position: absolute; right: 20px; top: 80px; z-index: 6;
+  display: grid; gap: 10px; width: min(240px, 80vw); padding: 12px 14px;
+  border-radius: 12px; background: rgba(8,10,20,0.88); border: 1px solid rgba(168,121,255,0.35);
+  color: #e6e6ff;
+}
+.singularity-slider { display: grid; gap: 4px; font-size: 12px; }
+.singularity-slider input[type="range"] { width: 100%; accent-color: #a879ff; }

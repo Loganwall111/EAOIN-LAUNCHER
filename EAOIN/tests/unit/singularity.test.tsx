@@ -2,8 +2,8 @@
 /**
  * Singularity — the shader-based black hole tab on the main menu.
  *
- * It renders a full-screen canvas and a "Dive In" button that starts the
- * zoom-through journey, revealing the hidden ARG note. This pins the UI
+ * It renders a full-screen canvas, a "Fall Through" button, and camera
+ * / disk / gravity sliders. WebGL itself is browser-only.
  * structure and the journey reveal flow (WebGL itself is browser-only).
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
@@ -19,10 +19,12 @@ afterEach(() => {
 const noop = () => {};
 
 describe('Singularity', () => {
-  it('renders the black hole canvas and a Dive In button', () => {
+  it('renders the black hole canvas, Fall Through button, and sliders', () => {
     render(<Singularity onBack={noop} />);
     expect(screen.getByText('🕳 The Black Hole')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Dive In/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Fall Through/ })).toBeTruthy();
+    expect(screen.getByText(/Disk thickness/)).toBeTruthy();
+    expect(screen.getByText(/Gravity strength/)).toBeTruthy();
     expect(document.querySelector('.singularity-canvas')).toBeTruthy();
   });
 
@@ -33,10 +35,10 @@ describe('Singularity', () => {
     expect(onBack).toHaveBeenCalled();
   });
 
-  it('dives in and advances through the journey stages', () => {
+  it('falls through and advances through the journey stages', () => {
     vi.useFakeTimers();
     render(<Singularity onBack={noop} />);
-    fireEvent.click(screen.getByRole('button', { name: /Dive In/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fall Through/ }));
     expect(screen.getByText('Neural Network')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
     expect(screen.getByText('Asteroid Field')).toBeTruthy();
@@ -47,7 +49,7 @@ describe('Singularity', () => {
   it('unlocks the secret ending with the correct password', () => {
     vi.useFakeTimers();
     render(<Singularity onBack={noop} />);
-    fireEvent.click(screen.getByRole('button', { name: /Dive In/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Fall Through/ }));
     // advance to the monitor stage
     fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
     fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));

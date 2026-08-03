@@ -1,16 +1,19 @@
 /**
- * Singularity — a shader-based black hole you can explore on the main menu.
+ * Singularity — a REAL, ray-marched black hole simulator (2.0 Update Part 2).
  *
- * 2.0 Update Part 2's headline feature. This is NOT a game mode — it's a tab
- * on the main menu called Singularity. It renders a real black hole with:
- *   - A gravitational-lensing shader (light bends around the event horizon).
- *   - A swirling accretion disc + vortex.
- *   - Mouse-move parallax so you can pan the camera around the hole.
- *   - A zoom-in "journey" that flies you through the hole toward a hidden
- *     neural-network / world with a note (ARG tie-in).
+ * Unlike a flat 2D shader, this uses a WebGL fragment shader that ray-marches
+ * light through the Schwarzschild metric with ADAPTIVE step sizes, so rays are
+ * bent (gravitational lensing) up to 180° around the event horizon — producing
+ * the "Interstellar" look where the accretion disk wraps over and under the
+ * black sphere.
  *
- * Implemented with a full-screen WebGL fragment shader (no Babylon entity) so
- * it reads as a genuine lensing effect, not a model with a black sprite.
+ * Interaction:
+ *   - Mouse DRAG to pan / rotate / orbit the camera in a real 3D viewport.
+ *   - Scroll wheel + W/S + arrow keys to zoom in/out of the hole.
+ *   - Two sliders: accretion-disk thickness and gravity strength.
+ *   - Zoom all the way through the hole to begin the ARG journey into the
+ *     hidden world (neural network → Minecraft planet → the house → the
+ *     monitor → password → secret ending).
  */
 import { useEffect, useRef, useState } from 'react';
 import { ARG_FRAGMENTS, getARG } from '../arg/ARGStoryline';
@@ -31,10 +34,19 @@ const FRAG = `
   varying vec2 v_uv;
   uniform vec2 u_res;
   uniform float u_time;
-  uniform vec2 u_mouse;
-  uniform float u_zoom;
+  uniform vec3 u_camPos;
+  uniform vec3 u_camTarget;
+  uniform float u_diskThickness;
+  uniform float u_gravity;   // 1.0 = natural Schwarzschild strength
+  uniform float u_aspect;
 
-  // Simplex-like noise for starfield + vortex.
+  const float PI = 3.14159265359;
+  const float RS = 1.0;            // Schwarzschild radius (unit)
+  const float DISK_INNER = 2.6;    // inner edge of the disk (in RS)
+  const float DISK_OUTER = 6.0;    // outer edge of the disk
+  const int MAX_STEPS = 260;
+  const float MAX_DIST = 90.0;
+
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
   float noise(vec2 p){
     vec2 i=floor(p), f=fract(p);
@@ -43,50 +55,88 @@ const FRAG = `
                mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
   }
 
+  // A starfield sampled in the ray's final (escaped) direction.
+  vec3 starfield(vec3 dir){
+    vec2 p = vec2(dir.z, dir.x) * 60.0 + dir.y * 30.0;
+    float star = step(0.986, hash(floor(p)));
+    vec3 col = vec3(0.7,0.85,1.0) * star * 0.9;
+    // faint nebula gradient
+    float neb = noise(dir.xy * 3.0 + dir.z);
+    col += vec3(0.25,0.06,0.4) * neb * 0.25;
+    col += vec3(0.02,0.04,0.09);
+    return col;
+  }
+
   void main(){
     vec2 uv = v_uv;
-    vec2 p = (uv - 0.5) * vec2(u_res.x/u_res.y, 1.0);
+    vec2 ndc = (uv - 0.5) * vec2(u_aspect, 1.0);
 
-    // Black hole centre, nudged by mouse parallax and zoom.
-    vec2 centre = vec2(0.0, 0.0) + u_mouse * 0.15;
-    vec2 toCentre = p - centre;
-    float dist = length(toCentre);
+    // Build a right-handed camera basis from eye→target.
+    vec3 fwd = normalize(u_camTarget - u_camPos);
+    vec3 right = normalize(cross(fwd, vec3(0.0,1.0,0.0)));
+    vec3 up = cross(right, fwd);
+    float fov = 1.35; // ~1/tan(fov/2); bigger = wider
+    vec3 dir = normalize(ndc.x*right + ndc.y*up + fwd*fov);
 
-    // Event horizon radius (shrinks slightly as we zoom "into" the hole).
-    float horizon = 0.16 - u_zoom * 0.08;
+    vec3 pos = u_camPos;
+    vec3 ray = dir;
+    vec3 col = vec3(0.0);
+    bool escaped = false;
+    float t = 0.0;
 
-    // Gravitational lensing: bend UVs toward the hole based on 1/dist.
-    vec2 dir = toCentre / max(dist, 0.001);
-    float lens = 0.32 / (0.02 + dist*dist);
-    vec2 warped = uv + dir * lens * (1.0 - u_zoom*0.5);
+    // ---- Ray-march with gravitational lensing (Schwarzschild metric) ----
+    for (int i = 0; i < MAX_STEPS; i++) {
+      float r = length(pos);
+      float h = RS * u_gravity; // scaled horizon
 
-    // Accretion disc: swirling bands around the hole.
-    float angle = atan(warped.y - centre.y, warped.x - centre.x);
-    float swirl = noise(vec2(angle*6.0 + u_time*0.8, dist*14.0));
-    float disc = smoothstep(horizon*1.3, horizon*2.6, dist) *
-                 (1.0 - smoothstep(horizon*2.6, horizon*4.2, dist));
-    vec3 discColor = vec3(1.0, 0.35, 0.15) * (0.5 + 0.5*swirl) * disc;
+      // ADAPTIVE step: tiny near the horizon, large far away.
+      float stepLen = clamp((r - h) * 0.4, 0.012, 1.4);
+      if (r < h * 1.25) stepLen = 0.01;
 
-    // Photon ring glow at the horizon.
-    float ring = exp(-abs(dist - horizon) * 55.0);
-    vec3 ringColor = vec3(1.0, 0.9, 0.7) * ring * 1.4;
+      // Gravitational deflection: bend the ray toward the hole ~ 1/r^2.
+      // (Simplified Schwarzschild: the stronger the field, the more the bend.)
+      vec3 gAcc = -h * 0.8 / max(r*r, 1e-4) * (pos / max(r, 1e-4));
+      ray = normalize(ray + gAcc * stepLen * 0.5);
 
-    // Starfield (warped away behind the hole).
-    vec2 st = vec2(warped.x * 90.0 + u_time*2.0, warped.y*90.0);
-    float star = step(0.985, hash(floor(st))) * (1.0 - smoothstep(0.0, horizon*1.2, dist));
-    vec3 starColor = vec3(0.8,0.95,1.0) * star;
+      // Accretion disk: a thin disc in the y=0 plane between inner/outer.
+      // We accumulate its glow when the ray crosses the plane, which (because
+      // of the bending above) also lights the part that wraps OVER and UNDER
+      // the hole — the Interstellar look.
+      float diskRad = length(pos.xz);
+      float y = pos.y;
+      if (abs(y) < u_diskThickness && diskRad > DISK_INNER && diskRad < DISK_OUTER) {
+        float innerT = 1.0 - (diskRad - DISK_INNER)/(DISK_OUTER - DISK_INNER);
+        float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*0.6);
+        float edge = smoothstep(0.0, 1.0, innerT);
+        // hotter/brighter toward the inner edge
+        vec3 diskCol = vec3(1.0,0.62,0.28)*edge + vec3(0.6,0.2,0.05);
+        float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
+        col += diskCol * swirl * thickFade * (0.5 + innerT*0.7) * 0.6;
+      }
 
-    // Deep-space background (purple/teal gradient like the End sky).
-    vec3 bg = mix(vec3(0.02,0.03,0.08), vec3(0.12,0.02,0.18), uv.y);
-    bg += vec3(0.2,0.05,0.35) * smoothstep(0.8,0.3,dist);
+      // Advance.
+      pos += ray * stepLen;
+      t += stepLen;
 
-    vec3 col = bg + discColor + ringColor + starColor;
+      // Captured by the event horizon → pure black (no light escapes).
+      if (r < h) {
+        // Photon-ring glow just outside the horizon.
+        col += vec3(1.0,0.95,0.85) * smoothstep(h, h*1.5, r) * 0.25;
+        col *= 0.0;
+        escaped = false;
+        break;
+      }
+      if (t > MAX_DIST) { escaped = true; break; }
+    }
 
-    // The black hole interior is pure black (event horizon swallows light).
-    if (dist < horizon) col = vec3(0.0);
+    if (escaped || t >= MAX_DIST) {
+      // Light escaped the hole: paint the background starfield along the
+      // final ray direction (which may have been bent around the hole).
+      col += starfield(ray);
+    }
 
-    // Vignette.
-    col *= 0.6 + 0.4 * smoothstep(1.2, 0.2, length(p));
+    // Subtle vignette for cinematic feel.
+    col *= 0.55 + 0.45 * smoothstep(1.3, 0.15, length(ndc));
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -111,7 +161,11 @@ const JOURNEY_STAGES = [
   { id: 'monitor', title: 'The Monitor', desc: 'A password prompt glows. Enter the key to continue.', zoom: 0.96 },
 ] as const;
 
-
+interface Camera {
+  yaw: number;
+  pitch: number;
+  dist: number;
+}
 
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -122,6 +176,14 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const [secretEnding, setSecretEnding] = useState(false);
   const [fragments, setFragments] = useState(() => getARG().getState().collected);
   const [argMsg, setArgMsg] = useState<string | null>(null);
+  const [diskThickness, setDiskThickness] = useState(0.35);
+  const [gravity, setGravity] = useState(1.0);
+  const diskThicknessRef = useRef(diskThickness);
+  const gravityRef = useRef(gravity);
+  diskThicknessRef.current = diskThickness;
+  gravityRef.current = gravity;
+
+  const camRef = useRef<Camera>({ yaw: 0.6, pitch: 0.32, dist: 11 });
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -171,10 +233,15 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
-    const res = gl.getUniformLocation(prog, 'u_res');
-    const time = gl.getUniformLocation(prog, 'u_time');
-    const mouse = gl.getUniformLocation(prog, 'u_mouse');
-    const zoom = gl.getUniformLocation(prog, 'u_zoom');
+    const U = {
+      res: gl.getUniformLocation(prog, 'u_res'),
+      time: gl.getUniformLocation(prog, 'u_time'),
+      camPos: gl.getUniformLocation(prog, 'u_camPos'),
+      camTarget: gl.getUniformLocation(prog, 'u_camTarget'),
+      diskThickness: gl.getUniformLocation(prog, 'u_diskThickness'),
+      gravity: gl.getUniformLocation(prog, 'u_gravity'),
+      aspect: gl.getUniformLocation(prog, 'u_aspect'),
+    };
 
     const resize = () => {
       gl.canvas.width = canvas.clientWidth;
@@ -184,92 +251,132 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     resize();
     window.addEventListener('resize', resize);
 
-    const mouseTarget = { x: 0, y: 0 };
-    const onMouse = (e: MouseEvent) => {
-      mouseTarget.x = (e.clientX / window.innerWidth - 0.5) * 2;
-      mouseTarget.y = (e.clientY / window.innerHeight - 0.5) * 2;
+    // --- 3D camera: mouse drag orbits, wheel + keys zoom ---
+    const drag = { down: false, lastX: 0, lastY: 0 };
+    const onPointerDown = (e: PointerEvent) => { drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY; };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag.down) return;
+      const dx = e.clientX - drag.lastX;
+      const dy = e.clientY - drag.lastY;
+      drag.lastX = e.clientX; drag.lastY = e.clientY;
+      const c = camRef.current;
+      c.yaw -= dx * 0.006;
+      c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
     };
-    window.addEventListener('mousemove', onMouse);
-
-    const zoomTarget = { v: 0 };
-    let zoomNow = 0;
+    const onPointerUp = () => { drag.down = false; };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const c = camRef.current;
+      c.dist = Math.max(2.2, Math.min(40, c.dist + e.deltaY * 0.02));
+      // Zooming far in = entering the hole → start the journey.
+      if (c.dist <= 2.6 && !journeyRef.current) startJourneyRef.current();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const c = camRef.current;
+      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(2.2, c.dist - 0.6);
+      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.6);
+      if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
+      if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
+      if (c.dist <= 2.6 && !journeyRef.current) startJourneyRef.current();
+    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKeyDown);
 
     let raf = 0;
     const start = performance.now();
     const render = () => {
       const t = (performance.now() - start) / 1000;
+      const c = camRef.current;
+      // Orbit camera: yaw around Y, pitch up/down, radius = dist.
+      const cp = Math.cos(c.pitch);
+      const eye = new Float32Array([
+        Math.sin(c.yaw) * cp * c.dist,
+        Math.sin(c.pitch) * c.dist,
+        Math.cos(c.yaw) * cp * c.dist,
+      ]);
       gl.useProgram(prog);
-      gl.uniform2f(res, gl.canvas.width, gl.canvas.height);
-      gl.uniform1f(time, t);
-      gl.uniform2f(mouse, mouseTarget.x, mouseTarget.y);
-      // smooth zoom
-      zoomNow += (zoomTarget.v - zoomNow) * 0.05;
-      gl.uniform1f(zoom, zoomNow);
+      gl.uniform2f(U.res, gl.canvas.width, gl.canvas.height);
+      gl.uniform1f(U.time, t);
+      gl.uniform3f(U.camPos, eye[0], eye[1], eye[2]);
+      gl.uniform3f(U.camTarget, 0, 0, 0);
+      gl.uniform1f(U.diskThickness, diskThicknessRef.current);
+      gl.uniform1f(U.gravity, gravityRef.current);
+      gl.uniform1f(U.aspect, gl.canvas.width / Math.max(1, gl.canvas.height));
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
     render();
 
-    // Expose zoom control so the journey button can drive it.
-    (window as any).__singularityZoom = (v: number) => { zoomTarget.v = v; };
-
-    return () => {
+    const cleanup = () => {
       window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', onMouse);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(raf);
-      delete (window as any).__singularityZoom;
     };
+    (window as any).__singularityCleanup = cleanup;
+
+    return cleanup;
   }, []);
 
-  const currentStage = JOURNEY_STAGES[stageIdx];
-
-  const startJourney = () => {
+  // Holds a ref to startJourney so the render-loop callbacks can trigger it.
+  const journeyRef = useRef(false);
+  const startJourneyRef = useRef<() => void>(() => {});
+  startJourneyRef.current = () => {
+    if (journeyRef.current) return;
+    journeyRef.current = true;
     setJourney(true);
     setStageIdx(0);
     setNoteOpen(false);
     setPassword('');
     setSecretEnding(false);
-    (window as any).__singularityZoom?.(JOURNEY_STAGES[0].zoom);
+  };
+
+  const currentStage = JOURNEY_STAGES[stageIdx];
+
+  const startJourney = () => {
+    journeyRef.current = true;
+    setJourney(true);
+    setStageIdx(0);
+    setNoteOpen(false);
+    setPassword('');
+    setSecretEnding(false);
   };
 
   const advanceStage = () => {
     const next = stageIdx + 1;
     if (next >= JOURNEY_STAGES.length) return;
     setStageIdx(next);
-    (window as any).__singularityZoom?.(JOURNEY_STAGES[next].zoom);
   };
 
   const prevStage = () => {
-    const next = Math.max(0, stageIdx - 1);
-    setStageIdx(next);
-    (window as any).__singularityZoom?.(JOURNEY_STAGES[next].zoom);
+    setStageIdx(Math.max(0, stageIdx - 1));
   };
 
   const submitPassword = () => {
-    // The key is "EAOIN" (or its numeric-phone code equivalent 32646). Case-insensitive.
     const answer = password.trim().toLowerCase();
     const correct = answer === 'eaoin' || answer === '32646';
     if (correct) {
       setSecretEnding(true);
       setNoteOpen(true);
       getGodMode().unlock();
-      // Grant the read-once ticket. It shows the code now; the read flag is
-      // set when the player leaves the journey, so a later revisit reads "READ".
       getEndingTicket().grant();
     }
   };
 
   const resetJourney = () => {
+    journeyRef.current = false;
     setJourney(false);
     setStageIdx(0);
     setNoteOpen(false);
-    if (secretEnding) {
-      // Leaving the journey after reading the ending marks the ticket as read,
-      // so a future revisit shows "READ" instead of the numbers.
-      getEndingTicket().read();
-    }
+    if (secretEnding) getEndingTicket().read();
     setSecretEnding(false);
-    (window as any).__singularityZoom?.(0);
+    camRef.current.dist = 11;
   };
 
   return (
@@ -287,12 +394,28 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       </div>
 
       <div className="singularity-hint">
-        Move your mouse to pan around the lensing. {journey ? `Descending: ${currentStage.title}` : 'Click "Dive In" to zoom through the hole.'}
+        {journey
+          ? `Descending: ${currentStage.title}`
+          : 'Drag to orbit • Scroll / W-S / arrows to zoom • Zoom all the way in to fall through.'}
+      </div>
+
+      {/* Camera-control sliders */}
+      <div className="singularity-controls">
+        <label className="singularity-slider">
+          <span>💿 Disk thickness</span>
+          <input type="range" min={0.08} max={0.8} step={0.02} value={diskThickness}
+            onChange={(e) => setDiskThickness(Number(e.target.value))} />
+        </label>
+        <label className="singularity-slider">
+          <span>🌌 Gravity strength</span>
+          <input type="range" min={0.3} max={2.2} step={0.05} value={gravity}
+            onChange={(e) => setGravity(Number(e.target.value))} />
+        </label>
       </div>
 
       <div className="singularity-actions">
         {!journey
-          ? <button className="singularity-dive" onClick={startJourney}>🕳 Dive In</button>
+          ? <button className="singularity-dive" onClick={startJourney}>🕳 Fall Through</button>
           : (
             <>
               <button className="singularity-dive" onClick={prevStage} disabled={stageIdx === 0}>◀ Back</button>
