@@ -98,3 +98,24 @@ describe('Black Hole gravitational lensing', () => {
     engine.dispose();
   });
 });
+
+describe('BlackHoleEncounter Interstellar styles', () => {
+  it('defaults to classic and spawns cleanly', () => {
+    const { engine, scene, hole } = makeEncounter();
+    expect(hole.style).toBe('classic');
+    hole.spawn(new Vector3(0, 0, 40));
+    expect(hole.isActive()).toBe(true);
+    hole.dispose(); scene.dispose(); engine.dispose();
+  });
+
+  it('supports the gargantua and wormhole styles without throwing', () => {
+    for (const style of ['classic', 'gargantua', 'wormhole'] as const) {
+      const { engine, scene, hole } = makeEncounter();
+      hole.style = style;
+      hole.attach();
+      hole.spawn(new Vector3(0, 0, 40));
+      expect(() => hole.update(0.016, new Vector3(0, 0, 20))).not.toThrow();
+      hole.dispose(); scene.dispose(); engine.dispose();
+    }
+  });
+});

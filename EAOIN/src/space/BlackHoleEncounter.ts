@@ -132,6 +132,15 @@ export class BlackHoleEncounter {
   /** Raised when the player crosses the horizon. */
   onConsumed: (() => void) | null = null;
 
+  /**
+   * Interstellar-inspired style:
+   *   - 'classic'  : warm Einstein-ring lensing (the default).
+   *   - 'gargantua': the big Interstellar look — huge, very bright disc,
+   *                  golden photon ring, more glow.
+   *   - 'wormhole' : a swirling blue-white mouth you pass through into the void.
+   */
+  style: 'classic' | 'gargantua' | 'wormhole' = 'classic';
+
   constructor(scene: Scene, camera: Camera) {
     this.scene = scene;
     this.camera = camera;
@@ -158,36 +167,39 @@ export class BlackHoleEncounter {
     horizon.applyFog = false;
     this.horizon = horizon;
 
-    // Photon sphere.
+    // Photon sphere — colour depends on Interstellar style.
     const ring = MeshBuilder.CreateTorus(
       'bh_photon_ring',
-      { diameter: EVENT_HORIZON_RADIUS * 2.7, thickness: 0.9, tessellation: 72 },
+      { diameter: EVENT_HORIZON_RADIUS * (this.style === 'gargantua' ? 3.2 : 2.7), thickness: this.style === 'gargantua' ? 1.6 : 0.9, tessellation: 72 },
       this.scene
     );
     const rm = new StandardMaterial('bh_photon_mat', this.scene);
-    rm.emissiveColor = new Color3(1.0, 0.78, 0.42);
+    if (this.style === 'wormhole') rm.emissiveColor = new Color3(0.55, 0.85, 1.0);   // blue-white
+    else rm.emissiveColor = new Color3(1.0, 0.78, 0.42);                               // golden (classic/gargantua)
     rm.diffuseColor = Color3.Black();
     rm.disableLighting = true;
     rm.fogEnabled = false;
-    rm.alpha = 0.9;
+    rm.alpha = 0.95;
     ring.material = rm;
     ring.parent = this.root;
     ring.isPickable = false;
     ring.applyFog = false;
     this.photonRing = ring;
 
-    // Accretion disc.
+    // Accretion disc — size/colour by style.
     const disc = MeshBuilder.CreateTorus(
       'bh_accretion_disc',
-      { diameter: EVENT_HORIZON_RADIUS * 5.5, thickness: EVENT_HORIZON_RADIUS * 1.6, tessellation: 64 },
+      { diameter: EVENT_HORIZON_RADIUS * (this.style === 'gargantua' ? 8.0 : 5.5), thickness: EVENT_HORIZON_RADIUS * 1.8, tessellation: 64 },
       this.scene
     );
     const dm = new StandardMaterial('bh_disc_mat', this.scene);
-    dm.emissiveColor = new Color3(1.0, 0.48, 0.16);
+    if (this.style === 'wormhole') dm.emissiveColor = new Color3(0.4, 0.75, 1.0);
+    else if (this.style === 'gargantua') dm.emissiveColor = new Color3(1.0, 0.6, 0.22);
+    else dm.emissiveColor = new Color3(1.0, 0.48, 0.16);
     dm.diffuseColor = Color3.Black();
     dm.disableLighting = true;
     dm.fogEnabled = false;
-    dm.alpha = 0.62;
+    dm.alpha = this.style === 'gargantua' ? 0.85 : 0.62;
     disc.material = dm;
     disc.scaling.y = 0.08;
     disc.parent = this.root;

@@ -77,6 +77,8 @@ export class EndGameRuntime {
     private readonly options: EndGameOptions
   ) {
     this.blackHole = new BlackHoleEncounter(scene, camera);
+    // The late-game End black hole is the big Interstellar gargantua.
+    this.blackHole.style = 'gargantua';
     this.leviathan = new VoidLeviathan(scene, options.seed);
     this.bloop = new Bloop(scene, options.seed);
 
