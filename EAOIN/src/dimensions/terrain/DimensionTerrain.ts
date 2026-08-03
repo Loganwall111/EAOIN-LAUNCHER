@@ -30,6 +30,7 @@
 import { BlockID } from '@shared/blocks/BlockRegistry';
 import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from '../../world/Chunk';
 import { AdvancedNoise } from '../../world/AdvancedNoise';
+import { mineshaftAnchorAt, placeMineshaft } from '../../world/MineshaftStructures';
 
 export type DimensionArchetype =
   | 'hills' | 'nether' | 'end' | 'space' | 'frozen' | 'volcanic'
@@ -250,6 +251,14 @@ export class DimensionTerrainGenerator {
         // Surface decor scattered deterministically.
         this.decorate(chunk, lx, surfaceClamped, lz, wx, wz);
       }
+    }
+
+    // Mineshafts in caves — every dimension gets abandoned shafts carved into
+    // its own terrain (regular + rare Black Mineshaft). Skipped for pure void /
+    // floating worlds where there's no rock to tunnel through.
+    if (this.archetype !== 'void' && this.archetype !== 'rift') {
+      const shaft = mineshaftAnchorAt(chunk.x * CHUNK_SIZE, chunk.z * CHUNK_SIZE);
+      if (shaft) placeMineshaft(chunk, shaft);
     }
   }
 
