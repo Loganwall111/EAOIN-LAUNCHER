@@ -29,6 +29,15 @@ import { Color3, Color4, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMater
 import { RuntimeDimensionID } from '../dimensions/DimensionRuntime';
 import { PortalWindow } from './PortalWindow';
 
+export interface PortalBuildTechnique {
+  /** Short label shown in the Portal Gallery ("Obsidian frame", "Ground + end crystals", …). */
+  label: string;
+  /** Which block you place to "complete" the frame and light the portal. */
+  triggerBlock: number;
+  /** A sentence explaining exactly how to build it. */
+  hint: string;
+}
+
 export interface PortalDef {
   dimension: RuntimeDimensionID;
   name: string;
@@ -39,12 +48,22 @@ export interface PortalDef {
   frameBlock: number; // a BlockID
   particleCount: number;
   description: string;
+  /** How this portal is built in-world (2.0 — each dimension has its own technique). */
+  build?: PortalBuildTechnique;
 }
+
+/** Block ids used as portal frame materials across the build techniques. */
+export const PORTAL_BLOCKS = {
+  OBSIDIAN: 12,
+  END_CRYSTAL: 16, // Crystal Shard — the "end crystal" that lights a ground end portal
+  GLASS: 64,
+  RIFT_STONE: 313,
+} as const;
 
 export const PORTAL_DEFS: PortalDef[] = [
   { id: undefined as any, dimension: 'overworld', name: 'Wooden Doorway', emoji: '🚪', color1: new Color3(0.7, 0.45, 0.25), color2: new Color3(0.9, 0.7, 0.4), size: 2.4, frameBlock: 6, particleCount: 6, description: 'A simple wooden archway back home.' } as any,
-  { dimension: 'nether', name: 'Nether Portal', emoji: '🔥', color1: new Color3(0.45, 0.05, 0.05), color2: new Color3(0.85, 0.25, 0.05), size: 2.6, frameBlock: 12, particleCount: 30, description: 'A frame of obsidian swirling with hellfire.' },
-  { dimension: 'end', name: 'End Gateway', emoji: '🌌', color1: new Color3(0.2, 0.05, 0.4), color2: new Color3(0.55, 0.2, 0.95), size: 2.8, frameBlock: 43, particleCount: 40, description: 'A floating gateway of stars.' },
+  { dimension: 'nether', name: 'Nether Portal', emoji: '🔥', color1: new Color3(0.45, 0.05, 0.05), color2: new Color3(0.85, 0.25, 0.05), size: 2.6, frameBlock: 12, particleCount: 30, description: 'A frame of obsidian swirling with hellfire.', build: { label: 'Obsidian standing frame', triggerBlock: PORTAL_BLOCKS.OBSIDIAN, hint: 'Build a standing 4-wide × 5-tall ring of Obsidian with a 2×3 air opening, then place the last Obsidian block to light it.' } },
+  { dimension: 'end', name: 'End Gateway', emoji: '🌌', color1: new Color3(0.2, 0.05, 0.4), color2: new Color3(0.55, 0.2, 0.95), size: 2.8, frameBlock: 43, particleCount: 40, description: 'A floating gateway of stars.', build: { label: 'Ground frame + end crystals', triggerBlock: PORTAL_BLOCKS.END_CRYSTAL, hint: 'Lay a flat 5×5 ring of Obsidian on the ground with a 3×3 air floor, then place a Crystal Shard on top of the ring to light the portal.' } },
   { dimension: 'crystal_realm', name: 'Crystal Portal', emoji: '💎', color1: new Color3(0.45, 0.18, 0.6), color2: new Color3(0.85, 0.5, 1), size: 2.6, frameBlock: 16, particleCount: 24, description: 'A ring of crystal shards and light.' },
   { dimension: 'sky_kingdom', name: 'Sky Gate', emoji: '☁', color1: new Color3(0.55, 0.85, 0.95), color2: new Color3(0.95, 0.95, 0.95), size: 2.6, frameBlock: 64, particleCount: 14, description: 'A floating platform with a beam of light.' },
   { dimension: 'abyss', name: 'Void Rift', emoji: '🕳', color1: new Color3(0.02, 0.0, 0.05), color2: new Color3(0.4, 0.1, 0.8), size: 3.0, frameBlock: 12, particleCount: 20, description: 'A crack in reality itself.' },
@@ -71,8 +90,8 @@ export const PORTAL_DEFS: PortalDef[] = [
   { dimension: 'sun', name: 'Solar Gate', emoji: '☀', color1: new Color3(1, 0.85, 0.4), color2: new Color3(1, 1, 0.6), size: 2.6, frameBlock: 49, particleCount: 28, description: 'A blazing arch of pure plasma.' },
   { dimension: 'moon', name: 'Lunar Gate', emoji: '🌙', color1: new Color3(0.75, 0.78, 0.85), color2: new Color3(0.95, 0.95, 1), size: 2.6, frameBlock: 23, particleCount: 18, description: 'A pale arch of moon-rock light.' },
   { dimension: 'humorous', name: 'Humorous Portal', emoji: '🪼', color1: new Color3(0.4, 0.2, 0.8), color2: new Color3(0.8, 0.4, 1), size: 2.8, frameBlock: 308, particleCount: 30, description: 'A pink-purple portal of drifting cosmic light.' },
-  { dimension: 'rift_dimension', name: 'Rift Portal', emoji: '🌀', color1: new Color3(0.1, 0.5, 0.9), color2: new Color3(0.6, 0.9, 1), size: 3.0, frameBlock: 313, particleCount: 34, description: 'A blue, rippling rift tearing through reality.' },
-  { dimension: 'aether', name: 'Aether Globe', emoji: '☁️', color1: new Color3(0.85, 0.85, 0.95), color2: new Color3(1, 1, 1), size: 2.6, frameBlock: 64, particleCount: 22, description: 'A glowing globe of cloud and light.' },
+  { dimension: 'rift_dimension', name: 'Rift Portal', emoji: '🌀', color1: new Color3(0.1, 0.5, 0.9), color2: new Color3(0.6, 0.9, 1), size: 3.0, frameBlock: 313, particleCount: 34, description: 'A blue, rippling rift tearing through reality.', build: { label: 'Twin rift cylinders', triggerBlock: PORTAL_BLOCKS.RIFT_STONE, hint: 'Build two vertical rings of Rift Stone facing each other 3 blocks apart (a ring-shaped cylinder of radius 2 with an air hole), then place the last Rift Stone to rip the rift open.' } },
+  { dimension: 'aether', name: 'Aether Globe', emoji: '☁️', color1: new Color3(0.85, 0.85, 0.95), color2: new Color3(1, 1, 1), size: 2.6, frameBlock: 64, particleCount: 22, description: 'A glowing globe of cloud and light.', build: { label: 'Glass globe', triggerBlock: PORTAL_BLOCKS.GLASS, hint: 'Sculpt a hollow sphere of Glass (a 5×5 globe shell with an air interior), then place the final Glass block to condense the aether globe.' } },
 ];
 
 export interface PortalCoordinate {
@@ -241,6 +260,11 @@ export class PortalSystem {
 
   constructor(scene: Scene) { this.scene = scene; }
 
+  /** Friendly display name for a dimension's portal, if one is defined. */
+  portalName(dimension: RuntimeDimensionID): string | null {
+    return PORTAL_DEFS.find((p) => p.dimension === dimension)?.name ?? null;
+  }
+
   /** Spawn the portal for a given dimension at the given world position. */
   spawnForDimension(dimension: RuntimeDimensionID, position: Vector3): PortalInstance {
     const def = PORTAL_DEFS.find((p) => p.dimension === dimension);
@@ -251,10 +275,20 @@ export class PortalSystem {
   }
 
   /**
-   * Detect a Minecraft-style buildable obsidian portal frame around a just-placed
-   * block (obsidian = id 12). A valid frame is a 4-wide × 5-tall ring of obsidian
-   * with a 2×3 air interior, oriented along X or Z. Returns the dimension + world
-   * position of the portal centre, or null if no complete frame encloses this block.
+   * Detect a *buildable portal frame* around a just-placed block and return the
+   * dimension + world position it lights, or null.
+   *
+   * 2.0 — every dimension has its own build technique (not just the classic
+   * obsidian frame):
+   *   - Nether → a standing 4-wide × 5-tall ring of Obsidian (completing block: Obsidian).
+   *   - End    → a flat 5×5 ring of Obsidian laid on the ground, lit by placing
+   *              a Crystal Shard ("end crystal") on top of the ring.
+   *   - Aether → a hollow Glass globe (completing block: Glass).
+   *   - Rift   → twin vertical rings of Rift Stone (completing block: Rift Stone).
+   *
+   * The technique is chosen by *which block was just placed* — the placed block
+   * (already committed to `getBlock`) must be the "trigger" that completes a
+   * frame of that type.
    */
   findBuildablePortalFrame(
     worldX: number,
@@ -262,22 +296,43 @@ export class PortalSystem {
     worldZ: number,
     getBlock: (x: number, y: number, z: number) => number
   ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
-    const OBSIDIAN = 12;
-    const AIR = 0;
-    const isObsidian = (x: number, y: number, z: number) => getBlock(x, y, z) === OBSIDIAN;
-    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === AIR;
+    const placed = getBlock(worldX, worldY, worldZ);
 
-    // The frame is 4 wide × 5 tall, interior opening 2 wide × 3 tall.
-    // Frame: (dx in 0..4, dy in 0..4). Interior: dx 1..3, dy 1..3.
-    // orientX = true  → frame spans X, width along X; single row in Z.
-    // orientX = false → frame spans Z, width along Z; single column in X.
+    // Nether — placing Obsidian that completes a standing 4×5 ring.
+    if (placed === PORTAL_BLOCKS.OBSIDIAN) {
+      const nether = this.detectNetherFrame(worldX, worldY, worldZ, getBlock);
+      if (nether) return nether;
+    }
+    // End — placing an end crystal (Crystal Shard) on top of a ground Obsidian ring.
+    if (placed === PORTAL_BLOCKS.END_CRYSTAL) {
+      const end = this.detectEndGroundFrame(worldX, worldY, worldZ, getBlock);
+      if (end) return end;
+    }
+    // Aether — placing Glass that completes a hollow Glass globe.
+    if (placed === PORTAL_BLOCKS.GLASS) {
+      const aether = this.detectAetherGlobe(worldX, worldY, worldZ, getBlock);
+      if (aether) return aether;
+    }
+    // Rift — placing Rift Stone that completes the twin vertical rings.
+    if (placed === PORTAL_BLOCKS.RIFT_STONE) {
+      const rift = this.detectRiftCylinders(worldX, worldY, worldZ, getBlock);
+      if (rift) return rift;
+    }
+    return null;
+  }
+
+  /** Nether: standing 4 wide × 5 tall ring of obsidian, interior 2×3 air. */
+  private detectNetherFrame(
+    worldX: number, worldY: number, worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    const isObsidian = (x: number, y: number, z: number) => getBlock(x, y, z) === PORTAL_BLOCKS.OBSIDIAN;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === 0;
     const frames: Array<{ baseX: number; baseY: number; baseZ: number; orientX: boolean }> = [];
     for (let orientX = 0; orientX <= 1; orientX++) {
       const isX = orientX === 1;
-      // The frame's base corner must be within 4 blocks of the placed block.
       for (let bx = worldX - 4; bx <= worldX; bx++) {
         for (let bz = worldZ - 4; bz <= worldZ; bz++) {
-          // bottom-left of frame at (bx, baseY, bz); height 5 -> baseY = worldY - 4 .. worldY
           for (let by = worldY - 4; by <= worldY; by++) {
             let complete = true;
             for (let dx = 0; dx <= 4 && complete; dx++) {
@@ -286,11 +341,8 @@ export class PortalSystem {
                 const wx = bx + (isX ? dx : 0);
                 const wz = bz + (isX ? 0 : dx);
                 const wy = by + dy;
-                if (interior) {
-                  if (!isAir(wx, wy, wz)) { complete = false; break; }
-                } else {
-                  if (!isObsidian(wx, wy, wz)) { complete = false; break; }
-                }
+                if (interior) { if (!isAir(wx, wy, wz)) { complete = false; break; } }
+                else { if (!isObsidian(wx, wy, wz)) { complete = false; break; } }
               }
             }
             if (complete) frames.push({ baseX: bx, baseY: by, baseZ: bz, orientX: isX });
@@ -299,21 +351,109 @@ export class PortalSystem {
       }
     }
     if (frames.length === 0) return null;
+    const onRing = (f: { baseX: number; baseZ: number }) =>
+      (worldX === f.baseX || worldX === f.baseX + 4 || worldX === f.baseX + 1 || worldX === f.baseX + 3)
+      || (worldZ === f.baseZ || worldZ === f.baseZ + 4 || worldZ === f.baseZ + 1 || worldZ === f.baseZ + 3);
+    const frame = frames.find(onRing) ?? frames[0];
+    // Center of the opening: for an X-oriented frame (width along X, single row
+    // in Z) the portal sits at z = baseZ; for a Z-oriented frame at x = baseX.
+    const cx = frame.orientX ? frame.baseX + 2 : frame.baseX;
+    const cz = frame.orientX ? frame.baseZ : frame.baseZ + 2;
+    return { dimension: 'nether', x: cx, y: frame.baseY + 2, z: cz };
+  }
 
-    // Prefer the frame that actually touches the placed block (the placed block
-    // is one of the ring's obsidian cells). Otherwise fall back to the first.
-    const placedOnFrame = frames.find((f) => {
-      const onRing =
-        (worldX === f.baseX || worldX === f.baseX + 4 || worldX === f.baseX + 1 || worldX === f.baseX + 3)
-        || (worldZ === f.baseZ || worldZ === f.baseZ + 4 || worldZ === f.baseZ + 1 || worldZ === f.baseZ + 3);
-      return onRing;
-    });
-    const frame = placedOnFrame ?? frames[0];
-    const cx = frame.baseX + 2;
-    const cz = frame.baseZ + 2;
-    const cy = frame.baseY + 2;
-    // Classic obsidian frame leads to the Nether.
-    return { dimension: 'nether', x: cx, y: cy, z: cz };
+  /** End: a flat 5×5 Obsidian ring on the ground, lit by a Crystal Shard on its border. */
+  private detectEndGroundFrame(
+    worldX: number, worldY: number, worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    // The crystal sits at (worldX, worldY, worldZ) on top of the ring at worldY-1.
+    const ringY = worldY - 1;
+    const isObsidian = (x: number, y: number, z: number) => getBlock(x, y, z) === PORTAL_BLOCKS.OBSIDIAN;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === 0;
+    for (let bx = worldX - 4; bx <= worldX; bx++) {
+      for (let bz = worldZ - 4; bz <= worldZ; bz++) {
+        const onBorder =
+          (worldX === bx || worldX === bx + 4 || worldZ === bz || worldZ === bz + 4)
+          && worldX >= bx && worldX <= bx + 4 && worldZ >= bz && worldZ <= bz + 4;
+        if (!onBorder) continue;
+        let complete = true;
+        for (let dx = 0; dx <= 4 && complete; dx++) {
+          for (let dz = 0; dz <= 4 && complete; dz++) {
+            const interior = dx >= 1 && dx <= 3 && dz >= 1 && dz <= 3;
+            const x = bx + dx, z = bz + dz;
+            if (interior) { if (!isAir(x, ringY, z)) { complete = false; break; } }
+            else { if (!isObsidian(x, ringY, z)) { complete = false; break; } }
+          }
+        }
+        if (complete) return { dimension: 'end', x: bx + 2, y: ringY + 1, z: bz + 2 };
+      }
+    }
+    return null;
+  }
+
+  /** Aether: a hollow Glass globe (5×5 sphere shell, air interior). */
+  private detectAetherGlobe(
+    worldX: number, worldY: number, worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    const isGlass = (x: number, y: number, z: number) => getBlock(x, y, z) === PORTAL_BLOCKS.GLASS;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === 0;
+    for (let cx = worldX - 2; cx <= worldX + 2; cx++) {
+      for (let cy = worldY - 2; cy <= worldY + 2; cy++) {
+        for (let cz = worldZ - 2; cz <= worldZ + 2; cz++) {
+          const d0 = (worldX - cx) ** 2 + (worldY - cy) ** 2 + (worldZ - cz) ** 2;
+          if (d0 < 4 || d0 > 8) continue; // placed block must be a shell cell
+          let complete = true;
+          for (let dx = -2; dx <= 2 && complete; dx++) {
+            for (let dy = -2; dy <= 2 && complete; dy++) {
+              for (let dz = -2; dz <= 2 && complete; dz++) {
+                const d2 = dx * dx + dy * dy + dz * dz;
+                if (d2 > 8) continue; // outside the globe shell — unconstrained
+                const x = cx + dx, y = cy + dy, z = cz + dz;
+                if (d2 >= 4) { if (!isGlass(x, y, z)) { complete = false; } }
+                else { if (!isAir(x, y, z)) { complete = false; } }
+              }
+            }
+          }
+          if (complete) return { dimension: 'aether', x: cx, y: cy, z: cz };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Rift: two vertical rings of Rift Stone (radius ~2) offset 3 blocks along Z. */
+  private detectRiftCylinders(
+    worldX: number, worldY: number, worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    const isStone = (x: number, y: number, z: number) => getBlock(x, y, z) === PORTAL_BLOCKS.RIFT_STONE;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === 0;
+    const inBand = (dx: number, dy: number) => dx * dx + dy * dy >= 4 && dx * dx + dy * dy <= 7;
+    const ringComplete = (cx: number, cy: number, rz: number): boolean => {
+      for (let dx = -3; dx <= 3; dx++) {
+        for (let dy = -3; dy <= 3; dy++) {
+          const d2 = dx * dx + dy * dy;
+          const x = cx + dx, y = cy + dy;
+          if (d2 >= 4 && d2 <= 7) { if (!isStone(x, y, rz)) return false; }
+          else if (d2 <= 2) { if (!isAir(x, y, rz)) return false; }
+        }
+      }
+      return true;
+    };
+    for (let cx = worldX - 3; cx <= worldX + 3; cx++) {
+      for (let cy = worldY - 3; cy <= worldY + 3; cy++) {
+        for (let az = worldZ - 3; az <= worldZ; az++) {
+          const inRingA = worldZ === az && inBand(worldX - cx, worldY - cy);
+          const inRingB = worldZ === az + 3 && inBand(worldX - cx, worldY - cy);
+          if (!inRingA && !inRingB) continue;
+          if (!ringComplete(cx, cy, az) || !ringComplete(cx, cy, az + 3)) continue;
+          return { dimension: 'rift_dimension', x: cx, y: cy, z: az + 1.5 };
+        }
+      }
+    }
+    return null;
   }
 
   update(dt: number, camera: Vector3): void {

@@ -2277,9 +2277,12 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         authorityRuntime.recordAction(); if (!creativeNow) publishInventory(removeFromInventory(inventoryRef.current, blockToPlace, 1));
         onGameplayEvent('blocksPlaced'); audio.play('place', settingsRef.current); rebuildEditedBlock(placeTarget); saveWorldEdits();
 
-        // Buildable portals: placing an obsidian block that completes a 4×5
-        // obsidian frame lights up a portal to that dimension (classic Nether).
-        if (blockToPlace === 12) {
+        // Buildable portals: each dimension has its own build technique (2.0).
+        // Placing the frame-completing block — Obsidian (Nether standing ring),
+        // a Crystal Shard on a ground ring (End), Glass (Aether globe), or Rift
+        // Stone (twin rift cylinders) — lights the matching portal.
+        const portalTriggerBlocks = [12, 16, 64, 313];
+        if (portalTriggerBlocks.includes(blockToPlace)) {
           const frame = portalSystem.findBuildablePortalFrame(
             placeTarget.x, placeTarget.y, placeTarget.z,
             (x, y, z) => terrain.getBlockAt(x, y, z)
@@ -2287,7 +2290,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           if (frame) {
             portalSystem.spawnForDimension(frame.dimension, new Vector3(frame.x, frame.y, frame.z));
             forceTerrainCoverage = true;
-            showActionMessage(`🔥 Portal activated — ${dimensionRuntime.getDefinition().name}`);
+            const portalName = portalSystem.portalName(frame.dimension) ?? dimensionRuntime.getDefinition().name;
+            showActionMessage(`🔥 Portal activated — ${portalName}`);
             audio.play('ui', settingsRef.current);
           }
         }
