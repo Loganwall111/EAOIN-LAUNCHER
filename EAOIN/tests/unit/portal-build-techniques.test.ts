@@ -165,6 +165,51 @@ describe('Rift — twin vertical rings of Rift Stone', () => {
   });
 });
 
+describe('Wormhole — two facing lensing rings of Wormhole Frame', () => {
+  it('lights a wormhole fast-travel portal to a valid dimension', () => {
+    const w = makeWorld();
+    const cx = 50, cy = 60, az = 20;
+    const WH = 341;
+    // Ring A at z=az, ring B at z=az+4. Ring cells: d2 in 6..10; interior d2 in 0..3.
+    for (const ringZ of [az, az + 4]) {
+      for (let dx = -4; dx <= 4; dx++) {
+        for (let dy = -4; dy <= 4; dy++) {
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= 6 && d2 <= 10) w.set(cx + dx, cy + dy, ringZ, WH);
+          else if (d2 <= 3) w.set(cx + dx, cy + dy, ringZ, 0);
+        }
+      }
+    }
+    // Place the final frame block on ring A at a valid ring cell (dx=3,dy=0 => d2=9).
+    const px = cx + 3, py = cy;
+    w.set(px, py, az, WH);
+    const system = new PortalSystem(undefined as never);
+    const frame = system.findBuildablePortalFrame(px, py, az, w.getBlock);
+    expect(frame).not.toBeNull();
+    // A wormhole must lead somewhere valid, not the overworld.
+    expect(frame?.dimension).not.toBe('overworld');
+    expect(frame?.x).toBe(cx);
+    expect(frame?.y).toBe(cy);
+  });
+
+  it('returns null when only one ring is built', () => {
+    const w = makeWorld();
+    const cx = 50, cy = 60, az = 20;
+    const WH = 341;
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dy = -4; dy <= 4; dy++) {
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= 6 && d2 <= 10) w.set(cx + dx, cy + dy, az, WH);
+        else if (d2 <= 3) w.set(cx + dx, cy + dy, az, 0);
+      }
+    }
+    const px = cx + 3, py = cy;
+    w.set(px, py, az, WH);
+    const system = new PortalSystem(undefined as never);
+    expect(system.findBuildablePortalFrame(px, py, az, w.getBlock)).toBeNull();
+  });
+});
+
 describe('Build technique metadata', () => {
   it('exposes a build technique on each of the four customizable portals', () => {
     const system = new PortalSystem(undefined as never);

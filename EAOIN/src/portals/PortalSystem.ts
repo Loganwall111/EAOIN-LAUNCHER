@@ -58,7 +58,20 @@ export const PORTAL_BLOCKS = {
   END_CRYSTAL: 16, // Crystal Shard — the "end crystal" that lights a ground end portal
   GLASS: 64,
   RIFT_STONE: 313,
+  WORMHOLE_FRAME: 341,
 } as const;
+
+/** Dimensions the lensing wormhole can fast-travel to (not overworld/self). */
+const WORMHOLE_DESTINATIONS: RuntimeDimensionID[] = [
+  'nether', 'end', 'aether', 'rift_dimension', 'crystal_realm', 'sky_kingdom',
+  'alien_worlds', 'chaos_dimension', 'dream_realm', 'mushroom_kingdom',
+  'storm_dimension', 'astral_plane', 'cosmic_void',
+];
+
+/** Pick a random wormhole destination. */
+function randomWormholeDestination(): RuntimeDimensionID {
+  return WORMHOLE_DESTINATIONS[Math.floor(Math.random() * WORMHOLE_DESTINATIONS.length)];
+}
 
 export const PORTAL_DEFS: PortalDef[] = [
   { id: undefined as any, dimension: 'overworld', name: 'Wooden Doorway', emoji: '🚪', color1: new Color3(0.7, 0.45, 0.25), color2: new Color3(0.9, 0.7, 0.4), size: 2.4, frameBlock: 6, particleCount: 6, description: 'A simple wooden archway back home.' } as any,
@@ -318,6 +331,12 @@ export class PortalSystem {
       const rift = this.detectRiftCylinders(worldX, worldY, worldZ, getBlock);
       if (rift) return rift;
     }
+    // Wormhole — placing Wormhole Frame that completes two facing lensing rings.
+    // Fast-travels to a random dimension.
+    if (placed === PORTAL_BLOCKS.WORMHOLE_FRAME) {
+      const wormhole = this.detectWormhole(worldX, worldY, worldZ, getBlock);
+      if (wormhole) return wormhole;
+    }
     return null;
   }
 
@@ -450,6 +469,40 @@ export class PortalSystem {
           if (!inRingA && !inRingB) continue;
           if (!ringComplete(cx, cy, az) || !ringComplete(cx, cy, az + 3)) continue;
           return { dimension: 'rift_dimension', x: cx, y: cy, z: az + 1.5 };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Wormhole: two facing vertical rings of Wormhole Frame (lensing fast-travel). */
+  private detectWormhole(
+    worldX: number, worldY: number, worldZ: number,
+    getBlock: (x: number, y: number, z: number) => number
+  ): { dimension: RuntimeDimensionID; x: number; y: number; z: number } | null {
+    const isFrame = (x: number, y: number, z: number) => getBlock(x, y, z) === PORTAL_BLOCKS.WORMHOLE_FRAME;
+    const isAir = (x: number, y: number, z: number) => getBlock(x, y, z) === 0;
+    const inBand = (dx: number, dy: number) => dx * dx + dy * dy >= 6 && dx * dx + dy * dy <= 10;
+    const ringComplete = (cx: number, cy: number, rz: number): boolean => {
+      for (let dx = -4; dx <= 4; dx++) {
+        for (let dy = -4; dy <= 4; dy++) {
+          const d2 = dx * dx + dy * dy;
+          const x = cx + dx, y = cy + dy;
+          if (d2 >= 6 && d2 <= 10) { if (!isFrame(x, y, rz)) return false; }
+          else if (d2 <= 3) { if (!isAir(x, y, rz)) return false; }
+        }
+      }
+      return true;
+    };
+    for (let cx = worldX - 4; cx <= worldX + 4; cx++) {
+      for (let cy = worldY - 4; cy <= worldY + 4; cy++) {
+        for (let az = worldZ - 4; az <= worldZ; az++) {
+          const inRingA = worldZ === az && inBand(worldX - cx, worldY - cy);
+          const inRingB = worldZ === az + 4 && inBand(worldX - cx, worldY - cy);
+          if (!inRingA && !inRingB) continue;
+          if (!ringComplete(cx, cy, az) || !ringComplete(cx, cy, az + 4)) continue;
+          // Fast-travel to a random dimension.
+          return { dimension: randomWormholeDestination(), x: cx, y: cy, z: az + 2 };
         }
       }
     }
