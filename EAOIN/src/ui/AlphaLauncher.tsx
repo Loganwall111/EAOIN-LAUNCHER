@@ -44,6 +44,16 @@ export default function AlphaLauncher({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
+        <div className="alpha-howto">
+          <h3>📌 How to play the alpha (from inside this launcher)</h3>
+          <ol>
+            <li>Press <b>▶ Play Alpha</b> above — it opens the alpha build in a new tab.</li>
+            <li>If a pop-up is blocked, allow it, or copy the link below and paste it in a new tab.</li>
+            <li>Play it like the main game — the alpha has all the next-gen 2.0 features.</li>
+          </ol>
+          <div className="alpha-howto-link">🔗 <code>{ALPHA_URL}</code></div>
+        </div>
+
         <div className="alpha-features">
           <h3>What's inside the alpha</h3>
           <div className="alpha-feature-grid">

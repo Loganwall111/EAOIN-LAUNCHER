@@ -149,9 +149,6 @@ export default function TitleScreen({
         <button className="menu-btn is-portals" onClick={onPortalGallery}>
           Portal Gallery<span className="btn-icon">🌀</span>
         </button>
-        <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
-          Alpha Launcher<span className="btn-icon">🚀</span>
-        </button>
         <button className="menu-btn is-horizonos" onClick={onHorizonOS}>
           HorizonOS<span className="btn-icon">🖥️</span>
         </button>
@@ -169,6 +166,12 @@ export default function TitleScreen({
         </button>
         <button className="menu-btn is-editor" onClick={onEditorMode}>
           Editor Mode<span className="btn-icon">🛠</span>
+        </button>
+
+        {/* ---- separate launcher section (bottom) ---- */}
+        <div className="menu-section-divider"><span>ALPHA LAUNCHER</span></div>
+        <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
+          Alpha Launcher<span className="btn-icon">🚀</span>
         </button>
 
         <button className="menu-btn" onClick={onQuit}>

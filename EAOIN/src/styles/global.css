@@ -3250,6 +3250,16 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .alpha-play:hover { filter: brightness(1.12); transform: translateY(-1px); }
 .alpha-play:active { transform: translateY(1px); }
 .alpha-url { font: 11px var(--eaoin-pixel-font, monospace); color: rgba(200,215,238,0.7); word-break: break-all; }
+.alpha-howto {
+  padding: 18px 20px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+}
+.alpha-howto h3 { margin: 0 0 10px; font-size: 14px; letter-spacing: 0.5px; color: #ffd166; }
+.alpha-howto ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: rgba(220,232,248,0.92); line-height: 1.5; }
+.alpha-howto-link { margin-top: 12px; font-size: 12px; color: rgba(200,215,238,0.8); }
+.alpha-howto-link code {
+  padding: 3px 8px; background: #0b0e18; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+  font: 11px var(--eaoin-pixel-font, monospace); color: #8ad6ff; word-break: break-all;
+}
 .alpha-features { padding: 4px 0; }
 .alpha-features h3 { margin: 0 0 12px; font-size: 14px; letter-spacing: 0.5px; color: #ffd166; }
 .alpha-feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
