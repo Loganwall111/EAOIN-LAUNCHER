@@ -3283,4 +3283,55 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   .gamehub-portals { flex-direction: row; }
   .alpha-launcher-body { padding: 16px; }
   .alpha-feature-grid { grid-template-columns: 1fr; }
+  .alpha-columns { grid-template-columns: 1fr; }
 }
+
+/* --- Alpha Launcher boot sequence (2.0 update part 2) --- */
+.alpha-boot {
+  position: fixed; inset: 0; z-index: 950; overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #05100a, #02060a 70%);
+  color: #4dff9e; font-family: var(--eaoin-pixel-font, monospace);
+  display: flex; flex-direction: column; justify-content: center; padding: 40px 60px;
+  text-shadow: 0 0 8px rgba(77,255,158,0.7);
+}
+.alpha-boot-title { font-size: 22px; letter-spacing: 3px; color: #7dffb4; margin-bottom: 24px; }
+.alpha-boot-lines { display: grid; gap: 8px; }
+.alpha-boot-line { font-size: 15px; opacity: 0.7; }
+.alpha-boot-line.cur { opacity: 1; color: #c8ffdd; }
+.alpha-boot-cursor { font-size: 18px; margin-top: 16px; animation: alphaBlink 0.7s steps(2) infinite; }
+@keyframes alphaBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* --- Alpha Launcher version selector + patch notes + settings --- */
+.alpha-settings-btn {
+  margin-left: auto; width: 44px; height: 44px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 20px;
+}
+.alpha-settings-btn:hover { filter: brightness(1.2); }
+.alpha-settings {
+  position: absolute; right: 28px; top: 76px; z-index: 5; width: min(360px, 90vw);
+  padding: 16px; border-radius: 12px; background: rgba(10,14,24,0.96);
+  border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  display: grid; gap: 12px;
+}
+.alpha-settings-title { font-weight: 800; font-size: 14px; color: #ffd166; }
+.alpha-settings label { display: grid; gap: 4px; font-size: 12px; color: rgba(210,225,245,0.9); }
+.alpha-settings .mini-input { width: 100%; font: 11px var(--eaoin-pixel-font, monospace); }
+.alpha-settings-hint { font-size: 11px; color: rgba(200,215,238,0.7); line-height: 1.5; }
+.alpha-settings-hint code { color: #8ad6ff; }
+.alpha-settings-close { padding: 8px; border-radius: 8px; cursor: pointer; background: rgba(98,216,255,0.15); border: 1px solid rgba(98,216,255,0.4); color: #fff; font-weight: 700; }
+.alpha-columns { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; margin-top: 8px; }
+.alpha-versions, .alpha-patch {
+  padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.12);
+}
+.alpha-versions h3, .alpha-patch h3 { margin: 0 0 10px; font-size: 14px; letter-spacing: 0.5px; color: #ffd166; }
+.alpha-version-list { display: grid; gap: 8px; }
+.alpha-version {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; text-align: left;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; cursor: pointer; color: inherit;
+}
+.alpha-version.selected { border-color: var(--ui-cyan, #62d8ff); background: rgba(98,216,255,0.12); }
+.alpha-ver-num { font-family: var(--eaoin-pixel-font, monospace); font-weight: 800; color: #7dffb4; }
+.alpha-ver-title { flex: 1; font-size: 13px; }
+.alpha-ver-latest { font-size: 9px; padding: 2px 7px; border-radius: 999px; background: rgba(255,209,102,0.2); color: #ffd166; }
+.alpha-patch-tagline { font-size: 12px; color: rgba(210,225,245,0.85); margin-bottom: 8px; }
+.alpha-patch-notes { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12px; line-height: 1.5; color: rgba(220,232,248,0.92); }
