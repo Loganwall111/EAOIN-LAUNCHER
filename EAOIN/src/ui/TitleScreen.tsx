@@ -29,6 +29,8 @@ export interface TitleScreenProps {
   onGameHub: () => void;
   /** Launch the Portal Gallery area. */
   onPortalGallery: () => void;
+  /** Launch the in-game Alpha Launcher (opens the EAOIN 2.0 alpha build). */
+  onAlphaLauncher: () => void;
   /** Launch HorizonOS — the in-game virtual desktop / OS. */
   onHorizonOS: () => void;
   onMods: () => void;
@@ -48,7 +50,7 @@ export interface TitleScreenProps {
 
 export default function TitleScreen({
   appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onTutorial, onGameHub,
-  onPortalGallery, onHorizonOS, onMods,
+  onPortalGallery, onAlphaLauncher, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
@@ -146,6 +148,9 @@ export default function TitleScreen({
         </button>
         <button className="menu-btn is-portals" onClick={onPortalGallery}>
           Portal Gallery<span className="btn-icon">🌀</span>
+        </button>
+        <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
+          Alpha Launcher<span className="btn-icon">🚀</span>
         </button>
         <button className="menu-btn is-horizonos" onClick={onHorizonOS}>
           HorizonOS<span className="btn-icon">🖥️</span>

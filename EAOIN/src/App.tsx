@@ -10,6 +10,7 @@ import HorizonOS from './ui/HorizonOS';
 import TutorialWorld from './ui/TutorialWorld';
 import GameHubScreen from './ui/GameHubScreen';
 import PortalGallery from './ui/PortalGallery';
+import AlphaLauncher from './ui/AlphaLauncher';
 import ServerLobbyWorld from './ui/ServerLobbyWorld';
 import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
@@ -82,7 +83,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'alphaluncher';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   const [appPhase, setAppPhase] = useState<AppPhase>('launcherboot');
@@ -381,6 +382,7 @@ export default function App() {
             onMultiplayer={() => setAppPhase('multiplayer')}
             onGameHub={() => setAppPhase('gamehub')}
             onPortalGallery={() => setAppPhase('portalgallery')}
+            onAlphaLauncher={() => setAppPhase('alphaluncher')}
             onHorizonOS={() => setAppPhase('horizonos')}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}
@@ -445,6 +447,13 @@ export default function App() {
               window.setTimeout(() => window.dispatchEvent(new CustomEvent('eaoin-travel-dimension', { detail: { dimensionId: dimension } })), 3000);
             }}
           />
+        </div>
+      );
+    }
+    if (appPhase === 'alphaluncher') {
+      return (
+        <div className={shellClass}>
+          <AlphaLauncher onBack={() => setAppPhase('title')} />
         </div>
       );
     }
