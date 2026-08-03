@@ -253,6 +253,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       setSecretEnding(true);
       setNoteOpen(true);
       getGodMode().unlock();
+      // Grant the read-once ticket. It shows the code now; the read flag is
+      // set when the player leaves the journey, so a later revisit reads "READ".
       getEndingTicket().grant();
     }
   };
@@ -261,6 +263,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     setJourney(false);
     setStageIdx(0);
     setNoteOpen(false);
+    if (secretEnding) {
+      // Leaving the journey after reading the ending marks the ticket as read,
+      // so a future revisit shows "READ" instead of the numbers.
+      getEndingTicket().read();
+    }
     setSecretEnding(false);
     (window as any).__singularityZoom?.(0);
   };
@@ -348,6 +355,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
                 <p>The Cosmic Girl returns. She was never the monster — she was the one who sacrificed herself to it, and sent her son to a world named EAOIN so he could grow up.</p>
                 <p>Her message is a song, and her gift is <b>God Mode</b> — the power to build and dream anything, all at once.</p>
                 <p className="singularity-note-key">🎁 <b>GOD MODE UNLOCKED</b></p>
+                <div className="singularity-ticket">
+                  <div className="singularity-ticket-head">🎟 ENDING TICKET</div>
+                  <div className="singularity-ticket-code">{getEndingTicket().get().read ? 'READ' : getEndingTicket().get().code}</div>
+                  <div className="singularity-ticket-foot">Keep these numbers — they are the last of the key.</div>
+                </div>
               </>
             ) : SINGULARITY_NOTE.map((line, i) => <p key={i} className={line === '' ? 'spacer' : ''}>{line}</p>)}
             <button className="singularity-note-close" onClick={() => setNoteOpen(false)}>Close</button>

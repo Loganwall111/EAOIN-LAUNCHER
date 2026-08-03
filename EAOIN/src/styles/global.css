@@ -3406,3 +3406,13 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .god-locked-desc { color: rgba(220,230,250,0.9); line-height: 1.5; font-size: 13px; }
 .god-locked-key { font-size: 13px; color: #c4a8ff; }
 .god-locked-key b { color: #4dff9e; font-size: 18px; letter-spacing: 2px; }
+
+/* --- Ending ticket (inside the Singularity secret-ending note) --- */
+.singularity-ticket {
+  margin-top: 8px; padding: 14px; border-radius: 10px; text-align: center;
+  background: linear-gradient(180deg,#1a1030,#0c0818); border: 1px dashed #ffd166;
+  color: #ffd166; font-family: var(--eaoin-pixel-font, monospace);
+}
+.singularity-ticket-head { font-weight: 800; letter-spacing: 2px; font-size: 13px; }
+.singularity-ticket-code { font-size: 30px; letter-spacing: 6px; color: #fff; margin: 6px 0; text-shadow: 0 0 14px rgba(255,209,102,0.6); }
+.singularity-ticket-foot { font-size: 10px; color: rgba(255,209,102,0.8); }
