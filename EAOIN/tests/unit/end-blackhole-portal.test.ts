@@ -7,7 +7,7 @@
  * tests pin the pull strength curve and the enter detection.
  */
 import { describe, it, expect } from 'vitest';
-import { NullEngine, Scene, Vector3 } from '@babylonjs/core';
+import { NullEngine, Scene, UniversalCamera, Vector3, PostProcess } from '@babylonjs/core';
 import { EndBlackHole } from '../../src/effects/EndBlackHole';
 
 function makeHole(): { hole: EndBlackHole; scene: Scene; engine: NullEngine } {
@@ -17,6 +17,18 @@ function makeHole(): { hole: EndBlackHole; scene: Scene; engine: NullEngine } {
   hole.ensure(new Vector3(0, 120, 0));
   hole.setActive(true);
   return { hole, scene, engine };
+}
+
+function makeHoleWithCamera(): { hole: EndBlackHole; scene: Scene; engine: NullEngine; camera: UniversalCamera } {
+  const engine = new NullEngine();
+  const scene = new Scene(engine);
+  const camera = new UniversalCamera('cam', new Vector3(0, 0, -10), scene);
+  camera.setTarget(Vector3.Zero());
+  scene.activeCamera = camera;
+  const hole = new EndBlackHole(scene, camera);
+  hole.ensure(new Vector3(0, 120, 40));
+  hole.setActive(true);
+  return { hole, scene, engine, camera };
 }
 
 describe('EndBlackHole portal', () => {
@@ -51,5 +63,17 @@ describe('EndBlackHole portal', () => {
     const c = hole.centre();
     expect(c.y).toBeCloseTo(120);
     scene.dispose(); engine.dispose();
+  });
+});
+
+describe('EndBlackHole lensing post-process', () => {
+  it('creates a lensing post-process when a camera is available', () => {
+    const { engine, scene, hole, camera } = makeHoleWithCamera();
+    const postProcesses = (scene.activeCamera?._postProcesses ?? []).filter(Boolean) as PostProcess[];
+    expect(postProcesses.some((p) => p.name.includes('eaoinEndBlackHoleLens'))).toBe(true);
+    hole.tick(0.016, performance.now(), new Vector3(0, 120, 30));
+    hole.dispose();
+    scene.dispose();
+    engine.dispose();
   });
 });

@@ -577,7 +577,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       // 2.0 — severe weather: tornadoes, blizzards, sandstorms, meteor showers.
       const severeWeather = new SevereWeather(scene);
       // 2.0 — End black-hole sky with gravitational lensing (pulls only players).
-      const endBlackHole = new EndBlackHole(scene);
+      const endBlackHole = new EndBlackHole(scene, camera);
       const moonEvents = new MoonEvents();
       const specialEvents = new SpecialEvents();
       const configureTerrainShadow = (mesh: Mesh): void => {
@@ -1709,7 +1709,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           if (inEnd) {
             const holePos = camera.position.clone().add(new Vector3(0, 120, 0));
             endBlackHole.ensure(holePos);
-            endBlackHole.tick(deltaSeconds);
+            endBlackHole.tick(deltaSeconds, performance.now(), camera.position);
             endBlackHole.pull(camera.position, tempRiftPull);
             camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 2));
 

@@ -13,8 +13,11 @@
  *     void you can explore freely. There is no loading screen — it is instant.
  */
 import {
-  Color3, Color4, DynamicTexture, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMaterial, Texture, Vector3,
+  Camera, Color3, Color4, DynamicTexture, Effect, Matrix, Mesh, MeshBuilder, ParticleSystem, PostProcess, Scene, StandardMaterial, Texture, Vector3,
 } from '@babylonjs/core';
+
+/** Screen-space gravitational-lensing shader, same feel as the Singularity. */
+const LENS_SHADER = 'eaoinEndBlackHoleLens';
 
 export class EndBlackHole {
   private core: Mesh | null = null;
@@ -23,13 +26,46 @@ export class EndBlackHole {
   private voidSphere: Mesh | null = null;
   private stars: ParticleSystem | null = null;
   private warpRing: Mesh | null = null;
+  private lensPP: PostProcess | null = null;
   private active = false;
   /** Distance at which the black hole starts pulling the player (the Edge). */
   private pullRadius = 90;
   /** Event horizon radius — crossing it means you entered the hole. */
   private horizonRadius = 13;
 
-  constructor(private readonly scene: Scene) {}
+  constructor(private readonly scene: Scene, private readonly camera?: Camera) {
+    Effect.ShadersStore[`${LENS_SHADER}FragmentShader`] = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D textureSampler;
+uniform vec2 holeCenter;
+uniform float holeRadius;
+uniform float strength;
+uniform float aspect;
+void main(void){
+  vec2 uv = vUV;
+  vec2 d = uv - holeCenter;
+  d.x *= aspect;
+  float dist = length(d);
+  if (dist < holeRadius){ gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }
+  float deflection = strength * holeRadius * holeRadius / (dist*dist);
+  deflection = min(deflection, 0.45);
+  vec2 dir = normalize(d);
+  vec2 warp = dir * deflection;
+  warp.x /= aspect;
+  vec2 sampleUV = uv - warp;
+  float r = texture2D(textureSampler, clamp(uv - warp*0.965, 0.001, 0.999)).r;
+  float g = texture2D(textureSampler, clamp(sampleUV, 0.001, 0.999)).g;
+  float b = texture2D(textureSampler, clamp(uv - warp*1.045, 0.001, 0.999)).b;
+  vec3 col = vec3(r,g,b);
+  float ringDist = abs(dist - holeRadius*1.32);
+  float ring = exp(-ringDist*90.0) * strength;
+  col += vec3(1.0, 0.72, 0.38) * ring * 1.5;
+  float shadow = smoothstep(holeRadius*2.6, holeRadius, dist);
+  col *= 1.0 - shadow*0.92*strength;
+  gl_FragColor = vec4(col, 1.0);
+}`;
+  }
 
   setActive(active: boolean): void {
     this.active = active;
@@ -44,6 +80,24 @@ export class EndBlackHole {
         if (!active && this.stars.isStarted()) this.stars.stop();
       }
     }
+    if (active) this.ensureLens();
+    else this.disposeLens();
+  }
+
+  /** Enable the lensing post-process (only when the hole is active). */
+  private ensureLens(): void {
+    if (this.lensPP || !this.camera) return;
+    try {
+      this.lensPP = new PostProcess(LENS_SHADER, LENS_SHADER, ['holeCenter','holeRadius','strength','aspect'], null, 1.0, this.camera);
+    } catch (e) {
+      console.warn('[EndBlackHole] lensing shader unavailable', e);
+      this.lensPP = null;
+    }
+  }
+
+  private disposeLens(): void {
+    this.lensPP?.dispose();
+    this.lensPP = null;
   }
 
   /** Build the black hole above the origin (over the central dragon island). */
@@ -169,8 +223,8 @@ export class EndBlackHole {
     }
   }
 
-  /** Spin the lens/disc + pulse the ring. */
-  tick(deltaSeconds: number, time = performance.now()): void {
+  /** Spin the lens/disc + pulse the ring + feed the lensing post-process. */
+  tick(deltaSeconds: number, time = performance.now(), playerPosition?: Vector3): void {
     if (!this.active) return;
     if (this.lens) this.lens.rotation.z += deltaSeconds * 0.6;
     if (this.disc) this.disc.rotation.z += deltaSeconds * 0.2;
@@ -181,6 +235,34 @@ export class EndBlackHole {
       (this.lens.material as StandardMaterial).emissiveColor = new Color3(1.0 * pulse, 0.75 * pulse, 0.45 * pulse);
     }
     if (this.stars) this.stars.start();
+    this.updateLens(playerPosition ?? this.core?.position ?? Vector3.Zero());
+  }
+
+  /** Project the hole to screen space and warp the framebuffer around it. */
+  private updateLens(playerPosition: Vector3): void {
+    if (!this.lensPP || !this.core || !this.camera) return;
+    const engine = this.scene.getEngine();
+    const width = engine.getRenderWidth();
+    const height = engine.getRenderHeight();
+    const aspect = width / Math.max(1, height);
+    const identity = Matrix.Identity();
+    const viewport = this.camera.viewport.toGlobal(width, height);
+    const projected = Vector3.Project(this.core.position, identity, this.scene.getTransformMatrix(), viewport);
+    const cx = projected.x / width;
+    const cy = 1 - projected.y / height;
+    const forward = this.camera.getForwardRay().direction;
+    const toHole = this.core.position.subtract(playerPosition).normalize();
+    const facing = Vector3.Dot(forward, toHole);
+    const distance = Vector3.Distance(this.core.position, playerPosition);
+    const onScreen = facing > 0 && cx > -0.6 && cx < 1.6 && cy > -0.6 && cy < 1.6;
+    const apparentRadius = Math.min(0.55, (this.horizonRadius / Math.max(1, distance)) * 0.85);
+    const strength = onScreen ? Math.min(1, 26 / Math.max(1, distance)) : 0;
+    this.lensPP.onApply = (effect) => {
+      effect.setFloat2('holeCenter', cx, cy);
+      effect.setFloat('holeRadius', apparentRadius);
+      effect.setFloat('strength', strength);
+      effect.setFloat('aspect', aspect);
+    };
   }
 
   /**
@@ -222,7 +304,7 @@ export class EndBlackHole {
 
   dispose(): void {
     this.core?.dispose(); this.lens?.dispose(); this.disc?.dispose(); this.voidSphere?.dispose();
-    this.warpRing?.dispose(); this.stars?.dispose();
+    this.warpRing?.dispose(); this.stars?.dispose(); this.disposeLens();
     this.core = this.lens = this.disc = this.voidSphere = this.warpRing = null;
     this.stars = null;
   }
