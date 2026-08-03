@@ -5,11 +5,11 @@ export const BUILD_STAMP = 2026080221;
  * Where the EAOIN 2.0 alpha preview is hosted on our single live site.
  *
  * The alpha is packaged as a sub-directory of the stable build (Alternative A),
- * so it lives at `./alpha/` on the same origin as the stable v1.0.0 release.
- * The Alpha Launcher menu button navigates here to bridge seamlessly to the
- * alpha preview without leaving the live URL track.
+ * so it lives at `./alpha/` on the same origin. The `?launch=1` query makes the
+ * alpha skip its launcher boot + version-select and land straight on the title
+ * screen, so clicking Alpha Launcher seamlessly bridges into the alpha.
  */
-export const ALPHA_URL = './alpha/';
+export const ALPHA_URL = './alpha/?launch=1';
 export const RELEASE_LABEL = `EAOIN ${GAME_VERSION} — ${RELEASE_NAME}`;
 export const RELEASE_TAGLINE = 'Official Public Release — Terrain Revamp • The Creator Endgame • 71 Memory Shards';
 export const RELEASE_FEATURES = [
