@@ -56,6 +56,7 @@ import { aiReply, npcPersona } from '../ai/AIAssistant';
 import { ScreenSystem } from '../effects/ScreenSystem';
 import { ColoredLighting } from '../effects/ColoredLighting';
 import { WorldsEdgeRuntime } from '../effects/WorldsEdgeRuntime';
+import { SevereWeather } from '../effects/SevereWeather';
 import { TNT_BLAST_RADIUS, TNT_FUSE_SECONDS, detonateTNT } from '../effects/ExplosionEffects';
 import { LogicRuntime } from '../redstone/LogicRuntime';
 import { configureSceneLighting, SceneLightingHandles } from '../rendering/SceneLighting';
@@ -568,6 +569,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const lighting = configureSceneLighting(scene, spawn);
       // Storm lightning + meteors/comets that streak across the sky and crash.
       const weatherEffects = new WeatherEffects(scene, lighting.sun, lighting.sky);
+      // 2.0 — severe weather: tornadoes, blizzards, sandstorms, meteor showers.
+      const severeWeather = new SevereWeather(scene);
       const moonEvents = new MoonEvents();
       const specialEvents = new SpecialEvents();
       const configureTerrainShadow = (mesh: Mesh): void => {
@@ -1518,6 +1521,19 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         physics.update(deltaSeconds);
         // Storm lightning flashes + meteors/comets that streak and crash.
         weatherEffects.update(deltaSeconds, atmosphere.getProfile().weather, camera.position, 0.55, 0.42);
+        // 2.0 — severe weather (tornado/blizzard/sandstorm/meteor shower) with a
+        // wandering tornado that pulls the player toward its funnel.
+        {
+          const weather = atmosphere.getProfile().weather;
+          const severeType =
+            weather === 'rain' ? 'tornado' as const
+            : weather === 'snowstorm' ? 'blizzard' as const
+            : weather === 'sandstorm' ? 'sandstorm' as const
+            : weather === 'ashfall' || weather === 'embers' ? 'meteorshower' as const
+            : 'none' as const;
+          const severe = severeWeather.update(deltaSeconds, severeType, camera.position);
+          if (severe.pull) camera.position.addInPlace(severe.pull.scale(deltaSeconds));
+        }
         // Moon events: blood/crimson/full moon tint the night and raise hostile
         // spawn pressure. Only at night.
         moonEvents.update(deltaSeconds);
@@ -2685,7 +2701,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); severeWeather.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 
