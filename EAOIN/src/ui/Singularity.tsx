@@ -13,6 +13,7 @@
  * it reads as a genuine lensing effect, not a model with a black sprite.
  */
 import { useEffect, useRef, useState } from 'react';
+import { ARG_FRAGMENTS, getARG } from '../arg/ARGStoryline';
 
 const VERT = `
   attribute vec2 a_pos;
@@ -103,6 +104,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [journey, setJourney] = useState(false);
+  const [fragments, setFragments] = useState(() => getARG().getState().collected);
+  const [argMsg, setArgMsg] = useState<string | null>(null);
+
+  const collectFragment = (dimension: string) => {
+    const frag = getARG().collect(dimension);
+    if (frag) {
+      setFragments(getARG().getState().collected);
+      setArgMsg(`🔎 Fragment found: ${frag.emoji} ${frag.title} — "${frag.text}"`);
+    } else {
+      setArgMsg('This fragment is already yours.');
+    }
+    window.setTimeout(() => setArgMsg(null), 4000);
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -226,6 +240,25 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         {!journey
           ? <button className="singularity-dive" onClick={startJourney}>🕳 Dive In</button>
           : <button className="singularity-dive" onClick={resetJourney}>↻ Surface</button>}
+      </div>
+
+      <div className="singularity-arg">
+        <div className="singularity-arg-head">🧬 ARG — Recover the Key</div>
+        <div className="singularity-arg-progress">
+          <div className="singularity-arg-bar"><div className="singularity-arg-fill" style={{ width: `${Math.round((fragments.length / ARG_FRAGMENTS.length) * 100)}%` }} /></div>
+          <span>{fragments.length}/{ARG_FRAGMENTS.length} fragments</span>
+        </div>
+        <div className="singularity-arg-glyphs">
+          {ARG_FRAGMENTS.map((f) => (
+            <button key={f.id} className={`singularity-glyph ${fragments.includes(f.id) ? 'found' : ''}`}
+              onClick={() => collectFragment(f.id)} title={f.title}>
+              {fragments.includes(f.id) ? f.glyph : f.emoji}
+            </button>
+          ))}
+        </div>
+        <p className="singularity-arg-hint">Click a fragment to recover it. Gather all {ARG_FRAGMENTS.length} to complete the key.</p>
+        {argMsg && <p className="singularity-arg-msg">{argMsg}</p>}
+        {getARG().isKeyComplete() && <p className="singularity-arg-key">🔑 The key is <b>EAOIN</b> — enter it to unlock the secret ending.</p>}
       </div>
 
       {noteOpen && (

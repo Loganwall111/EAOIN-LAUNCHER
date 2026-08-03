@@ -39,6 +39,8 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [matrixBg, setMatrixBg] = useState(() => (localStorage.getItem('eaoin_launcher_matrix') === '1'));
   const [debug, setDebug] = useState<LauncherDebugSettings>(() => defaultDebugSettings());
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [aiInput, setAiInput] = useState('');
@@ -100,11 +102,30 @@ export default function LauncherScreen({ state, onSelect, onLaunch, onInstalled,
         {motes.map((m) => <span key={m.id} className="launcher-mote" style={{ left: `${m.left}%`, width: m.size, height: m.size, animationDelay: `${m.delay}s`, animationDuration: `${m.duration}s` }} />)}
       </div>
 
+      {/* Matrix-green background overlay (2.0 update part 2) */}
+      <div className={`launcher-matrix-bg ${matrixBg ? 'on' : ''}`} aria-hidden="true" />
+
       {/* Studio name at the very top */}
       <header className="launcher-header">
         <div className="launcher-studio">ONEBLOCKAWAY STUDIOS</div>
         <div className="launcher-wordmark">EAOIN LAUNCHER</div>
+        <button className="launcher-settings-btn" onClick={() => setSettingsOpen((o) => !o)} aria-label="Launcher settings">⚙</button>
       </header>
+
+      {settingsOpen && (
+        <div className="launcher-settings">
+          <div className="ls-title">⚙ Launcher Settings</div>
+          <label className="ls-row">
+            <span>Matrix-green background</span>
+            <input type="checkbox" checked={matrixBg} onChange={() => {
+              const v = !matrixBg;
+              setMatrixBg(v);
+              try { localStorage.setItem('eaoin_launcher_matrix', v ? '1' : '0'); } catch { /* ignore */ }
+            }} />
+          </label>
+          <button className="ls-close" onClick={() => setSettingsOpen(false)}>Close</button>
+        </div>
+      )}
 
       {/* System update at the top */}
       <div className="launcher-update">

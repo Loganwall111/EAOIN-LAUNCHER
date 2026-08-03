@@ -286,3 +286,30 @@
 .launcher-ai-msg.ai { color: #cfe0ff; }
 .launcher-ai-msg.you { color: #9fe0b0; }
 .launcher-ai-input input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(120,160,255,0.4); background: rgba(0,0,0,0.4); color: #fff; }
+
+/* --- 2.0 update part 2: launcher background overhaul + settings --- */
+.launcher-header { position: relative; }
+.launcher-settings-btn {
+  position: absolute; top: 10px; right: 16px; width: 42px; height: 42px; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 20px;
+}
+.launcher-settings-btn:hover { filter: brightness(1.2); }
+.launcher-settings {
+  position: absolute; top: 60px; right: 16px; z-index: 20; width: min(320px, 90vw); padding: 16px; border-radius: 12px;
+  background: rgba(8,12,20,0.96); border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  display: grid; gap: 12px; color: #fff;
+}
+.ls-title { font-weight: 800; font-size: 14px; color: #ffd166; }
+.ls-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.ls-close { padding: 9px; border-radius: 8px; cursor: pointer; background: rgba(98,216,255,0.15); border: 1px solid rgba(98,216,255,0.4); color: #fff; font-weight: 700; }
+
+/* Matrix-green background overlay (toggleable) */
+.launcher-matrix-bg {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.6) 0 2px, transparent 2px 3px),
+    radial-gradient(circle at 50% 30%, rgba(77,255,158,0.12), transparent 60%),
+    linear-gradient(180deg,#02070a,#02110a 60%,#01060a);
+  transition: opacity 0.4s ease;
+}
+.launcher-matrix-bg.on { opacity: 1; }

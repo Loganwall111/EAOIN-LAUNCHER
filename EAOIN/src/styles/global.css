@@ -3357,3 +3357,17 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-note-card p { margin: 0; line-height: 1.5; }
 .singularity-note-card p.spacer { height: 8px; }
 .singularity-note-close { padding: 10px; border-radius: 8px; cursor: pointer; background: rgba(168,121,255,0.15); border: 1px solid #a879ff; color: #fff; font-weight: 700; margin-top: 6px; }
+
+/* --- ARG panel inside Singularity --- */
+.singularity-arg { position: absolute; left: 20px; bottom: 20px; z-index: 6; width: min(300px, 88vw); padding: 14px; border-radius: 12px; background: rgba(8,10,18,0.9); border: 1px solid rgba(168,121,255,0.35); color: #e6e6ff; display: grid; gap: 8px; }
+.singularity-arg-head { font-weight: 800; color: #c4a8ff; font-size: 13px; }
+.singularity-arg-progress { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.singularity-arg-bar { flex: 1; height: 8px; border-radius: 6px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.singularity-arg-fill { height: 100%; background: linear-gradient(90deg,#a879ff,#4dff9e); transition: width 0.4s ease; }
+.singularity-arg-glyphs { display: flex; gap: 8px; }
+.singularity-glyph { width: 40px; height: 40px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 20px; display: grid; place-items: center; }
+.singularity-glyph.found { background: rgba(77,255,158,0.2); border-color: #4dff9e; color: #9fffd0; box-shadow: 0 0 12px rgba(77,255,158,0.3); }
+.singularity-arg-hint { font-size: 11px; color: rgba(200,215,238,0.7); }
+.singularity-arg-msg { font-size: 12px; color: #9fffd0; line-height: 1.4; }
+.singularity-arg-key { font-size: 13px; color: #ffd166; }
+.singularity-arg-key b { color: #4dff9e; font-size: 16px; letter-spacing: 2px; }
