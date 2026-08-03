@@ -23,7 +23,8 @@ export type RecipeID =
   | 'dimensional_door'
   | 'rocket_core'
   | 'moon_rock'
-  | 'omni_creator';
+  | 'omni_creator'
+  | 'god_mode_block';
 
 export interface RecipeCost {
   blockId: BlockID;
@@ -205,6 +206,16 @@ export const RECIPES: Recipe[] = [
       { blockId: 215, amount: 8 },  // Black Hole Fragments
     ],
     output: { type: 'block', blockId: 302, amount: 1 },
+  },
+  {
+    id: 'god_mode_block',
+    name: 'God Mode Block',
+    description: 'Piece together the Encryptor with a Memory Shard to forge the God Mode Block — the absolute next level.',
+    costs: [
+      { blockId: 339, amount: 1 }, // The Encryptor
+      { blockId: 308, amount: 1 }, // Memory Shard
+    ],
+    output: { type: 'block', blockId: 340, amount: 1 },
   },
 ];
 

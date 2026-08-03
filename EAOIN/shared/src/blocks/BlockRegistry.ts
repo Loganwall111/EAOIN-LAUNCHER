@@ -426,6 +426,8 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   336: { id: 336, name: 'Glow Water (Pink)', shortName: 'GK', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#ff8ad0', accentColor: '#ffd0ec' },
   337: { id: 337, name: 'Winter Water (Frozen)', shortName: 'WF', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#bfe8ff', accentColor: '#e0f6ff' },
   338: { id: 338, name: 'Beach Water (Turquoise)', shortName: 'WB', category: 'fluid', solid: false, transparent: true, hardness: 0.0, lightLevel: 0, emissive: false, stackSize: 64, color: '#6ad0c8', accentColor: '#c0f0ea' },
+  339: { id: 339, name: 'The Encryptor', shortName: 'EN', category: 'functional', solid: true, transparent: false, hardness: 50.0, lightLevel: 13, emissive: true, stackSize: 1, color: '#a879ff', accentColor: '#4dff9e' },
+  340: { id: 340, name: 'God Mode Block', shortName: 'GM', category: 'creative', solid: true, transparent: false, hardness: -1.0, lightLevel: 15, emissive: true, stackSize: 1, color: '#ffd166', accentColor: '#ffffff' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */

@@ -29,6 +29,7 @@ import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { AdvancedNoise } from './AdvancedNoise';
 import { DeepCaveGenerator } from './DeepCaves';
 import { mineshaftAnchorAt, placeMineshaft } from './MineshaftStructures';
+import { placeEAOINRemains } from './EAOINRemains';
 import { editKey, WorldBlockEdit } from './WorldSave';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
 import {
@@ -644,6 +645,8 @@ export class CavesAndCliffsTerrainGenerator {
     if (this.devBiomeMods.vegetation) this.applyVegetation(chunk);
     if (this.devBiomeMods.structures) this.applyStructures(chunk);
     if (this.devBiomeMods.structures) this.applyMineshafts(chunk);
+    // 2.0 Update Part 2 — the EAOIN company remains at the world centre.
+    if (this.devBiomeMods.structures) placeEAOINRemains(chunk);
     // Skylands must really have a void below their islands. The old
     // unconditional foundation painted a walkable floor across y=0.
     if (!this.config.floatingIslands && !this.config.skyIslands) {
