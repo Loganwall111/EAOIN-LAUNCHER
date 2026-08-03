@@ -277,6 +277,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const bossSummonRef = useRef<((bossId: string) => string) | null>(null);
   /** AI NPC spawn bridge (set inside the scene, called from chat). */
   const aiNpcRef = useRef<((name: string, x: number, y: number, z: number, colours?: { shirt: string; hair: string; skin: string; pants: string }) => void) | null>(null);
+  /** True once the player has entered the End black hole this session. */
+  const enteredBlackHoleRef = useRef(false);
   /** Latest player world position, kept fresh each frame for the chat/AI. */
   const playerPosRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
   /** Live boss state, drives the on-screen boss health bar. */
@@ -1705,10 +1707,37 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           const inEnd = chunkSource.getDimension() === 'end';
           endBlackHole.setActive(inEnd);
           if (inEnd) {
-            endBlackHole.ensure(camera.position.clone().add(new Vector3(0, 120, 0)));
+            const holePos = camera.position.clone().add(new Vector3(0, 120, 0));
+            endBlackHole.ensure(holePos);
             endBlackHole.tick(deltaSeconds);
             endBlackHole.pull(camera.position, tempRiftPull);
             camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 2));
+
+            // Crossing the event horizon = entering the black hole. It is a
+            // physical portal, not a solid block.
+            if (endBlackHole.entered(camera.position)) {
+              const blackHoleEnteredRef = enteredBlackHoleRef.current;
+              if (!blackHoleEnteredRef) {
+                enteredBlackHoleRef.current = true;
+                if (isCreativeMode(gameModeRef.current)) {
+                  // Creative: portal into a black void you can explore freely.
+                  endBlackHole.showVoid();
+                  const hc = endBlackHole.centre();
+                  camera.position.set(hc.x, hc.y - 1, hc.z);
+                  streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+                  forceTerrainCoverage = true;
+                  audio.play('ui', settingsRef.current);
+                  showActionMessage('You fall into the black hole — an endless black void surrounds you.');
+                } else {
+                  // Survival: spaghettification — torn apart and killed.
+                  showActionMessage('☠ Spaghettification — the black hole pulls you apart…');
+                  const next = applyDamage(survivalStatsRef.current, 9999);
+                  survivalStatsRef.current = next; publishSurvivalStats(next);
+                  setDead(true);
+                  audio.play('explosion', settingsRef.current);
+                }
+              }
+            }
           }
         }
         // 1.0 — tick command-block system (repeating/impulse/chain).
