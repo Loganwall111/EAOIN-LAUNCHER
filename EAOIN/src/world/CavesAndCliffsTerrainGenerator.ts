@@ -29,7 +29,6 @@ import { Chunk, CHUNK_HEIGHT, CHUNK_SIZE } from './Chunk';
 import { AdvancedNoise } from './AdvancedNoise';
 import { DeepCaveGenerator } from './DeepCaves';
 import { editKey, WorldBlockEdit } from './WorldSave';
-import { mineshaftAnchorAt, placeMineshaft } from './MineshaftStructures';
 import { getWorldLayout, SPAWN_PROTECTED_RADIUS } from './WorldDistribution';
 import {
   getBiome,
@@ -643,7 +642,6 @@ export class CavesAndCliffsTerrainGenerator {
     if (this.devBiomeMods.vegetation) this.applyBorderVegetation(chunk);
     if (this.devBiomeMods.vegetation) this.applyVegetation(chunk);
     if (this.devBiomeMods.structures) this.applyStructures(chunk);
-    if (this.devBiomeMods.structures) this.applyMineshafts(chunk);
     // Skylands must really have a void below their islands. The old
     // unconditional foundation painted a walkable floor across y=0.
     if (!this.config.floatingIslands && !this.config.skyIslands) {
@@ -2069,18 +2067,6 @@ export class CavesAndCliffsTerrainGenerator {
         this.placeVolcano(chunk, wx, wz);
       }
     });
-  }
-
-  /**
-   * Mineshafts in caves — regular Minecraft-style abandoned shafts (with a
-   * rarer "Black Mineshaft" deep variant) carved into the rock across every
-   * dimension. Uses the shared MineshaftStructures builder so the Overworld
-   * and the per-dimension terrains all produce the same style of shaft.
-   */
-  private applyMineshafts(chunk: Chunk): void {
-    const shaft = mineshaftAnchorAt(chunk.x * CHUNK_SIZE, chunk.z * CHUNK_SIZE);
-    if (!shaft) return;
-    placeMineshaft(chunk, shaft);
   }
 
   private placeMonolith(chunk: Chunk, wx: number, wy: number, wz: number): void {
