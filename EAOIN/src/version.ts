@@ -1,6 +1,15 @@
 export const GAME_VERSION = '2.0.0';
 export const RELEASE_NAME = 'The Final Release — Coloured Lighting & World\u2019s Edge';
 export const BUILD_STAMP = 2026080221;
+/**
+ * Where the EAOIN 2.0 alpha preview is hosted on our single live site.
+ *
+ * The alpha is packaged as a sub-directory of the stable build (Alternative A),
+ * so it lives at `./alpha/` on the same origin as the stable v1.0.0 release.
+ * The Alpha Launcher menu button navigates here to bridge seamlessly to the
+ * alpha preview without leaving the live URL track.
+ */
+export const ALPHA_URL = './alpha/';
 export const RELEASE_LABEL = `EAOIN ${GAME_VERSION} — ${RELEASE_NAME}`;
 export const RELEASE_TAGLINE = 'Official Public Release — Terrain Revamp • The Creator Endgame • 71 Memory Shards';
 export const RELEASE_FEATURES = [
