@@ -39,6 +39,7 @@ const FRAG = `
   uniform float u_diskThickness;
   uniform float u_gravity;   // 1.0 = natural Schwarzschild strength
   uniform float u_aspect;
+  uniform int u_stage;       // 0=hole, 1=neural, 2=asteroids, 3=planet, 4=house, 5=monitor
 
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
@@ -48,6 +49,7 @@ const FRAG = `
   const float MAX_DIST = 90.0;
 
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+  float hash1(float n){ return fract(sin(n)*43758.5453); }
   float noise(vec2 p){
     vec2 i=floor(p), f=fract(p);
     f=f*f*(3.0-2.0*f);
@@ -58,12 +60,169 @@ const FRAG = `
   // A starfield sampled in the ray's final (escaped) direction.
   vec3 starfield(vec3 dir){
     vec2 p = vec2(dir.z, dir.x) * 60.0 + dir.y * 30.0;
-    float star = step(0.986, hash(floor(p)));
+    float star = step(0.984, hash(floor(p)));
     vec3 col = vec3(0.7,0.85,1.0) * star * 0.9;
-    // faint nebula gradient
-    float neb = noise(dir.xy * 3.0 + dir.z);
+    float neb = noise(dir.xy * 3.0 + vec2(dir.z, dir.z));
     col += vec3(0.25,0.06,0.4) * neb * 0.25;
     col += vec3(0.02,0.04,0.09);
+    return col;
+  }
+
+  // ---- SDF helpers for the journey worlds ----
+  float sdSphere(vec3 p, float r){ return length(p)-r; }
+  float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0); }
+  float sdPlane(vec3 p, float y){ return p.y - y; }
+  float sdSegment(vec3 p, vec3 a, vec3 b, float r){
+    vec3 pa = p-a, ba = b-a;
+    float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+    return length(pa-ba*h) - r;
+  }
+
+  // Neural network: a glowing 3D lattice of nodes + synapses.
+  float mapNeural(vec3 p, out int mat){
+    float d = 1e9;
+    mat = 0;
+    // Nodes on a grid.
+    vec3 cell = floor(p*0.7 + 0.5);
+    vec3 local = p*0.7 - cell;
+    float node = sdSphere(local, 0.22);
+    // Random node sizes / glow.
+    float rnd = hash(cell.xy + vec2(cell.z*7.3, cell.z*7.3));
+    if (node < d) { d = node; mat = (rnd > 0.5) ? 1 : 2; }
+    // Synapse segments along each axis between neighbours.
+    vec3 c2 = cell + vec3(1,0,0);
+    vec3 l2 = p*0.7 - c2;
+    float seg = sdSegment(p*0.7, cell, c2, 0.04);
+    if (seg < d) { d = seg; mat = 3; }
+    return d / 0.7;
+  }
+
+  // Asteroid field: drifting rocks.
+  float mapAsteroids(vec3 p, out int mat){
+    float d = 1e9;
+    mat = 0;
+    for (int i = 0; i < 14; i++) {
+      float hx = hash1(float(i)*3.1);
+      float hy = hash1(float(i)*7.7);
+      float hz = hash1(float(i)*13.3);
+      float hs = 0.2 + hash1(float(i)*29.0)*0.5;
+      vec3 c = vec3((hx-0.5)*26.0, (hy-0.5)*26.0, (hz-0.5)*26.0);
+      c.y += sin(u_time*0.3 + hx*6.28)*2.0;
+      float r = sdSphere(p-c, hs);
+      if (r < d) { d = r; mat = 4; }
+    }
+    return d;
+  }
+
+  // Minecraft square planet: a big blocky cube with grass top + dirt sides.
+  float mapPlanet(vec3 p, out int mat){
+    float d = sdBox(p, vec3(3.2,3.2,3.2));
+    mat = 5;
+    // Blocky micro-relief on the surface.
+    float surf = max(d, -0.02);
+    vec3 q = p / max(1e-4, length(p)) * 3.2; // point on cube surface dir
+    // colour decided later by which face; return distance with small bump
+    return surf + (noise(q.xy*8.0 + vec2(q.z*3.0, q.z*3.0)) - 0.5)*0.04;
+  }
+
+  vec3 rotZ(vec3 p, float a){ float c=cos(a),s=sin(a); return vec3(c*p.x-s*p.y, s*p.x+c*p.y, p.z); }
+  vec3 rotY(vec3 p, float a){ float c=cos(a),s=sin(a); return vec3(c*p.x+s*p.z, p.y, -s*p.x+c*p.z); }
+
+  // The House: a little house on a ground plane with a glowing window.
+  float mapHouse(vec3 p, out int mat){
+    float g = sdPlane(p, -1.4);
+    float body = sdBox(p - vec3(0,-0.7,0), vec3(1.5,0.7,1.1));
+    // pyramid-ish roof
+    vec3 rp = p - vec3(0,0.7,0);
+    float roof2 = max(abs(rp.y - 0.4), length(vec2(abs(rp.x), abs(rp.z)) - 1.1) - 0.9);
+    float d = min(body, roof2);
+    mat = 6;
+    // glowing window
+    float win = sdBox(p - vec3(0.0, -0.6, 1.05), vec3(0.4,0.4,0.06));
+    if (win < d) { d = win; mat = 7; }
+    d = min(d, g);
+    return d;
+  }
+
+  // The Monitor: a floating computer screen.
+  float mapMonitor(vec3 p, out int mat){
+    float body = sdBox(p, vec3(1.4,1.0,0.2));
+    float screen = sdBox(p - vec3(0,0,0.05), vec3(1.2,0.82,0.02));
+    mat = 8;
+    if (screen < body) { mat = 9; return screen; }
+    return body;
+  }
+
+  // Unified scene map for journey stages.
+  float mapWorld(vec3 p, out int mat){
+    if (u_stage == 1) return mapNeural(p, mat);
+    if (u_stage == 2) return mapAsteroids(p, mat);
+    if (u_stage == 3) return mapPlanet(p, mat);
+    if (u_stage == 4) return mapHouse(p, mat);
+    return mapMonitor(p, mat);
+  }
+
+  vec3 calcNormal(vec3 p){
+    int m;
+    vec2 e = vec2(0.001, 0.0);
+    return normalize(vec3(
+      mapWorld(p+e.xyy, m)-mapWorld(p-e.xyy, m),
+      mapWorld(p+e.yxy, m)-mapWorld(p-e.yxy, m),
+      mapWorld(p+e.yyx, m)-mapWorld(p-e.yyx, m)));
+  }
+
+  vec3 colourMat(int mat, vec3 p, vec3 n, vec3 ro){
+    if (mat == 1) return vec3(0.3,0.8,1.0);       // cyan node
+    if (mat == 2) return vec3(1.0,0.35,0.7);      // pink node
+    if (mat == 3) return vec3(0.4,0.9,1.0)*0.5;   // synapse
+    if (mat == 4) return vec3(0.45,0.4,0.38);     // asteroid rock
+    if (mat == 5) {
+      // Minecraft planet: grass top, dirt/stone sides, blue bottom
+      if (n.y > 0.6) return vec3(0.42,0.76,0.26);
+      if (n.y < -0.6) return vec3(0.16,0.2,0.5);
+      if (abs(n.x) > 0.8) return vec3(0.54,0.36,0.2);
+      return vec3(0.55,0.55,0.6);
+    }
+    if (mat == 6) return vec3(0.65,0.45,0.25);    // wood house
+    if (mat == 7) return vec3(1.0,0.85,0.4);      // glowing window
+    if (mat == 8) return vec3(0.12,0.12,0.15);    // monitor frame
+    return vec3(0.05,0.2,0.25);                   // screen
+  }
+
+  vec3 renderWorld(vec3 ro, vec3 rd){
+    vec3 col = vec3(0.0);
+    float t = 0.0;
+    int mat = 0;
+    bool hit = false;
+    for (int i = 0; i < 90; i++) {
+      vec3 p = ro + rd*t;
+      int m;
+      float d = mapWorld(p, m);
+      if (d < 0.0015) { hit = true; mat = m; break; }
+      t += d;
+      if (t > 40.0) break;
+    }
+    if (hit) {
+      vec3 p = ro + rd*t;
+      vec3 n = calcNormal(p);
+      vec3 base = colourMat(mat, p, n, ro);
+      vec3 lightDir = normalize(vec3(0.4,0.9,0.3));
+      float diff = max(dot(n, lightDir), 0.0);
+      float amb = 0.25 + 0.25*n.y;
+      col = base*(amb + diff*0.9);
+      // glow on nodes/synapse/window/screen
+      if (mat == 1 || mat == 2) col += vec3(0.3,0.8,1.0)*0.6;
+      if (mat == 3) col += vec3(0.4,0.9,1.0);
+      if (mat == 7) col += vec3(1.0,0.85,0.4)*0.8;
+      if (mat == 9) {
+        // screen glow + scanlines + "EAOIN" flicker
+        vec2 sc = p.xz*6.0;
+        float scan = 0.5 + 0.5*sin(p.x*60.0 - u_time*3.0);
+        col = vec3(0.1,0.6,0.4)*scan + vec3(0.05,0.3,0.2);
+      }
+    } else {
+      col = starfield(rd);
+    }
     return col;
   }
 
@@ -78,6 +237,14 @@ const FRAG = `
     float fov = 1.35; // ~1/tan(fov/2); bigger = wider
     vec3 dir = normalize(ndc.x*right + ndc.y*up + fwd*fov);
 
+    // ---- Journey worlds: render a distinct scene per stage ----
+    if (u_stage >= 1) {
+      vec3 col = renderWorld(u_camPos, dir);
+      col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
+      gl_FragColor = vec4(col, 1.0);
+      return;
+    }
+
     vec3 pos = u_camPos;
     vec3 ray = dir;
     vec3 col = vec3(0.0);
@@ -89,39 +256,34 @@ const FRAG = `
       float r = length(pos);
       float h = RS * u_gravity; // scaled horizon
 
-      // ADAPTIVE step: tiny near the horizon, large far away.
       float stepLen = clamp((r - h) * 0.4, 0.012, 1.4);
       if (r < h * 1.25) stepLen = 0.01;
 
       // Gravitational deflection: bend the ray toward the hole ~ 1/r^2.
-      // (Simplified Schwarzschild: the stronger the field, the more the bend.)
       vec3 gAcc = -h * 0.8 / max(r*r, 1e-4) * (pos / max(r, 1e-4));
       ray = normalize(ray + gAcc * stepLen * 0.5);
 
-      // Accretion disk: a thin disc in the y=0 plane between inner/outer.
-      // We accumulate its glow when the ray crosses the plane, which (because
-      // of the bending above) also lights the part that wraps OVER and UNDER
-      // the hole — the Interstellar look.
+      // Accretion disk with extra glow.
       float diskRad = length(pos.xz);
       float y = pos.y;
       if (abs(y) < u_diskThickness && diskRad > DISK_INNER && diskRad < DISK_OUTER) {
         float innerT = 1.0 - (diskRad - DISK_INNER)/(DISK_OUTER - DISK_INNER);
         float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*0.6);
         float edge = smoothstep(0.0, 1.0, innerT);
-        // hotter/brighter toward the inner edge
         vec3 diskCol = vec3(1.0,0.62,0.28)*edge + vec3(0.6,0.2,0.05);
         float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
-        col += diskCol * swirl * thickFade * (0.5 + innerT*0.7) * 0.6;
+        col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7;
       }
 
-      // Advance.
+      // Photon-ring / bloom halo around the horizon for extra glow.
+      float rglow = max(r - h, 0.0);
+      col += vec3(1.0,0.85,0.6) * exp(-rglow*8.0) * 0.35;
+
       pos += ray * stepLen;
       t += stepLen;
 
-      // Captured by the event horizon → pure black (no light escapes).
       if (r < h) {
-        // Photon-ring glow just outside the horizon.
-        col += vec3(1.0,0.95,0.85) * smoothstep(h, h*1.5, r) * 0.25;
+        col += vec3(1.0,0.95,0.85) * smoothstep(h, h*1.5, r) * 0.35;
         col *= 0.0;
         escaped = false;
         break;
@@ -130,13 +292,12 @@ const FRAG = `
     }
 
     if (escaped || t >= MAX_DIST) {
-      // Light escaped the hole: paint the background starfield along the
-      // final ray direction (which may have been bent around the hole).
       col += starfield(ray);
     }
 
-    // Subtle vignette for cinematic feel.
-    col *= 0.55 + 0.45 * smoothstep(1.3, 0.15, length(ndc));
+    // Glow bloom / lift so the hole reads bright and luminous.
+    col += col*col*0.4;
+    col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -184,6 +345,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   gravityRef.current = gravity;
 
   const camRef = useRef<Camera>({ yaw: 0.6, pitch: 0.32, dist: 11 });
+  const stageRef = useRef(0);
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -241,6 +403,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       diskThickness: gl.getUniformLocation(prog, 'u_diskThickness'),
       gravity: gl.getUniformLocation(prog, 'u_gravity'),
       aspect: gl.getUniformLocation(prog, 'u_aspect'),
+      stage: gl.getUniformLocation(prog, 'u_stage'),
     };
 
     const resize = () => {
@@ -305,6 +468,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.diskThickness, diskThicknessRef.current);
       gl.uniform1f(U.gravity, gravityRef.current);
       gl.uniform1f(U.aspect, gl.canvas.width / Math.max(1, gl.canvas.height));
+      gl.uniform1i(U.stage, stageRef.current);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -327,11 +491,17 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   // Holds a ref to startJourney so the render-loop callbacks can trigger it.
   const journeyRef = useRef(false);
   const startJourneyRef = useRef<() => void>(() => {});
+  const setStage = (next: number) => {
+    setStageIdx(next);
+    stageRef.current = next + 1; // shader stage 1=neural, 2=asteroids, ...
+  };
+
   startJourneyRef.current = () => {
     if (journeyRef.current) return;
     journeyRef.current = true;
     setJourney(true);
     setStageIdx(0);
+    stageRef.current = 1; // first journey world = neural network
     setNoteOpen(false);
     setPassword('');
     setSecretEnding(false);
@@ -343,6 +513,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     journeyRef.current = true;
     setJourney(true);
     setStageIdx(0);
+    stageRef.current = 1;
     setNoteOpen(false);
     setPassword('');
     setSecretEnding(false);
@@ -351,11 +522,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const advanceStage = () => {
     const next = stageIdx + 1;
     if (next >= JOURNEY_STAGES.length) return;
-    setStageIdx(next);
+    setStage(next);
   };
 
   const prevStage = () => {
-    setStageIdx(Math.max(0, stageIdx - 1));
+    setStage(Math.max(0, stageIdx - 1));
   };
 
   const submitPassword = () => {
@@ -373,6 +544,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     journeyRef.current = false;
     setJourney(false);
     setStageIdx(0);
+    stageRef.current = 0;
     setNoteOpen(false);
     if (secretEnding) getEndingTicket().read();
     setSecretEnding(false);
