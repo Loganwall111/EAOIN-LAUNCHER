@@ -122,9 +122,10 @@ Controller and touch/mobile controls can be enabled in **Settings → Gameplay**
 
 The latest build ships with **coloured lighting**, **World's Edge**, **rails & minecarts**, **stalactites/stalagmites**, glowing coloured water, cameras, TV/Computer screens, furniture, and the full **Super Settings** layer.
 
-Recent additions (both stable and the 2.0 alpha preview):
+Recent additions:
 - **💾 Save & Quit** — the pause menu now has a green **Save & Quit to Menu** button (plus periodic auto-save) that returns you to the main menu instead of the launcher.
-- **⛏️ Mineshafts in caves** — abandoned Minecraft-style mineshafts (with a rare deep **Black Mineshaft** variant) spawn inside the cave systems of every dimension.
+
+> ⛏️ **Mineshafts in caves** (with a rare deep **Black Mineshaft** variant) are currently in the **2.0 alpha preview** — try them at `/alpha/?launch=1`.
 
 Full changelog is shown in the in-game launcher.
 
