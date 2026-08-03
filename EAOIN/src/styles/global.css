@@ -3399,3 +3399,10 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-monitor-ok { margin: 0; color: #4dff9e; font-weight: 800; }
 .singularity-dive:disabled { opacity: 0.4; cursor: not-allowed; }
 .singularity-note-key { font-size: 16px; color: #ffd166; text-align: center; }
+
+/* --- God Mode tab (Super Settings) --- */
+.god-locked { display: grid; gap: 10px; padding: 8px 4px; }
+.god-locked-title { font-weight: 800; color: #ffd166; font-size: 14px; }
+.god-locked-desc { color: rgba(220,230,250,0.9); line-height: 1.5; font-size: 13px; }
+.god-locked-key { font-size: 13px; color: #c4a8ff; }
+.god-locked-key b { color: #4dff9e; font-size: 18px; letter-spacing: 2px; }

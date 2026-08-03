@@ -9,14 +9,16 @@
  */
 import { useState } from 'react';
 import { SuperSettings } from '../settings/SuperSettings';
+import { getGodMode } from '../arg/GodMode';
 
-type Tab = 'lighting' | 'world' | 'camera' | 'rt' | 'debug' | 'mods';
+type Tab = 'lighting' | 'world' | 'camera' | 'rt' | 'god' | 'debug' | 'mods';
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'lighting', label: 'Lighting', icon: '💡' },
   { id: 'world', label: 'World', icon: '🌍' },
   { id: 'camera', label: 'Camera', icon: '📷' },
   { id: 'rt', label: 'Ray Tracing', icon: '⚡' },
+  { id: 'god', label: 'God Mode', icon: '👑' },
   { id: 'debug', label: 'Debug', icon: '🐞' },
   { id: 'mods', label: 'Mods & Editor', icon: '🛠' },
 ];
@@ -131,6 +133,10 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
             </>
           )}
 
+          {tab === 'god' && (
+            <GodModePanel />
+          )}
+
           {tab === 'debug' && (
             <>
               <Row label="Show chunk borders">
@@ -165,5 +171,63 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * GodModePanel — the "God Mode" tab in Super Settings.
+ *
+ * Only available once the ARG is complete (God Mode unlocked). Lets you enable
+ * God Mode and toggle its powers: super edit, god flight, no damage, instant
+ * build and unlimited inventory. When locked it explains how to unlock it.
+ */
+function GodModePanel() {
+  const [god, setGod] = useState(getGodMode().get());
+  const refresh = () => setGod(getGodMode().get());
+
+  if (!god.unlocked) {
+    return (
+      <div className="god-locked">
+        <div className="god-locked-title">👑 God Mode is LOCKED</div>
+        <p className="god-locked-desc">
+          Complete the ARG to unlock God Mode — the gift of the Cosmic Girl.
+          Enter the Singularity, collect all {5} fragments across the dimensions,
+          zoom through the black hole, and enter the key at the monitor.
+        </p>
+        <p className="god-locked-key">The key: <b>EAOIN</b></p>
+      </div>
+    );
+  }
+
+  const set = (key: 'superEdit' | 'godFlight' | 'noDamage' | 'instantBuild' | 'unlimitedInventory', v: boolean) => {
+    getGodMode().set(key, v);
+    refresh();
+  };
+
+  return (
+    <>
+      <Row label="God Mode" hint="The gift of a lifetime — customize everything at once.">
+        <Toggle on={god.active} onClick={() => { getGodMode().toggleActive(); refresh(); }} label="God Mode" />
+      </Row>
+      {god.active && (
+        <>
+          <Row label="Super Edit" hint="Edit every block freely.">
+            <Toggle on={god.superEdit} onClick={() => set('superEdit', !god.superEdit)} label="Super edit" />
+          </Row>
+          <Row label="God Flight" hint="Fly anywhere, no limits.">
+            <Toggle on={god.godFlight} onClick={() => set('godFlight', !god.godFlight)} label="God flight" />
+          </Row>
+          <Row label="No Damage" hint="Invulnerable to everything.">
+            <Toggle on={god.noDamage} onClick={() => set('noDamage', !god.noDamage)} label="No damage" />
+          </Row>
+          <Row label="Instant Build" hint="Place and mine instantly.">
+            <Toggle on={god.instantBuild} onClick={() => set('instantBuild', !god.instantBuild)} label="Instant build" />
+          </Row>
+          <Row label="Unlimited Inventory" hint="Every block, endless.">
+            <Toggle on={god.unlimitedInventory} onClick={() => set('unlimitedInventory', !god.unlimitedInventory)} label="Unlimited inventory" />
+          </Row>
+        </>
+      )}
+    </>
   );
 }
