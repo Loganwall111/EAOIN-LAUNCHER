@@ -50,13 +50,15 @@ export interface TitleScreenProps {
   onOpenGuide: () => void;
   onOpenStats: () => void;
   onOpenFriends: () => void;
+  /** Open the hidden cosmic rift behind the '?' button. */
+  onOpenCosmicRift?: () => void;
 }
 
 export default function TitleScreen({
   appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onTutorial, onGameHub,
   onPortalGallery, onAlphaLauncher, onSingularity, onBackToStable, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
-  onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
+  onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends, onOpenCosmicRift,
 }: TitleScreenProps) {
   const [splash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
@@ -105,6 +107,7 @@ export default function TitleScreen({
       {/* ---- top-right icon rail ---- */}
       <div className="title-icon-rail">
         <button className="icon-btn back-stable" title="Back to Stable" aria-label="Back to Stable" onClick={onBackToStable}>⬅️</button>
+        <button className="icon-btn cosmic-rift" title="?" aria-label="Cosmic rift" onClick={onOpenCosmicRift}>?</button>
         <button className="icon-btn" title="Options" aria-label="Options" onClick={onOptions}>⚙</button>
         <button className="icon-btn" title="Guide" aria-label="Guide" onClick={onOpenGuide}>📖</button>
         <button className="icon-btn" title="Statistics" aria-label="Statistics" onClick={onOpenStats}>📊</button>

@@ -29,6 +29,7 @@ function renderTitle(overrides: Partial<Parameters<typeof TitleScreen>[0]> = {})
       onPortalGallery={noop}
       onAlphaLauncher={noop}
       onSingularity={noop}
+      onOpenCosmicRift={noop}
       onBackToStable={noop}
       onHorizonOS={noop}
       onMods={noop}

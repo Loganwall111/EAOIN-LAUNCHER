@@ -3426,3 +3426,27 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 }
 .singularity-slider { display: grid; gap: 4px; font-size: 12px; }
 .singularity-slider input[type="range"] { width: 100%; accent-color: #a879ff; }
+
+/* --- Cosmic Rift (hidden "?" screen) --- */
+.cosmic-rift { position: fixed; inset: 0; z-index: 960; overflow: hidden; background: #000; color: #fff; font-family: var(--ui-font, sans-serif); }
+.cosmic-rift-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cosmic-rift-head { position: absolute; top: 0; left: 0; right: 0; padding: 20px 28px; z-index: 5; text-align: center; background: linear-gradient(180deg, rgba(0,0,0,0.7), transparent); }
+.cosmic-rift-eyebrow { font: 800 12px var(--eaoin-pixel-font, monospace); letter-spacing: 3px; color: #c4a8ff; }
+.cosmic-rift-hint { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 13px; color: rgba(230,225,255,0.9); text-align: center; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 999px; }
+.cosmic-vision { position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; gap: 16px; text-align: center; background: rgba(5,2,10,0.5); }
+.cosmic-woman { font-size: 90px; filter: drop-shadow(0 0 20px rgba(200,160,255,0.8)); animation: womanGlow 1.2s ease-in-out infinite; }
+@keyframes womanGlow { 0%,100% { filter: drop-shadow(0 0 16px rgba(200,160,255,0.6)); } 50% { filter: drop-shadow(0 0 34px rgba(255,160,220,0.95)); } }
+.cosmic-dialogue { display: grid; gap: 8px; max-width: 480px; }
+.cosmic-dialogue p { margin: 0; font: 700 20px var(--eaoin-pixel-font, monospace); color: #e8ddff; text-shadow: 0 0 12px rgba(160,120,255,0.8); }
+.cosmic-dialogue p.typing::after { content: '▮'; animation: caretBlink 0.7s steps(2) infinite; color: #ffd166; }
+@keyframes caretBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+.cosmic-scare { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; gap: 14px; background: radial-gradient(circle, #2a0000, #000 70%); text-align: center; }
+.cosmic-face { font-size: 130px; filter: drop-shadow(0 0 30px rgba(255,0,0,0.9)); animation: scareShake 0.12s linear infinite; }
+.cosmic-face-eyes { display: flex; gap: 30px; justify-content: center; }
+.cosmic-face-eyes .eye { font-size: 70px; }
+.cosmic-face-eyes .red { filter: drop-shadow(0 0 20px rgba(255,0,0,1)); }
+.cosmic-face-mouth { font-size: 90px; filter: drop-shadow(0 0 24px rgba(200,0,0,0.8)); }
+@keyframes scareShake { 0%{transform:translate(0,0);} 25%{transform:translate(2px,-2px) scale(1.02);} 50%{transform:translate(-2px,1px);} 75%{transform:translate(1px,2px) scale(0.99);} 100%{transform:translate(-1px,-1px);} }
+.cosmic-scare-text { font: 900 22px var(--eaoin-pixel-font, monospace); color: #ff4444; text-shadow: 0 0 20px rgba(255,0,0,0.9); letter-spacing: 1px; }
+.icon-btn.cosmic-rift { background: linear-gradient(180deg,#3a1a5a,#1a0a2a); border-top-color: #a879ff; border-left-color: #a879ff; }
+.icon-btn.cosmic-rift:hover { background: linear-gradient(180deg,#5a2a8a,#2a1040); }

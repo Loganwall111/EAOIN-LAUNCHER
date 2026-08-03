@@ -5,7 +5,7 @@
  *  floating ruins, or alternate realities. They animate dynamically with
  *  distortion, edge flow, and particles.
  */
-import { Color3, Color4, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMaterial, Texture, Vector3 } from '@babylonjs/core';
+import { Color3, Color4, DynamicTexture, Mesh, MeshBuilder, ParticleSystem, Scene, StandardMaterial, Texture, Vector3 } from '@babylonjs/core';
 
 export type RiftContent = 'dimension' | 'stars' | 'nebula' | 'black_hole' | 'floating_ruins' | 'alternate_reality' | 'galaxy';
 
@@ -46,7 +46,35 @@ export class RealityRift {
     const innerMat = new StandardMaterial('rift_inner_mat', scene);
     innerMat.emissiveColor = Color3.Lerp(def.color1, def.color2, 0.5);
     innerMat.diffuseColor = new Color3(0, 0, 0);
-    innerMat.alpha = 0.28;
+    // Gravitational-lensing vortex: a warped, spiralling texture so the rift
+    // visibly bends the light around it, like a mini black hole.
+    const vortex = new DynamicTexture('rift_vortex_tex', { width: 128, height: 128 }, scene, false);
+    const vctx = vortex.getContext() as unknown as CanvasRenderingContext2D | null;
+    if (vctx) {
+      const cx = 64, cy = 64;
+      for (let a = 0; a < 12; a++) {
+        const ang = (a / 12) * Math.PI * 2;
+        const r0 = 14, r1 = 56;
+        const grad = vctx.createRadialGradient(
+          cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0, 2,
+          cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1, r1 - r0,
+        );
+        const cr = Math.floor(def.color2.r * 255), cg = Math.floor(def.color2.g * 255), cb = Math.floor(def.color2.b * 255);
+        grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.9)`);
+        grad.addColorStop(0.5, `rgba(${cr},${cg},${cb},0.25)`);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        vctx.strokeStyle = grad;
+        vctx.lineWidth = 4;
+        vctx.beginPath();
+        vctx.arc(cx, cy, (r0 + r1) / 2, ang, ang + 1.4);
+        vctx.stroke();
+      }
+      vctx.fillStyle = 'rgba(0,0,0,0.6)';
+      vctx.beginPath(); vctx.arc(cx, cy, 8, 0, Math.PI * 2); vctx.fill();
+      vortex.update();
+    }
+    innerMat.emissiveTexture = vortex;
+    innerMat.alpha = 0.4;
     this.innerMesh.material = innerMat;
     this.innerMesh.isPickable = false;
 
@@ -83,9 +111,13 @@ export class RealityRift {
     this.def.lifetime -= dt;
     this.mesh.rotation.z += this.def.rotationSpeed * dt;
     this.mesh.lookAt(camera);
+    // Counter-spin the inner vortex so the lensing swirl churns.
+    if (this.innerMesh) this.innerMesh.rotation.z -= this.def.rotationSpeed * dt * 1.6;
     const fade = Math.min(1, this.def.lifetime) * Math.min(1, (this.def.maxLifetime - this.def.lifetime) / 1.0);
     const mat = this.mesh.material as StandardMaterial;
-    if (mat) mat.alpha = 0.18 + 0.16 * (0.5 + 0.5 * Math.sin(performance.now() * 0.003)) * fade;
+    if (mat) mat.alpha = 0.2 + 0.18 * (0.5 + 0.5 * Math.sin(performance.now() * 0.003)) * fade;
+    const im = this.innerMesh.material as StandardMaterial;
+    if (im) im.alpha = 0.3 + 0.15 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004)) * fade;
   }
 
   isExpired(): boolean { return this.def.lifetime <= 0; }
