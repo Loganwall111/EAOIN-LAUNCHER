@@ -33,7 +33,10 @@ const QUICK_LINKS = [
   { name: 'Google', url: 'https://www.google.com', icon: '🔍' },
   { name: 'Bing', url: 'https://www.bing.com', icon: 'b' },
   { name: 'GitHub', url: 'https://github.com', icon: '🐙' },
-  { name: 'EAOIN Guide', url: 'https://loganwall111.github.io/workspace-019f9970-c7a8-70dc-b070-31b29d1f5b35/', icon: '🏔' },
+  { name: 'EAOIN Guide', url: 'https://loganwall111.github.io/EAOIN-LAUNCHER/', icon: '🏔' },
+  { name: 'EAOIN Alpha', url: 'https://loganwall111.github.io/EAOIN-LAUNCHER/alpha/?launch=1', icon: '🚀' },
+  { name: 'Singularity', url: 'about:singularity', icon: '🕳' },
+  { name: 'ARG Terminal', url: 'about:arg', icon: '🧬' },
 ];
 
 /** A few known hosts that refuse to be embedded in an iframe. */
@@ -152,7 +155,21 @@ export default function BrowserApp() {
         <button className="brw-new-tab" onClick={home}>+</button>
       </div>
 
-      {currentUrl === 'about:home' ? (
+      {currentUrl === 'about:singularity' ? (
+        <div className="browser-arg">
+          <div className="brw-home-logo">🕳 Singularity</div>
+          <p>The black hole is a shader, not a thing. Dive in from the main menu and zoom through — past the neural network, the asteroid field, and the square Minecraft planet — to the house, then the monitor.</p>
+          <p className="browser-arg-key">The key is <b>EAOIN</b>. Enter it to unlock what she left behind.</p>
+          <button className="brw-btn" onClick={home}>← Home</button>
+        </div>
+      ) : currentUrl === 'about:arg' ? (
+        <div className="browser-arg">
+          <div className="brw-home-logo">🧬 ARG Terminal</div>
+          <p>EAOIN was a company that built AI chips and AI apartments — and a girl who grew up inside them. She sent her son to a world named after the company, then sacrificed herself to a monster you only ever hear.</p>
+          <p>Collect the five fragments across the dimensions. Assemble the key. Let her return.</p>
+          <button className="brw-btn" onClick={home}>← Home</button>
+        </div>
+      ) : currentUrl === 'about:home' ? (
         <div className="browser-home">
           <div className="brw-home-logo"><span>🜁</span> Nebula</div>
           <div className="brw-search">

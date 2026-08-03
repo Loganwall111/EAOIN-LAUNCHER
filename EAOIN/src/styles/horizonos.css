@@ -385,3 +385,10 @@
 .tiny-mc-player { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; z-index: 2; filter: drop-shadow(0 0 4px #000); }
 .tiny-mc-cross { position: absolute; inset: 0; display: grid; place-items: center; color: #4dff9e; font-size: 12px; z-index: 3; }
 .tiny-mc-hint { padding: 5px 8px; font-size: 10px; color: #5a8a70; }
+
+/* --- Nebula Browser ARG pages --- */
+.browser-arg { flex: 1; overflow: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 28px; background: linear-gradient(180deg,#02070a,#02110a); color: #c8ffe0; font-family: var(--eaoin-pixel-font, monospace); }
+.browser-arg p { max-width: 560px; line-height: 1.6; }
+.browser-arg .brw-home-logo { margin-bottom: 8px; }
+.browser-arg-key { color: #ffd166; }
+.browser-arg-key b { color: #4dff9e; font-size: 18px; letter-spacing: 2px; }
