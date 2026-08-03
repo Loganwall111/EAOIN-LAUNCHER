@@ -8,6 +8,7 @@
  */
 import { useState } from 'react';
 import { getBossesByDimension } from '../creatures/BossRegistry';
+import { PORTAL_DEFS } from '../portals/PortalSystem';
 
 interface PortalEntry {
   id: string;
@@ -17,6 +18,7 @@ interface PortalEntry {
   colour: string;
   style: string;   // the portal look
   blurb: string;
+  build?: { label: string; hint: string };
 }
 
 const PORTALS: PortalEntry[] = [
@@ -28,8 +30,16 @@ const PORTALS: PortalEntry[] = [
   { id: 'nether2', dimension: 'volcanic_realm', name: 'Volcanic Realm', emoji: '🌋', colour: '#e0483f', style: 'Magma circle', blurb: 'Obsidian and basalt with rivers of molten lava.' },
 ];
 
+/** Pull the live build-technique recipe from PORTAL_DEFS where one exists. */
+function buildRecipeFor(dimension: string): { label: string; hint: string } | undefined {
+  const def = PORTAL_DEFS.find((d) => d.dimension === dimension);
+  if (!def?.build) return undefined;
+  return { label: def.build.label, hint: def.build.hint };
+}
+
 export default function PortalGallery({ onBack, onTravel }: { onBack: () => void; onTravel: (dimension: string) => void }) {
   const [selected, setSelected] = useState<PortalEntry>(PORTALS[0]);
+  const recipe = buildRecipeFor(selected.dimension);
 
   return (
     <div className="portal-gallery">
@@ -62,6 +72,13 @@ export default function PortalGallery({ onBack, onTravel }: { onBack: () => void
           </div>
           <h2>{selected.name}</h2>
           <p className="portal-blurb">{selected.blurb}</p>
+          {recipe && (
+            <div className="portal-recipe">
+              <strong>🔧 How to build this portal</strong>
+              <span className="portal-recipe-label">{recipe.label}</span>
+              <span className="portal-recipe-hint">{recipe.hint}</span>
+            </div>
+          )}
           <div className="portal-mobs">
             {getBossesByDimension(selected.dimension as never).slice(0, 3).map((b) => <span key={b.id} className="portal-mob">{b.emoji} {b.name}</span>)}
           </div>

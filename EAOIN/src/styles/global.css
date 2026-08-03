@@ -3119,6 +3119,13 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .portal-blurb { color: rgba(200,215,238,0.85); max-width: 420px; }
 .portal-mobs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .portal-mob { font-size: 12px; padding: 4px 10px; border-radius: 14px; background: rgba(120,160,255,0.15); }
+.portal-recipe {
+  display: grid; gap: 6px; padding: 14px 16px; max-width: 440px; text-align: left;
+  background: rgba(0,0,0,0.4); border-left: 4px solid var(--ui-cyan, #62d8ff); border-radius: 10px;
+}
+.portal-recipe strong { color: var(--ui-cyan, #62d8ff); font-size: 13px; }
+.portal-recipe-label { font-weight: 700; font-size: 13px; color: #ffd166; }
+.portal-recipe-hint { font-size: 12px; line-height: 1.5; color: rgba(210,225,245,0.9); }
 
 /* Game Hub */
 .gamehub-portals { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
