@@ -14,6 +14,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { ARG_FRAGMENTS, getARG } from '../arg/ARGStoryline';
+import { getGodMode } from '../arg/GodMode';
+import { getEndingTicket } from '../arg/EndingTicket';
 
 const VERT = `
   attribute vec2 a_pos;
@@ -100,10 +102,24 @@ const SINGULARITY_NOTE = [
   '— the Cosmic Girl',
 ];
 
+/** Deep-journey stages: zoom through the hole and past each layer. */
+const JOURNEY_STAGES = [
+  { id: 'neural', title: 'Neural Network', desc: 'Connections of brains pulse as you fall through the singularity.', zoom: 0.35 },
+  { id: 'asteroids', title: 'Asteroid Field', desc: 'Dust and rock scream past the lens.', zoom: 0.5 },
+  { id: 'planet', title: 'The Square Planet', desc: 'A Minecraft world, blocky and alive, hangs below.', zoom: 0.68 },
+  { id: 'house', title: 'The House', desc: 'At the very beginning of the world — a single house.', zoom: 0.82 },
+  { id: 'monitor', title: 'The Monitor', desc: 'A password prompt glows. Enter the key to continue.', zoom: 0.96 },
+] as const;
+
+
+
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [journey, setJourney] = useState(false);
+  const [stageIdx, setStageIdx] = useState(0);
+  const [password, setPassword] = useState('');
+  const [secretEnding, setSecretEnding] = useState(false);
   const [fragments, setFragments] = useState(() => getARG().getState().collected);
   const [argMsg, setArgMsg] = useState<string | null>(null);
 
@@ -205,16 +221,47 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     };
   }, []);
 
+  const currentStage = JOURNEY_STAGES[stageIdx];
+
   const startJourney = () => {
     setJourney(true);
-    (window as any).__singularityZoom?.(1);
-    // After zooming "through", reveal the note.
-    window.setTimeout(() => setNoteOpen(true), 1800);
+    setStageIdx(0);
+    setNoteOpen(false);
+    setPassword('');
+    setSecretEnding(false);
+    (window as any).__singularityZoom?.(JOURNEY_STAGES[0].zoom);
+  };
+
+  const advanceStage = () => {
+    const next = stageIdx + 1;
+    if (next >= JOURNEY_STAGES.length) return;
+    setStageIdx(next);
+    (window as any).__singularityZoom?.(JOURNEY_STAGES[next].zoom);
+  };
+
+  const prevStage = () => {
+    const next = Math.max(0, stageIdx - 1);
+    setStageIdx(next);
+    (window as any).__singularityZoom?.(JOURNEY_STAGES[next].zoom);
+  };
+
+  const submitPassword = () => {
+    // The key is "EAOIN" (or its numeric-phone code equivalent 32646). Case-insensitive.
+    const answer = password.trim().toLowerCase();
+    const correct = answer === 'eaoin' || answer === '32646';
+    if (correct) {
+      setSecretEnding(true);
+      setNoteOpen(true);
+      getGodMode().unlock();
+      getEndingTicket().grant();
+    }
   };
 
   const resetJourney = () => {
     setJourney(false);
+    setStageIdx(0);
     setNoteOpen(false);
+    setSecretEnding(false);
     (window as any).__singularityZoom?.(0);
   };
 
@@ -233,14 +280,44 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       </div>
 
       <div className="singularity-hint">
-        Move your mouse to pan around the lensing. {journey ? 'Descending into the hole…' : 'Click "Dive In" to zoom through.'}
+        Move your mouse to pan around the lensing. {journey ? `Descending: ${currentStage.title}` : 'Click "Dive In" to zoom through the hole.'}
       </div>
 
       <div className="singularity-actions">
         {!journey
           ? <button className="singularity-dive" onClick={startJourney}>🕳 Dive In</button>
-          : <button className="singularity-dive" onClick={resetJourney}>↻ Surface</button>}
+          : (
+            <>
+              <button className="singularity-dive" onClick={prevStage} disabled={stageIdx === 0}>◀ Back</button>
+              <button className="singularity-dive" onClick={advanceStage} disabled={stageIdx >= JOURNEY_STAGES.length - 1}>Deeper ▸</button>
+              <button className="singularity-dive" onClick={resetJourney}>↻ Surface</button>
+            </>
+          )}
       </div>
+
+      {journey && (
+        <div className="singularity-stage">
+          <div className="singularity-stage-title">{currentStage.title}</div>
+          <div className="singularity-stage-desc">{currentStage.desc}</div>
+          <div className="singularity-stage-track">
+            {JOURNEY_STAGES.map((s, i) => <span key={s.id} className={i <= stageIdx ? 'on' : ''} title={s.title} />)}
+          </div>
+
+          {currentStage.id === 'monitor' && (
+            <div className="singularity-monitor" onClick={(e) => e.stopPropagation()}>
+              <div className="singularity-monitor-head">🖥 EAOIN TERMINAL — ENTER PASSWORD</div>
+              <p className="singularity-monitor-hint">The key. The four letters worn into the world. Enter it to reach the other side.</p>
+              <div className="singularity-monitor-row">
+                <input className="singularity-monitor-input" value={password}
+                  onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitPassword()}
+                  placeholder="password" />
+                <button className="singularity-monitor-go" onClick={submitPassword}>Enter</button>
+              </div>
+              {secretEnding && <p className="singularity-monitor-ok">✓ Access granted.</p>}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="singularity-arg">
         <div className="singularity-arg-head">🧬 ARG — Recover the Key</div>
@@ -264,8 +341,15 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       {noteOpen && (
         <div className="singularity-note" onClick={() => setNoteOpen(false)}>
           <div className="singularity-note-card" onClick={(e) => e.stopPropagation()}>
-            <div className="singularity-note-head">📜 A Note</div>
-            {SINGULARITY_NOTE.map((line, i) => <p key={i} className={line === '' ? 'spacer' : ''}>{line}</p>)}
+            <div className="singularity-note-head">{secretEnding ? '💫 THE COSMIC GIRL RETURNS' : '📜 A Note'}</div>
+            {secretEnding ? (
+              <>
+                <p>You have recovered every fragment, assembled the key, and crossed to the other side of the planet.</p>
+                <p>The Cosmic Girl returns. She was never the monster — she was the one who sacrificed herself to it, and sent her son to a world named EAOIN so he could grow up.</p>
+                <p>Her message is a song, and her gift is <b>God Mode</b> — the power to build and dream anything, all at once.</p>
+                <p className="singularity-note-key">🎁 <b>GOD MODE UNLOCKED</b></p>
+              </>
+            ) : SINGULARITY_NOTE.map((line, i) => <p key={i} className={line === '' ? 'spacer' : ''}>{line}</p>)}
             <button className="singularity-note-close" onClick={() => setNoteOpen(false)}>Close</button>
           </div>
         </div>

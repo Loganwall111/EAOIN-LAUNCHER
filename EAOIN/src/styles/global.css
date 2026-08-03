@@ -3371,3 +3371,31 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-arg-msg { font-size: 12px; color: #9fffd0; line-height: 1.4; }
 .singularity-arg-key { font-size: 13px; color: #ffd166; }
 .singularity-arg-key b { color: #4dff9e; font-size: 16px; letter-spacing: 2px; }
+
+/* --- Singularity deep-journey stages + monitor + secret ending --- */
+.singularity-stage {
+  position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); z-index: 6;
+  width: min(460px, 92vw); padding: 16px 20px; border-radius: 14px; text-align: center;
+  background: rgba(8,10,20,0.92); border: 1px solid #a879ff; box-shadow: 0 0 40px rgba(168,121,255,0.25); color: #e6e6ff;
+  display: grid; gap: 8px;
+}
+.singularity-stage-title { font-weight: 800; font-size: 20px; color: #c4a8ff; }
+.singularity-stage-desc { font-size: 13px; color: rgba(220,230,250,0.9); line-height: 1.5; }
+.singularity-stage-track { display: flex; justify-content: center; gap: 6px; }
+.singularity-stage-track span { width: 34px; height: 5px; border-radius: 4px; background: rgba(255,255,255,0.15); }
+.singularity-stage-track span.on { background: #a879ff; }
+.singularity-monitor {
+  margin-top: 6px; padding: 14px; border-radius: 10px; background: #020a06; border: 1px solid #1a6a3a;
+  font-family: var(--eaoin-pixel-font, monospace); color: #7dffb4; text-align: left; display: grid; gap: 10px;
+}
+.singularity-monitor-head { font-weight: 800; color: #7dffb4; letter-spacing: 1px; }
+.singularity-monitor-hint { font-size: 12px; color: #9fdda8; line-height: 1.5; margin: 0; }
+.singularity-monitor-row { display: flex; gap: 8px; align-items: center; }
+.singularity-monitor-input {
+  flex: 1; padding: 9px 12px; background: #01050a; border: 1px solid #1a6a3a; color: #7dffb4;
+  font: 700 14px var(--eaoin-pixel-font, monospace); outline: none;
+}
+.singularity-monitor-go { padding: 9px 16px; cursor: pointer; background: rgba(60,255,160,0.15); border: 1px solid #4dff9e; color: #9fffd0; border-radius: 8px; font-weight: 700; }
+.singularity-monitor-ok { margin: 0; color: #4dff9e; font-weight: 800; }
+.singularity-dive:disabled { opacity: 0.4; cursor: not-allowed; }
+.singularity-note-key { font-size: 16px; color: #ffd166; text-align: center; }

@@ -33,12 +33,30 @@ describe('Singularity', () => {
     expect(onBack).toHaveBeenCalled();
   });
 
-  it('reveals the ARG note after diving in', () => {
+  it('dives in and advances through the journey stages', () => {
     vi.useFakeTimers();
     render(<Singularity onBack={noop} />);
     fireEvent.click(screen.getByRole('button', { name: /Dive In/ }));
-    act(() => { vi.advanceTimersByTime(2000); });
-    expect(screen.getByText('📜 A Note')).toBeTruthy();
-    expect(screen.getByText(/The key is EAOIN/)).toBeTruthy();
+    expect(screen.getByText('Neural Network')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    expect(screen.getByText('Asteroid Field')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    expect(screen.getByText('The Square Planet')).toBeTruthy();
+  });
+
+  it('unlocks the secret ending with the correct password', () => {
+    vi.useFakeTimers();
+    render(<Singularity onBack={noop} />);
+    fireEvent.click(screen.getByRole('button', { name: /Dive In/ }));
+    // advance to the monitor stage
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Deeper/ }));
+    expect(screen.getByText(/ENTER PASSWORD/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('password'), { target: { value: 'eaoin' } });
+    fireEvent.click(screen.getByRole('button', { name: /Enter/ }));
+    expect(screen.getByText(/THE COSMIC GIRL RETURNS/)).toBeTruthy();
+    expect(screen.getByText(/GOD MODE UNLOCKED/)).toBeTruthy();
   });
 });
