@@ -4,6 +4,7 @@ import { craftRecipe, RECIPES, RecipeID } from './crafting/RecipeBook';
 import MainMenu from './ui/MainMenu';
 import TitleScreen from './ui/TitleScreen';
 import HowToPlayGuide from './ui/HowToPlayGuide';
+import { ALPHA_URL } from './version';
 import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import HorizonOS from './ui/HorizonOS';
@@ -376,7 +377,7 @@ export default function App() {
             onSingleplayer={() => setAppPhase('worlds')}
             onMultiplayer={() => setAppPhase('multiplayer')}
             onHorizonOS={() => setAppPhase('horizonos')}
-            onAlphaLauncher={() => { window.location.assign('./alpha/'); }}
+            onAlphaLauncher={() => { window.location.assign(ALPHA_URL); }}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}
             onEditorMode={() => setAppPhase('editor')}
