@@ -208,21 +208,37 @@ const FRAG = `
       vec3 base = colourMat(mat, p, n, ro);
       vec3 lightDir = normalize(vec3(0.4,0.9,0.3));
       float diff = max(dot(n, lightDir), 0.0);
-      float amb = 0.25 + 0.25*n.y;
-      col = base*(amb + diff*0.9);
+      float amb = 0.3 + 0.3*n.y;
+      col = base*(amb + diff*1.0);
       // glow on nodes/synapse/window/screen
-      if (mat == 1 || mat == 2) col += vec3(0.3,0.8,1.0)*0.6;
+      if (mat == 1 || mat == 2) col += vec3(0.3,0.8,1.0)*0.7;
       if (mat == 3) col += vec3(0.4,0.9,1.0);
-      if (mat == 7) col += vec3(1.0,0.85,0.4)*0.8;
+      if (mat == 7) col += vec3(1.0,0.85,0.4)*0.9;
       if (mat == 9) {
         // screen glow + scanlines + "EAOIN" flicker
-        vec2 sc = p.xz*6.0;
         float scan = 0.5 + 0.5*sin(p.x*60.0 - u_time*3.0);
         col = vec3(0.1,0.6,0.4)*scan + vec3(0.05,0.3,0.2);
+      }
+      // Minecraft planet: add animated drifting clouds + a soft atmosphere.
+      if (mat == 5) {
+        vec3 q = normalize(p) * 3.4;
+        float cloud = noise(vec2(q.x*2.0 + u_time*0.12, q.z*2.0 - u_time*0.08));
+        cloud = smoothstep(0.45, 0.8, cloud);
+        col += vec3(1.0, 1.0, 0.95) * cloud * 0.5;
+        // faint blue atmosphere halo on the edges.
+        float atm = pow(clamp(1.0 - dot(n, normalize(ro - p)), 0.0, 1.0), 3.0);
+        col += vec3(0.3,0.55,1.0) * atm * 0.6;
+      }
+      // Asteroid sparkle: warm rim glow.
+      if (mat == 4) {
+        float rim = pow(clamp(1.0 - dot(n, normalize(ro - p)), 0.0, 1.0), 2.0);
+        col += vec3(1.0,0.7,0.4) * rim * 0.5;
       }
     } else {
       col = starfield(rd);
     }
+    // Bloom lift so every world glows.
+    col += col*col*0.35;
     return col;
   }
 
@@ -328,6 +344,21 @@ interface Camera {
   dist: number;
 }
 
+/**
+ * Map camera distance to a journey stage, purely physical (no buttons):
+ *   - far out  → black hole (stage 0)
+ *   - zoom in  → neural (1) → asteroids (2) → planet (3) → house (4) → monitor (5)
+ *   - zoom out / look back → reverse, seeing everything again.
+ */
+export function stageFromDist(dist: number): number {
+  if (dist >= 8) return 0;        // black hole
+  if (dist >= 6.2) return 1;      // neural network
+  if (dist >= 4.6) return 2;      // asteroid field
+  if (dist >= 3.2) return 3;      // Minecraft planet
+  if (dist >= 2.6) return 4;      // house
+  return 5;                        // monitor (deepest)
+}
+
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -346,6 +377,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
 
   const camRef = useRef<Camera>({ yaw: 0.6, pitch: 0.32, dist: 11 });
   const stageRef = useRef(0);
+  const lastStageRef = useRef(0);
+  const setStageIdxProxy = useRef<(s: number) => void>(() => {});
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -415,6 +448,9 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     window.addEventListener('resize', resize);
 
     // --- 3D camera: mouse drag orbits, wheel + keys zoom ---
+    // Physical zoom: camera distance drives the stage. Zoom in past each
+    // threshold and you fall into the next world; zoom back out (or turn
+    // around / look back) and you reverse to see everything again.
     const drag = { down: false, lastX: 0, lastY: 0 };
     const onPointerDown = (e: PointerEvent) => { drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY; };
     const onPointerMove = (e: PointerEvent) => {
@@ -427,12 +463,21 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
     };
     const onPointerUp = () => { drag.down = false; };
+    const applyZoom = () => {
+      // Recompute stage purely from camera distance.
+      const stage = stageFromDist(camRef.current.dist);
+      if (stage !== lastStageRef.current) {
+        lastStageRef.current = stage;
+        stageRef.current = stage;
+        // Sync React state (only when it changes).
+        setStageIdxProxy.current(stage);
+      }
+    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const c = camRef.current;
       c.dist = Math.max(2.2, Math.min(40, c.dist + e.deltaY * 0.02));
-      // Zooming far in = entering the hole → start the journey.
-      if (c.dist <= 2.6 && !journeyRef.current) startJourneyRef.current();
+      applyZoom();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       const c = camRef.current;
@@ -440,7 +485,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.6);
       if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
       if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
-      if (c.dist <= 2.6 && !journeyRef.current) startJourneyRef.current();
+      applyZoom();
     };
     canvas.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove);
@@ -451,6 +496,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     let raf = 0;
     const start = performance.now();
     const render = () => {
+      applyZoom(); // keep the stage in sync with camera distance every frame
       const t = (performance.now() - start) / 1000;
       const c = camRef.current;
       // Orbit camera: yaw around Y, pitch up/down, radius = dist.
@@ -488,46 +534,17 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     return cleanup;
   }, []);
 
-  // Holds a ref to startJourney so the render-loop callbacks can trigger it.
-  const journeyRef = useRef(false);
-  const startJourneyRef = useRef<() => void>(() => {});
-  const setStage = (next: number) => {
-    setStageIdx(next);
-    stageRef.current = next + 1; // shader stage 1=neural, 2=asteroids, ...
+  // Physical, button-free journey: stage is driven purely by camera zoom.
+  // Zoom in → fall deeper; zoom out / look back → reverse and see everything.
+  const isJourney = stageIdx >= 1;
+
+  // Bridge so the render-loop's applyZoom can update React state.
+  setStageIdxProxy.current = (stage: number) => {
+    setStageIdx(stage);
+    setJourney(stage >= 1);
   };
 
-  startJourneyRef.current = () => {
-    if (journeyRef.current) return;
-    journeyRef.current = true;
-    setJourney(true);
-    setStageIdx(0);
-    stageRef.current = 1; // first journey world = neural network
-    setNoteOpen(false);
-    setPassword('');
-    setSecretEnding(false);
-  };
-
-  const currentStage = JOURNEY_STAGES[stageIdx];
-
-  const startJourney = () => {
-    journeyRef.current = true;
-    setJourney(true);
-    setStageIdx(0);
-    stageRef.current = 1;
-    setNoteOpen(false);
-    setPassword('');
-    setSecretEnding(false);
-  };
-
-  const advanceStage = () => {
-    const next = stageIdx + 1;
-    if (next >= JOURNEY_STAGES.length) return;
-    setStage(next);
-  };
-
-  const prevStage = () => {
-    setStage(Math.max(0, stageIdx - 1));
-  };
+  const currentStage = JOURNEY_STAGES[Math.max(0, Math.min(stageIdx, JOURNEY_STAGES.length - 1))];
 
   const submitPassword = () => {
     const answer = password.trim().toLowerCase();
@@ -538,17 +555,6 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       getGodMode().unlock();
       getEndingTicket().grant();
     }
-  };
-
-  const resetJourney = () => {
-    journeyRef.current = false;
-    setJourney(false);
-    setStageIdx(0);
-    stageRef.current = 0;
-    setNoteOpen(false);
-    if (secretEnding) getEndingTicket().read();
-    setSecretEnding(false);
-    camRef.current.dist = 11;
   };
 
   return (
@@ -566,9 +572,9 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       </div>
 
       <div className="singularity-hint">
-        {journey
-          ? `Descending: ${currentStage.title}`
-          : 'Drag to orbit • Scroll / W-S / arrows to zoom • Zoom all the way in to fall through.'}
+        {isJourney
+          ? `Descending: ${currentStage.title} — zoom out or look back to surface`
+          : 'Drag to orbit • Scroll / W-S / arrows to zoom • Zoom all the way in to fall through'}
       </div>
 
       {/* Camera-control sliders */}
@@ -585,27 +591,16 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         </label>
       </div>
 
-      <div className="singularity-actions">
-        {!journey
-          ? <button className="singularity-dive" onClick={startJourney}>🕳 Fall Through</button>
-          : (
-            <>
-              <button className="singularity-dive" onClick={prevStage} disabled={stageIdx === 0}>◀ Back</button>
-              <button className="singularity-dive" onClick={advanceStage} disabled={stageIdx >= JOURNEY_STAGES.length - 1}>Deeper ▸</button>
-              <button className="singularity-dive" onClick={resetJourney}>↻ Surface</button>
-            </>
-          )}
-      </div>
-
-      {journey && (
+      {/* Journey depth HUD (no buttons — purely physical zoom) */}
+      {isJourney && (
         <div className="singularity-stage">
           <div className="singularity-stage-title">{currentStage.title}</div>
           <div className="singularity-stage-desc">{currentStage.desc}</div>
           <div className="singularity-stage-track">
-            {JOURNEY_STAGES.map((s, i) => <span key={s.id} className={i <= stageIdx ? 'on' : ''} title={s.title} />)}
+            {JOURNEY_STAGES.map((s, i) => <span key={s.id} className={i < stageIdx ? 'on' : ''} title={s.title} />)}
           </div>
 
-          {currentStage.id === 'monitor' && (
+          {stageIdx >= 5 && (
             <div className="singularity-monitor" onClick={(e) => e.stopPropagation()}>
               <div className="singularity-monitor-head">🖥 EAOIN TERMINAL — ENTER PASSWORD</div>
               <p className="singularity-monitor-hint">The key. The four letters worn into the world. Enter it to reach the other side.</p>
