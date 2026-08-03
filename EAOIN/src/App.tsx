@@ -548,7 +548,17 @@ export default function App() {
           onLoadingProgress={handleWorldLoadingProgress}
           onGameModeChange={setGameMode}
           onOpenCharacter={() => { exitToMenu(); setAppPhase('creator'); }}
-          onExitToLauncher={() => { exitToMenu(); setAppPhase('launcher'); }}
+          onSaveAndQuit={() => {
+            // Persist current player progress, then return to the main menu
+            // (NOT the launcher) so quitting feels like a save-and-exit.
+            new PlayerSaveManager(worldSeed).save({
+              inventory,
+              tools: toolInventory,
+              survivalStats,
+              selectedTool: isToolUnlocked(toolInventory, selectedTool) ? selectedTool : 'hand',
+            });
+            exitToMenu();
+          }}
           appearance={appearance}
           superSettings={superSettings}
         />

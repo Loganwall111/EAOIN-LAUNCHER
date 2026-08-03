@@ -1146,9 +1146,15 @@ html, body, #root {
   padding: 12px 14px;
   font-size: 15px;
 }
-.pause-panel .pause-btn.primary {
+".pause-panel .pause-btn.primary {
   background: linear-gradient(180deg, #4a8fd8, #2a5a9a);
 }
+.pause-panel .pause-btn.save {
+  background: linear-gradient(180deg, #4a9a5a, #2a6a3a);
+  border-top-color: #7ef7a0;
+  border-left-color: #7ef7a0;
+}
+.pause-panel .pause-btn.save:hover { filter: brightness(1.1); }
 
 .pause-panel h2,
 .settings-panel h2 {

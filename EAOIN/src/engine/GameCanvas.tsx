@@ -134,8 +134,8 @@ interface GameCanvasProps {
   onGameModeChange?: (mode: GameMode) => void;
   /** Open the character creator from the pause menu. */
   onOpenCharacter?: () => void;
-  /** Quit to the launcher (instead of exiting the app). */
-  onExitToLauncher?: () => void;
+  /** Save progress and return to the main menu (used by Save & Quit). */
+  onSaveAndQuit?: () => void;
   /** Character appearance, used to texture the third-person avatar. */
   appearance?: import('../ui/theme').CharacterAppearance;
   /** Super Settings (Part 4) — coloured lighting, god rays, etc. */
@@ -217,7 +217,7 @@ function particleQualityFor(preset: GameSettings['qualityPreset']): number {
   return 1;
 }
 
-export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onExitToLauncher, appearance, superSettings }: GameCanvasProps) {
+export default function GameCanvas({ seed, gameMode, onExit, modRegistry, selectedBlock, onSelectedBlockChange, selectedTool, onSelectedToolChange, toolInventory, inventory, onInventoryChange, survivalStats, onSurvivalStatsChange, settings, onSettingsChange, onToggleInventory, onToggleSettings, onGameplayEvent, onRuntimeStatusChange, onTelemetry, onLoadingProgress, onGameModeChange, onOpenCharacter, onSaveAndQuit, appearance, superSettings }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const selectedBlockRef = useRef<BlockID>(selectedBlock);
   const selectedToolRef = useRef<ToolID>(selectedTool);
@@ -235,6 +235,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
   const loadingProgressRef = useRef(onLoadingProgress);
+  /** Holds the world-edit saver so the pause menu can trigger a save & quit. */
+  const saveWorldEditsRef = useRef<() => void>(() => {});
   useEffect(() => { telemetryRef.current = onTelemetry; }, [onTelemetry]);
   useEffect(() => { loadingProgressRef.current = onLoadingProgress; }, [onLoadingProgress]);
   const [actionMessage, setActionMessage] = useState('WASD move • SPACE jump • Left mine with hand punch • Right place • T chat /day /time • O objectives U systems');
@@ -930,6 +932,12 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       };
       const rebuildEditedBlock = (target: BlockCoordinate): void => { renderer.rebuildForWorldBlock(target.x, target.z); publishRenderStats(); };
       const saveWorldEdits = (): void => { const r = saveManager.save(terrain.getEdits()); showActionMessage(r.message); };
+      saveWorldEditsRef.current = saveWorldEdits;
+      // Auto-save: periodically persist world edits so a quit-to-menu never loses
+      // block changes, even if the player forgets to use Save & Quit.
+      const autoSaveTimer = window.setInterval(() => {
+        if (!disposed) { const r = saveManager.save(terrain.getEdits()); if (r.count > 0) { /* silent periodic save */ } }
+      }, 60000);
       publishRenderStats(); publishRuntimeStatus();
 
       const finishMining = (session: MiningSession): void => {
@@ -2653,6 +2661,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       cleanupScene = () => {
         unsubscribeDevTuning();
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
+        window.clearInterval(autoSaveTimer);
         canvas.removeEventListener('mousedown', handleBlockMouseDown); canvas.removeEventListener('contextmenu', handleContextMenu);
         canvas.removeEventListener('touchstart', handleCanvasTouchStart);
         canvas.removeEventListener('touchmove', handleCanvasTouchMove);
@@ -2812,7 +2821,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             <button className="pause-btn" onClick={onToggleSettings}>Settings</button>
             <button className="pause-btn" onClick={onToggleInventory}>Inventory</button>
             <button className="pause-btn" onClick={() => onOpenCharacter?.()}>Character</button>
-            <button className="pause-btn" onClick={() => onExitToLauncher?.()}>Quit to Launcher</button>
+            <button className="pause-btn save" onClick={() => { saveWorldEditsRef.current(); onSaveAndQuit?.(); }}>Save &amp; Quit to Menu</button>
           </div>
         )}
       </div>
