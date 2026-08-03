@@ -104,6 +104,7 @@ export default function TouchControls({ enabled }: TouchControlsProps) {
         <HoldButton label="PLACE" action="place" hint="Place the selected block" />
         <HoldButton label="⤒" action="jump" hint="Jump / swim up" />
         <HoldButton label="FLY" action="fly" hint="Toggle flight" />
+        <HoldButton label="RUN" action="sprint" hint="Sprint (toggle)" />
         <HoldButton label="🎒" action="inventory" hint="Open inventory" />
         <HoldButton label="💬" action="chat" hint="Open chat" />
         <HoldButton label="❯❯" action="hotbarNext" hint="Next hotbar slot" />

@@ -289,6 +289,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const touchStickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   /** Accumulated look-drag from touch (consumed + reset each frame in the loop). */
   const touchLookRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Sprint state — set by Shift (keyboard), a gamepad trigger, or a touch button. */
+  const sprintingRef = useRef(false);
+  /** Current walking animation phase for the arm/foot motion. */
+  const movePhaseRef = useRef(0);
 
   useEffect(() => { selectedBlockRef.current = selectedBlock; }, [selectedBlock]);
   useEffect(() => { selectedToolRef.current = selectedTool; }, [selectedTool]);
@@ -1397,7 +1401,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           camera.position.z - lastCameraPosition.z
         ) / Math.max(0.0001, deltaSeconds);
         viewModel.setHeldItem(selectedBlockRef.current);
-        viewModel.update(deltaSeconds, horizontalSpeed);
+        viewModel.update(deltaSeconds, horizontalSpeed, Boolean(flightEnabledRef.current), sprintingRef.current);
 
         enclosureFrame += 1;
         if (enclosureFrame % 15 === 0) {
@@ -1742,6 +1746,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
               // Triggers mine (hold to keep mining) / place.
               if (pad.buttons[7]?.value > 0.5) startMining();
               if (pad.buttons[6]?.value > 0.5) placeSelectedBlock();
+              // Sprint: holding the left shoulder/trigger (button 6/10) sprints.
+              sprintingRef.current = btn(10) || btn(6) || (pad.buttons[6]?.value ?? 0) > 0.5;
               // Bumpers cycle the hotbar.
               if (btn(4) && !padBtn4) { padBtn4 = true; cycleHotbar(-1); }
               if (!btn(4)) padBtn4 = false;
@@ -1779,10 +1785,13 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             tempMove.copyFrom(tempForward).scaleInPlace(moveY);
             tempMove.addInPlace(tempRight.scale(moveX));
             tempMove.normalize();
-            const walkSpeed = (flightEnabledRef.current ? settingsRef.current.cameraSpeed * 2.6 : settingsRef.current.cameraSpeed * 1.15) * 60 * deltaSeconds;
+            const sprinting = sprintingRef.current && !flightEnabledRef.current;
+            const walkSpeed = (flightEnabledRef.current ? settingsRef.current.cameraSpeed * 2.6 : settingsRef.current.cameraSpeed * (sprinting ? 2.1 : 1.15)) * 60 * deltaSeconds;
             tempMove.scaleInPlace(Math.max(0, walkSpeed));
             (camera as any).moveWithCollisions?.(tempMove);
             if (!(camera as any).moveWithCollisions) camera.position.addInPlace(tempMove);
+            // Track a move phase so the flying/walking arm animation can sync.
+            movePhaseRef.current += tempMove.length() * 0.04;
           }
         }
 
@@ -1838,7 +1847,11 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             if (!(camera as any).moveWithCollisions) camera.position.y += flyStep;
           }
         } else {
-          camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * 1.15);
+          // Sprinting: holding Shift (or a controller/touch sprint) roughly
+          // doubles ground speed. Legs no longer "get stuck" because Babylon's
+          // collision moveWithCollisions steps are scaled per-frame by speed.
+          const sprinting = sprintingRef.current && !flightEnabledRef.current;
+          camera.speed = Math.max(0.7, settingsRef.current.cameraSpeed * (sprinting ? 2.1 : 1.15));
           grounded = isGroundedCheck(camera.position);
           if (grounded) {
             if (velocityY < -0.5 && wasFalling) {
@@ -2362,6 +2375,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         // Music stays on GameAudio; ambience is owned by AmbienceEngine now.
         audio.startMusic(settingsRef.current, ambienceProfile === 'nether' ? 'nether' : 'overworld');
         pressedKeys.add(event.code);
+        // Sprint: holding Left/Right Shift (or any Shift) while moving sprints.
+        if (event.key === 'Shift' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+          sprintingRef.current = true;
+        }
         if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); if (!flightEnabledRef.current && grounded) jumpRequested = true; return; }
         if (event.key === 'F5') {
           event.preventDefault();
@@ -2486,7 +2503,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
         if (event.key.toLowerCase() === 'o') { event.preventDefault(); document.exitPointerLock?.(); onToggleSettings(); return; }
       };
-      const handleKeyUp = (event: KeyboardEvent): void => { pressedKeys.delete(event.code); };
+      const handleKeyUp = (event: KeyboardEvent): void => {
+        pressedKeys.delete(event.code);
+        if (event.key === 'Shift' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') sprintingRef.current = false;
+      };
       const handleContextMenu = (e: MouseEvent): void => { e.preventDefault(); };
       const handleResize = (): void => { engine.resize(); };
       canvas.addEventListener('mousedown', handleBlockMouseDown); canvas.addEventListener('contextmenu', handleContextMenu);
@@ -2544,6 +2564,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         else if (action === 'pause') setPaused((p) => !p);
         else if (action === 'hotbarNext') cycleHotbar(1);
         else if (action === 'hotbarPrev') cycleHotbar(-1);
+        else if (action === 'sprint') sprintingRef.current = !sprintingRef.current;
       };
       window.addEventListener('eaoin-touch-move', handleTouchMove);
       window.addEventListener('eaoin-touch-action', handleTouchAction);

@@ -27,10 +27,25 @@ export default function ServerLobbyWorld({ server, onExit }: ServerLobbyWorldPro
     const engine = new Engine(canvas, true);
     const scene = new Scene(engine);
     scene.clearColor = new Color4(0.4, 0.6, 0.9, 1);
+    scene.gravity = new Vector3(0, -0.6, 0);
+    scene.collisionsEnabled = true;
 
-    const camera = new FreeCamera('lobby_cam', new Vector3(0, lobbySpawnY() + 1, 12), scene);
+    // The player spawns ON the ground (eye just above the plaza surface) with
+    // collision + gravity so they can actually walk around — the old code left
+    // the camera floating in the air with no collision, which made joining a
+    // server feel like a broken "pan out" where you couldn't move.
+    const camStart = new Vector3(0, lobbySpawnY() + 1, 12);
+    const camera = new FreeCamera('lobby_cam', camStart, scene);
     camera.setTarget(new Vector3(0, lobbySpawnY(), 0));
     camera.attachControl(canvas, true);
+    camera.checkCollisions = true;
+    camera.applyGravity = true;
+    camera.ellipsoid = new Vector3(0.3, 0.9, 0.3);
+    camera.ellipsoidOffset = new Vector3(0, 0.9, 0);
+    camera.minZ = 0.1;
+    camera.keysUp = [87, 38]; camera.keysDown = [83, 40];
+    camera.keysLeft = [65, 37]; camera.keysRight = [68, 39];
+    camera.speed = 0.6;
 
     const light = new HemisphericLight('lobby_light', new Vector3(0.5, 1, 0.3), scene);
     light.intensity = 0.9;

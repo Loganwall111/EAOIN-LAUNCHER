@@ -181,7 +181,7 @@ export class FirstPersonViewModel {
    * @param deltaSeconds frame delta
    * @param movementSpeed horizontal speed in blocks/sec, drives the walk bob
    */
-  update(deltaSeconds: number, movementSpeed = 0): void {
+  update(deltaSeconds: number, movementSpeed = 0, flying = false, sprinting = false): void {
     if (!this.enabled) return;
 
     // --- swing ------------------------------------------------------------
@@ -199,20 +199,33 @@ export class FirstPersonViewModel {
       }
     }
 
-    // --- walk bob ---------------------------------------------------------
-    this.bobPhase += deltaSeconds * Math.min(movementSpeed, 6) * 2.2;
-    const bobActive = movementSpeed > 0.15 ? 1 : 0;
-    const bobX = Math.cos(this.bobPhase) * 0.014 * bobActive;
-    const bobY = Math.abs(Math.sin(this.bobPhase)) * 0.018 * bobActive;
+    // --- walk/sprint/fly bob ----------------------------------------------
+    const speed = Math.min(movementSpeed, flying ? 8 : sprinting ? 9 : 6);
+    this.bobPhase += deltaSeconds * speed * 2.4;
+    const active = movementSpeed > 0.15 ? 1 : 0;
+    const bobX = Math.cos(this.bobPhase) * (flying ? 0.006 : 0.014) * active;
+    const bobY = Math.abs(Math.sin(this.bobPhase)) * (flying ? 0.010 : 0.018) * active;
+
+    if (flying) {
+      // Flying: the arm eases out and forward with a gentle glide bob, so it
+      // "moves with you" as you fly.
+      const glide = Math.sin(this.bobPhase * 0.6);
+      this.shoulder.rotation.x = 0.10 - swingAmount * 1.0 + glide * 0.08;
+      this.shoulder.rotation.z = -0.30 + swingAmount * 0.18;
+      this.root.position.x = 0.50 + bobX;
+      this.root.position.y = -0.20 - bobY;
+      this.root.position.z = 0.80 + swingAmount * 0.10;
+      return;
+    }
 
     // The swing is a ROTATION about the shoulder, plus a small forward thrust.
     // The old code translated the arm on three axes at once, which is what
     // made it look like a box sliding around the screen.
     this.shoulder.rotation.x = 0.32 - swingAmount * 1.25;
-    this.shoulder.rotation.z = -0.14 + swingAmount * 0.22;
+    this.shoulder.rotation.z = -0.14 + swingAmount * 0.22 + (sprinting ? -0.06 : 0);
     this.root.position.x = 0.44 + bobX - swingAmount * 0.05;
     this.root.position.y = -0.28 - bobY + swingAmount * 0.03;
-    this.root.position.z = 0.68 + swingAmount * 0.10;
+    this.root.position.z = 0.68 + swingAmount * 0.10 + (sprinting ? 0.05 : 0);
   }
 
   dispose(): void {
