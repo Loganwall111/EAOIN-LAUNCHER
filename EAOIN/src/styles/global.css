@@ -3335,3 +3335,25 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .alpha-ver-latest { font-size: 9px; padding: 2px 7px; border-radius: 999px; background: rgba(255,209,102,0.2); color: #ffd166; }
 .alpha-patch-tagline { font-size: 12px; color: rgba(210,225,245,0.85); margin-bottom: 8px; }
 .alpha-patch-notes { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 12px; line-height: 1.5; color: rgba(220,232,248,0.92); }
+
+/* --- Singularity: shader-based black hole (2.0 update part 2) --- */
+.singularity { position: fixed; inset: 0; z-index: 950; overflow: hidden; background: #000; color: #fff; font-family: var(--ui-font, sans-serif); }
+.singularity-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.singularity-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.75)); }
+.singularity-head { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 18px; padding: 20px 28px; z-index: 5; background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent); }
+.singularity-x { margin-left: auto; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-size: 18px; }
+.singularity-x:hover { background: rgba(168,121,255,0.25); }
+.singularity-hint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 13px; color: rgba(220,230,250,0.85); text-align: center; background: rgba(0,0,0,0.5); padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
+.singularity-actions { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 10px; }
+.singularity-dive {
+  padding: 14px 30px; border-radius: 12px; cursor: pointer; border: none; font: 800 16px var(--ui-font, sans-serif);
+  background: linear-gradient(180deg,#a879ff,#5a3a99); color: #fff; box-shadow: 0 6px 24px rgba(168,121,255,0.4);
+  transition: transform 80ms, filter 120ms;
+}
+.singularity-dive:hover { filter: brightness(1.12); transform: translateY(-1px); }
+.singularity-note { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,0.6); }
+.singularity-note-card { width: min(420px, 90vw); padding: 24px; border-radius: 14px; background: rgba(10,12,20,0.97); border: 1px solid #a879ff; box-shadow: 0 0 40px rgba(168,121,255,0.3); color: #e6e6ff; display: grid; gap: 10px; }
+.singularity-note-head { font-weight: 800; color: #c4a8ff; font-size: 16px; border-bottom: 1px solid rgba(168,121,255,0.3); padding-bottom: 8px; }
+.singularity-note-card p { margin: 0; line-height: 1.5; }
+.singularity-note-card p.spacer { height: 8px; }
+.singularity-note-close { padding: 10px; border-radius: 8px; cursor: pointer; background: rgba(168,121,255,0.15); border: 1px solid #a879ff; color: #fff; font-weight: 700; margin-top: 6px; }

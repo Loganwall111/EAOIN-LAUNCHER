@@ -11,6 +11,7 @@ import TutorialWorld from './ui/TutorialWorld';
 import GameHubScreen from './ui/GameHubScreen';
 import PortalGallery from './ui/PortalGallery';
 import AlphaLauncher from './ui/AlphaLauncher';
+import Singularity from './ui/Singularity';
 import ServerLobbyWorld from './ui/ServerLobbyWorld';
 import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
@@ -83,7 +84,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'alphaluncher';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'alphaluncher' | 'singularity';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   //
@@ -395,6 +396,7 @@ export default function App() {
             onGameHub={() => setAppPhase('gamehub')}
             onPortalGallery={() => setAppPhase('portalgallery')}
             onAlphaLauncher={() => setAppPhase('alphaluncher')}
+            onSingularity={() => setAppPhase('singularity')}
             onBackToStable={() => { window.location.assign('../'); }}
             onHorizonOS={() => setAppPhase('horizonos')}
             onMods={() => setAppPhase('mods')}
@@ -467,6 +469,13 @@ export default function App() {
       return (
         <div className={shellClass}>
           <AlphaLauncher onBack={() => setAppPhase('title')} />
+        </div>
+      );
+    }
+    if (appPhase === 'singularity') {
+      return (
+        <div className={shellClass}>
+          <Singularity onBack={() => setAppPhase('title')} onExit={() => setAppPhase('title')} />
         </div>
       );
     }
