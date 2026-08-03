@@ -70,6 +70,9 @@ export const PORTAL_DEFS: PortalDef[] = [
   { dimension: 'prehistoric_world', name: 'Prehistoric Gate', emoji: '🦖', color1: new Color3(0.45, 0.55, 0.2), color2: new Color3(0.85, 0.75, 0.4), size: 2.6, frameBlock: 3, particleCount: 14, description: 'A fossil arch of ancient light.' },
   { dimension: 'sun', name: 'Solar Gate', emoji: '☀', color1: new Color3(1, 0.85, 0.4), color2: new Color3(1, 1, 0.6), size: 2.6, frameBlock: 49, particleCount: 28, description: 'A blazing arch of pure plasma.' },
   { dimension: 'moon', name: 'Lunar Gate', emoji: '🌙', color1: new Color3(0.75, 0.78, 0.85), color2: new Color3(0.95, 0.95, 1), size: 2.6, frameBlock: 23, particleCount: 18, description: 'A pale arch of moon-rock light.' },
+  { dimension: 'humorous', name: 'Humorous Portal', emoji: '🪼', color1: new Color3(0.4, 0.2, 0.8), color2: new Color3(0.8, 0.4, 1), size: 2.8, frameBlock: 308, particleCount: 30, description: 'A pink-purple portal of drifting cosmic light.' },
+  { dimension: 'rift_dimension', name: 'Rift Portal', emoji: '🌀', color1: new Color3(0.1, 0.5, 0.9), color2: new Color3(0.6, 0.9, 1), size: 3.0, frameBlock: 313, particleCount: 34, description: 'A blue, rippling rift tearing through reality.' },
+  { dimension: 'aether', name: 'Aether Globe', emoji: '☁️', color1: new Color3(0.85, 0.85, 0.95), color2: new Color3(1, 1, 1), size: 2.6, frameBlock: 64, particleCount: 22, description: 'A glowing globe of cloud and light.' },
 ];
 
 export interface PortalCoordinate {
