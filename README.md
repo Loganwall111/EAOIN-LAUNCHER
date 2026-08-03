@@ -61,6 +61,30 @@ The game is hosted on **GitHub Pages** — no install needed.
 
 **[▶ Play EAOIN Now](https://loganwall111.github.io/EAOIN-LAUNCHER/)**
 
+---
+
+## 🚀 Alpha Preview (EAOIN 2.0)
+
+Want to try the **next-gen 2.0 alpha**? It's built into this same site — no download, no separate install.
+
+### How to launch the alpha
+
+**Option 1 — from the game (recommended)**
+1. Open the **stable game** at https://loganwall111.github.io/EAOIN-LAUNCHER/
+2. On the main menu, scroll to the bottom and click the **🚀 Alpha Launcher** button.
+3. It drops you straight onto the **alpha title screen** — play from there.
+
+**Option 2 — direct link**
+Just open the alpha directly in your browser:
+👉 **https://loganwall111.github.io/EAOIN-LAUNCHER/alpha/?launch=1**
+
+### What's in the alpha
+The 2.0 alpha previews the next-gen update — the Nether & End overhaul, black-hole End sky, severe weather (tornadoes, blizzards, sandstorms, meteor showers), custom buildable portals, the live Game Hub, deeper Nether mobs, sprinting, and the in-game Alpha Launcher.
+
+> ⚠️ **Alpha status:** This is an experimental preview. Expect bugs and unfinished features. The stable **v1.0.0** release remains the fully supported game at the main URL.
+
+---
+
 ### Run Locally
 
 ```bash
