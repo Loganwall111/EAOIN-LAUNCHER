@@ -86,7 +86,19 @@ export default function App() {
   type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'alphaluncher';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
-  const [appPhase, setAppPhase] = useState<AppPhase>('launcherboot');
+  //
+  // Seamless alpha bridge: when this build is opened from the main game's
+  // Alpha Launcher (navigated to with `?launch=1`), skip the launcher boot +
+  // version-select and land straight on the alpha title screen so the player
+  // is "in" the alpha instantly.
+  const [appPhase, setAppPhase] = useState<AppPhase>(() => {
+    try {
+      if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('launch')) {
+        return 'title';
+      }
+    } catch { /* SSR / storage guard */ }
+    return 'launcherboot';
+  });
   /** Launcher state (version/build selection, updates). */
   const [launcherState, setLauncherState] = useState<LauncherState>(() => {
     try {
