@@ -1680,3 +1680,8 @@ select.ui-input option { background: var(--ui-panel-solid); color: var(--ui-text
   border-color: var(--ui-cyan);
   box-shadow: 0 0 0 2px var(--ui-edge), 0 0 14px rgba(98, 216, 255, 0.4);
 }
+
+/* 2.0 menu button variants */
+.menu-btn.is-tutorial { background: linear-gradient(180deg,#3a6a8a,#2a4a6a 52%,#1c3a52 100%); }
+.menu-btn.is-gamehub { background: linear-gradient(180deg,#4a8a5a,#2a6a3a 52%,#1c4a28 100%); }
+.menu-btn.is-portals { background: linear-gradient(180deg,#6a3a8a,#4a2a6a 52%,#321a52 100%); }

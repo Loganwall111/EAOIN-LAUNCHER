@@ -23,6 +23,12 @@ export interface TitleScreenProps {
   onSignIn: () => void;
   onSingleplayer: () => void;
   onMultiplayer: () => void;
+  /** Launch the pre-built Tutorial World (sits right above Multiplayer). */
+  onTutorial: () => void;
+  /** Launch the Game Hub (HQ, studio, server). */
+  onGameHub: () => void;
+  /** Launch the Portal Gallery area. */
+  onPortalGallery: () => void;
   /** Launch HorizonOS — the in-game virtual desktop / OS. */
   onHorizonOS: () => void;
   onMods: () => void;
@@ -41,7 +47,8 @@ export interface TitleScreenProps {
 }
 
 export default function TitleScreen({
-  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onHorizonOS, onMods,
+  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onTutorial, onGameHub,
+  onPortalGallery, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
@@ -128,8 +135,17 @@ export default function TitleScreen({
         <button className="menu-btn is-primary" onClick={onSingleplayer}>
           Singleplayer<span className="btn-icon">🟩</span>
         </button>
+        <button className="menu-btn is-tutorial" onClick={onTutorial}>
+          Tutorial World<span className="btn-icon">📖</span>
+        </button>
         <button className="menu-btn is-primary" onClick={onMultiplayer}>
           Multiplayer<span className="btn-icon">🧑</span>
+        </button>
+        <button className="menu-btn is-gamehub" onClick={onGameHub}>
+          Game Hub<span className="btn-icon">🎮</span>
+        </button>
+        <button className="menu-btn is-portals" onClick={onPortalGallery}>
+          Portal Gallery<span className="btn-icon">🌀</span>
         </button>
         <button className="menu-btn is-horizonos" onClick={onHorizonOS}>
           HorizonOS<span className="btn-icon">🖥️</span>

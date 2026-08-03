@@ -7,6 +7,9 @@ import HowToPlayGuide from './ui/HowToPlayGuide';
 import CharacterCreator from './ui/CharacterCreator';
 import MultiplayerScreen from './ui/MultiplayerScreen';
 import HorizonOS from './ui/HorizonOS';
+import TutorialWorld from './ui/TutorialWorld';
+import GameHubScreen from './ui/GameHubScreen';
+import PortalGallery from './ui/PortalGallery';
 import ServerLobbyWorld from './ui/ServerLobbyWorld';
 import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
@@ -79,7 +82,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   const [appPhase, setAppPhase] = useState<AppPhase>('launcherboot');
@@ -374,7 +377,10 @@ export default function App() {
             signedInUser={signedInUser}
             onSignIn={() => setAppPhase('signin')}
             onSingleplayer={() => setAppPhase('worlds')}
+            onTutorial={() => setAppPhase('tutorial')}
             onMultiplayer={() => setAppPhase('multiplayer')}
+            onGameHub={() => setAppPhase('gamehub')}
+            onPortalGallery={() => setAppPhase('portalgallery')}
             onHorizonOS={() => setAppPhase('horizonos')}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}
@@ -408,6 +414,36 @@ export default function App() {
             onStart={startGame}
             currentSeed={worldSeed}
             onBack={() => setAppPhase('title')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'tutorial') {
+      return (
+        <div className={shellClass}>
+          <TutorialWorld
+            onBack={() => setAppPhase('title')}
+            onStart={() => startGame('tutorial_world', 'survival')}
+          />
+        </div>
+      );
+    }
+    if (appPhase === 'gamehub') {
+      return (
+        <div className={shellClass}>
+          <GameHubScreen onBack={() => setAppPhase('title')} />
+        </div>
+      );
+    }
+    if (appPhase === 'portalgallery') {
+      return (
+        <div className={shellClass}>
+          <PortalGallery
+            onBack={() => setAppPhase('title')}
+            onTravel={(dimension) => {
+              startGame(undefined, 'survival');
+              window.setTimeout(() => window.dispatchEvent(new CustomEvent('eaoin-travel-dimension', { detail: { dimensionId: dimension } })), 3000);
+            }}
           />
         </div>
       );

@@ -3079,3 +3079,83 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .super-actions { display: flex; gap: 10px; margin-top: 12px; }
 .super-settings .opt-row { border-bottom-color: rgba(255,255,255,0.08); }
 .super-settings input[type='color'] { width: 48px; height: 30px; border: 1px solid #3a5a8a; background: none; cursor: pointer; }
+
+/* ============================================================================
+   2.0 — Portal Gallery, Game Hub, Tutorial World screens
+   ========================================================================== */
+.portal-gallery, .gamehub-screen, .tutorial-world {
+  position: fixed; inset: 0; z-index: 900; overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(70,60,255,0.25), transparent 60%),
+    linear-gradient(180deg,#0b0e18,#05070f);
+  color: var(--ui-text); display: flex; flex-direction: column;
+  font-family: var(--ui-font,sans-serif);
+}
+.portal-gallery-head, .gamehub-head, .tutorial-head {
+  display: flex; align-items: center; gap: 18px; padding: 20px 28px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.portal-gallery-body, .gamehub-body, .tutorial-body {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: 300px 1fr;
+  gap: 20px; padding: 20px 28px;
+}
+.portal-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.portal-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px; text-align: left;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px; color: inherit; cursor: pointer;
+}
+.portal-card.selected { border-color: var(--ui-cyan); background: rgba(98,216,255,0.12); }
+.portal-emoji { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; }
+.portal-card small { color: rgba(200,215,238,0.7); font-size: 11px; display: block; }
+.portal-preview { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+.portal-ring {
+  width: 180px; height: 180px; border-radius: 50%; border: 8px solid;
+  display: grid; place-items: center; position: relative; background: rgba(0,0,0,0.4);
+}
+.portal-ring-inner { position: absolute; inset: 12px; border-radius: 50%; }
+.portal-emoji.big { font-size: 52px; position: relative; z-index: 2; filter: drop-shadow(0 0 14px #000); }
+.portal-preview h2 { margin: 0; font-size: 26px; }
+.portal-blurb { color: rgba(200,215,238,0.85); max-width: 420px; }
+.portal-mobs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.portal-mob { font-size: 12px; padding: 4px 10px; border-radius: 14px; background: rgba(120,160,255,0.15); }
+
+/* Game Hub */
+.gamehub-portals { display: flex; flex-direction: column; gap: 14px; justify-content: center; }
+.ghub-portal { display: flex; flex-direction: column; align-items: center; gap: 8px; background: none; border: none; color: inherit; cursor: pointer; }
+.ghub-ring {
+  width: 96px; height: 96px; border-radius: 50%; border: 4px solid var(--hc, #2aa8e0);
+  display: grid; place-items: center; font-size: 34px;
+  box-shadow: 0 0 24px var(--hc, #2aa8e0)66; background: rgba(0,0,0,0.4);
+  transition: transform 150ms;
+}
+.ghub-portal:hover .ghub-ring { transform: scale(1.08); }
+.ghub-portal.active .ghub-ring { box-shadow: 0 0 40px var(--hc, #2aa8e0)aa; }
+.gamehub-area { border: 2px solid; border-radius: 14px; padding: 22px; overflow-y: auto; }
+.gamehub-area h2 { margin: 0 0 8px; }
+.gamehub-desc { color: rgba(200,215,238,0.85); }
+.gamehub-content { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+.gamehub-item { padding: 12px; background: rgba(255,255,255,0.06); border-radius: 10px; font-size: 13px; }
+.gamehub-npc { display: flex; gap: 12px; align-items: center; padding: 14px; background: rgba(0,0,0,0.35); border-radius: 12px; }
+.npc-portrait { font-size: 40px; }
+
+/* Tutorial */
+.tutorial-body { grid-template-columns: 1fr 280px; align-items: start; }
+.tutorial-card { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 30px; background: rgba(255,255,255,0.05); border-radius: 16px; text-align: center; }
+.tutorial-icon { font-size: 64px; }
+.tutorial-card h2 { margin: 0; font-size: 28px; }
+.tutorial-card p { color: rgba(210,225,245,0.9); max-width: 460px; }
+.tutorial-progress { display: flex; gap: 6px; }
+.tutorial-progress span { width: 40px; height: 5px; border-radius: 4px; background: rgba(255,255,255,0.15); }
+.tutorial-progress span.on { background: var(--ui-cyan); }
+.tutorial-actions { display: flex; gap: 10px; }
+.tutorial-overview { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 16px; }
+.tutorial-overview ul { list-style: none; margin: 0; padding: 0; }
+.tutorial-overview li { padding: 8px; font-size: 13px; color: rgba(200,215,238,0.7); }
+.tutorial-overview li.current { color: #fff; background: rgba(98,216,255,0.15); border-radius: 8px; }
+
+@media (max-width: 820px) {
+  .portal-gallery-body, .gamehub-body, .tutorial-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .portal-list { flex-direction: row; overflow-x: auto; }
+  .gamehub-portals { flex-direction: row; }
+}
