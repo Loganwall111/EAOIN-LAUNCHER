@@ -395,6 +395,7 @@ export default function App() {
             onGameHub={() => setAppPhase('gamehub')}
             onPortalGallery={() => setAppPhase('portalgallery')}
             onAlphaLauncher={() => setAppPhase('alphaluncher')}
+            onBackToStable={() => { window.location.assign('../'); }}
             onHorizonOS={() => setAppPhase('horizonos')}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}

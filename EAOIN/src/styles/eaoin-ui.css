@@ -201,6 +201,12 @@
 
 .icon-btn:active { transform: translateY(1px); }
 .icon-btn.danger:hover { background: linear-gradient(180deg, #c0392b, #7d2018); }
+.icon-btn.back-stable {
+  background: linear-gradient(180deg, #4a8a5a, #2a6a3a);
+  border-top-color: #7ef7a0;
+  border-left-color: #7ef7a0;
+}
+.icon-btn.back-stable:hover { background: linear-gradient(180deg, #5aa86a, #347a44); }
 
 /* --- Center menu buttons -------------------------------------------------- */
 
@@ -1687,3 +1693,5 @@ select.ui-input option { background: var(--ui-panel-solid); color: var(--ui-text
 .menu-btn.is-portals { background: linear-gradient(180deg,#6a3a8a,#4a2a6a 52%,#321a52 100%); }
 .menu-btn.is-alpha { background: linear-gradient(180deg,#8a3a4a,#6a2a3a 52%,#4a1c26 100%); }
 .menu-btn.is-alpha:hover { border-left-color: #ffb0b0; }
+.menu-btn.is-backstable { background: linear-gradient(180deg,#3a7a4a,#2a5a3a 52%,#1c3a26 100%); }
+.menu-btn.is-backstable:hover { border-left-color: #7ef7a0; }

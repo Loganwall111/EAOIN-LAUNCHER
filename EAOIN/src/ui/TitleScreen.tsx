@@ -31,6 +31,8 @@ export interface TitleScreenProps {
   onPortalGallery: () => void;
   /** Launch the in-game Alpha Launcher (opens the EAOIN 2.0 alpha build). */
   onAlphaLauncher: () => void;
+  /** Return to the stable release (used inside the alpha preview). */
+  onBackToStable: () => void;
   /** Launch HorizonOS — the in-game virtual desktop / OS. */
   onHorizonOS: () => void;
   onMods: () => void;
@@ -50,7 +52,7 @@ export interface TitleScreenProps {
 
 export default function TitleScreen({
   appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onTutorial, onGameHub,
-  onPortalGallery, onAlphaLauncher, onHorizonOS, onMods,
+  onPortalGallery, onAlphaLauncher, onBackToStable, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
@@ -100,6 +102,7 @@ export default function TitleScreen({
 
       {/* ---- top-right icon rail ---- */}
       <div className="title-icon-rail">
+        <button className="icon-btn back-stable" title="Back to Stable" aria-label="Back to Stable" onClick={onBackToStable}>⬅️</button>
         <button className="icon-btn" title="Options" aria-label="Options" onClick={onOptions}>⚙</button>
         <button className="icon-btn" title="Guide" aria-label="Guide" onClick={onOpenGuide}>📖</button>
         <button className="icon-btn" title="Statistics" aria-label="Statistics" onClick={onOpenStats}>📊</button>
@@ -170,6 +173,9 @@ export default function TitleScreen({
 
         {/* ---- separate launcher section (bottom) ---- */}
         <div className="menu-section-divider"><span>ALPHA LAUNCHER</span></div>
+        <button className="menu-btn is-backstable" onClick={onBackToStable}>
+          Back to Stable<span className="btn-icon">⬅️</span>
+        </button>
         <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
           Alpha Launcher<span className="btn-icon">🚀</span>
         </button>
