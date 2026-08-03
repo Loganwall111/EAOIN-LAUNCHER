@@ -15,6 +15,8 @@ import GameHub from './os/GameHub';
 import MusicPlayer from './os/MusicPlayer';
 import MailApp from './os/MailApp';
 import CalendarApp from './os/CalendarApp';
+import Arcade from './os/Arcade';
+import TinyMinecraft from './os/TinyMinecraft';
 
 export interface HorizonOSProps {
   onExit: () => void;
@@ -45,6 +47,8 @@ const WINDOW_DEFS: Array<Omit<OSWindow, 'x' | 'y' | 'z' | 'open' | 'minimized' |
   { id: 'cameras', title: 'Security Cameras', icon: '📹' },
   { id: 'lore', title: 'Game Lore', icon: '📖' },
   { id: 'notes', title: "Creator's Notes", icon: '✍️' },
+  { id: 'arcade', title: 'Arcade', icon: '🕹️' },
+  { id: 'minecraft', title: 'Tiny Minecraft', icon: '⛏️' },
 ];
 
 const WINDOW_SIZES: Record<string, { w: number; h: number }> = {
@@ -310,6 +314,8 @@ export default function HorizonOS({ onExit }: HorizonOSProps) {
             {w.id === 'notes' && (
               <div className="hzos-list">{CREATOR_NOTES.map((n, i) => <p key={i} className="hzos-note">✍️ {n}</p>)}</div>
             )}
+            {w.id === 'arcade' && <Arcade />}
+            {w.id === 'minecraft' && <TinyMinecraft />}
           </div>
         </div>
       ))}

@@ -266,3 +266,122 @@
 /* ---------------- Neon Snake ---------------- */
 .snake-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; }
 .snake-canvas { width: min(320px, 100%); aspect-ratio: 1; border: 2px solid #1e2a4a; border-radius: 8px; background: #05070f; }
+
+/* ==========================================================================
+   2.0 Update Part 2 — HorizonOS MATRIX theme + new apps
+   Overrides the old Windows-7 blue desktop with a futuristic green terminal
+   aesthetic, while keeping every app functional. New apps: Arcade + Tiny
+   Minecraft, plus matrix boot lines.
+   ========================================================================== */
+.hzos-desktop { background: #02070a; }
+.hzos-wallpaper {
+  background:
+    radial-gradient(circle at 70% 18%, rgba(77,255,158,0.20), transparent 45%),
+    linear-gradient(180deg, #02070a, #02110a 55%, #01060a);
+}
+.hzos-wallpaper-moon {
+  background: radial-gradient(circle at 40% 40%, #9fffd0, #39d07a 60%, #145a34);
+  box-shadow: 0 0 70px rgba(77,255,158,0.7), 0 0 140px rgba(77,255,158,0.35);
+  opacity: 0.5;
+}
+.hzos-window { background: #060d14; border: 1px solid #0f4a2c; border-radius: 8px; box-shadow: 0 0 22px rgba(77,255,158,0.18); }
+.hzos-window-head { background: linear-gradient(180deg,#0a2a1a,#05140c); color: #7dffb4; border-bottom: 1px solid #0f4a2c; font-family: var(--eaoin-pixel-font, monospace); }
+.hzos-window-body { background: #04080d; color: #d8ffe9; }
+.hzos-taskbar { background: rgba(2,10,6,0.92); border-top: 1px solid #0f4a2c; }
+.hzos-start { background: linear-gradient(180deg,#0a3a22,#052014); color: #8dffc0; border: 1px solid #1a6a3a; }
+.hzos-task { background: rgba(10,40,24,0.4); color: #8dffc0; border: 1px solid #0f4a2c; }
+.hzos-task.active { background: rgba(60,255,160,0.18); border-color: #4dff9e; }
+.hzos-clock { color: #7dffb4; }
+.hzos-window-actions button { background: rgba(77,255,158,0.08); border: 1px solid #0f4a2c; color: #9fffd0; }
+.hzos-window-actions button:hover { background: rgba(77,255,158,0.2); }
+.hzos-boot { background: #000; }
+.hzos-terminal { background: #02080a; border: 1px solid #1a6a3a; }
+.hzos-term-head { background: #062010; color: #7dffb4; }
+.hzos-term-body { background: #01050a; color: #4dff9e; font-family: var(--eaoin-pixel-font, monospace); text-shadow: 0 0 6px rgba(77,255,158,0.6); }
+.hzos-term-line { color: #4dff9e; }
+.hzos-term-ok { color: #9fffd0; }
+.hzos-login { background: linear-gradient(180deg,#02110a,#02070a 60%,#01060a); }
+.hzos-login-card { background: rgba(4,14,9,0.94); border: 1px solid #1a6a3a; box-shadow: 0 0 40px rgba(77,255,158,0.2); color: #d8ffe9; }
+.hzos-logo { color: #7dffb4; }
+.hzos-account { background: rgba(10,40,24,0.4); color: #8dffc0; border: 1px solid #1a6a3a; }
+.hzos-account:hover { background: rgba(60,255,160,0.15); }
+.hzos-exit { color: #ff8a8a; }
+.hzos-error { color: #ff8a8a; }
+.hzos-hint { color: #5a8a70; }
+.hzos-icon-img { color: #9fffd0; }
+.hzos-icon span { color: #c8ffe0; }
+.hzos-icon:hover { background: rgba(77,255,158,0.1); }
+.hzos-note { color: #b8ffd6; }
+.hzos-row b { color: #7dffb4; }
+.hzos-wifi-panel { background: rgba(4,14,9,0.97); border: 1px solid #1a6a3a; color: #d8ffe9; }
+.hzos-wifi-head { background: linear-gradient(180deg,#0a3a22,#052014); color: #7dffb4; }
+.hzos-wifi-status { color: #a8ffc8; }
+.hzos-wifi-row:hover { background: rgba(77,255,158,0.1); }
+.hzos-wifi-row.active { background: rgba(60,255,160,0.18); }
+.hzos-wifi-name { color: #d8ffe9; }
+.hzos-wifi-off { background: #0a2014; color: #ff8a8a; border-top: 1px solid #1a6a3a; }
+.hzos-tray-icon.on { filter: drop-shadow(0 0 6px #4dff9e); }
+
+/* File Explorer / Browser / apps overridden to matrix (dark green) */
+.fxp-toolbar { background: #07150e; border-bottom: 1px solid #0f4a2c; }
+.fxp-tool { background: rgba(77,255,158,0.06); border: 1px solid #0f4a2c; color: #9fffd0; }
+.fxp-tool:hover:not(:disabled) { background: rgba(77,255,158,0.16); }
+.fxp-address { background: #03080c; border: 1px solid #0f4a2c; color: #c8ffe0; }
+.fxp-sidebar { background: #06100a; border-right: 1px solid #0f4a2c; }
+.fxp-side-item { color: #b8ffd6; }
+.fxp-side-item:hover { background: rgba(77,255,158,0.1); }
+.fxp-side-item.active { background: rgba(60,255,160,0.18); }
+.fxp-crumbs { background: #06100a; border-bottom: 1px solid #0a2a1a; color: #8dffc0; }
+.fxp-cell { color: #d8ffe9; }
+.fxp-cell:hover { background: rgba(77,255,158,0.1); outline: 1px solid #1a6a3a; }
+.fxp-cell.sel { background: rgba(60,255,160,0.2); outline: 1px solid #4dff9e; }
+.fxp-doc-head { background: #07150e; border-bottom: 1px solid #0f4a2c; }
+.fxp-doc-body { background: #02070a; color: #c8ffe0; }
+.fxp-status { background: #06100a; border-top: 1px solid #0f4a2c; color: #5a8a70; }
+.browser-toolbar { background: #07150e; border-bottom: 1px solid #0f4a2c; }
+.brw-btn { background: rgba(77,255,158,0.06); border: 1px solid #0f4a2c; color: #9fffd0; }
+.brw-btn:hover { background: rgba(77,255,158,0.16); }
+.brw-btn.ext-active { background: rgba(60,255,160,0.2); border-color: #4dff9e; }
+.brw-address { background: #03080c; border: 1px solid #0f4a2c; }
+.brw-address input { color: #c8ffe0; }
+.browser-tabs { background: #06100a; }
+.brw-tab { background: #07150e; color: #9fffd0; }
+.brw-tab.active { background: #0a2014; }
+
+/* ---------------- Arcade (new app) ---------------- */
+.arcade { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #d8ffe9; font-family: var(--eaoin-pixel-font, monospace); }
+.arcade-menu { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px; }
+.arcade-title { font-size: 26px; letter-spacing: 4px; color: #7dffb4; text-shadow: 0 0 14px rgba(77,255,158,0.7); }
+.arcade-cabinets { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; width: 100%; max-width: 460px; }
+.arcade-cab { padding: 16px; text-align: center; background: rgba(10,40,24,0.4); border: 1px solid #1a6a3a; border-radius: 10px; color: inherit; cursor: pointer; display: grid; gap: 6px; }
+.arcade-cab:hover { background: rgba(60,255,160,0.15); box-shadow: 0 0 18px rgba(77,255,158,0.2); }
+.arcade-cab-icon { font-size: 34px; }
+.arcade-cab strong { color: #9fffd0; }
+.arcade-cab small { color: #6a9a7a; font-size: 11px; }
+.arcade-hint { color: #5a8a70; font-size: 11px; }
+.arcade-game { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 8px; gap: 8px; }
+.arcade-game-head { display: flex; justify-content: space-between; align-items: center; color: #9fffd0; }
+.arcade-hud { font-size: 13px; }
+.arcade-hud b { color: #7dffb4; }
+.arcade-close { background: rgba(77,255,158,0.08); border: 1px solid #1a6a3a; color: #ff8a8a; cursor: pointer; }
+.arcade-canvas { border: 2px solid #1a6a3a; border-radius: 8px; background: #02060a; }
+.arcade-start { align-self: center; padding: 10px 20px; background: rgba(60,255,160,0.15); border: 1px solid #4dff9e; color: #9fffd0; cursor: pointer; border-radius: 8px; }
+.arcade-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.6); }
+.simon { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+.simon-pad { aspect-ratio: 1; border-radius: 10px; background: var(--sc); opacity: 0.35; cursor: pointer; border: none; }
+.simon-pad.lit { opacity: 1; box-shadow: 0 0 22px var(--sc); }
+
+/* ---------------- Tiny Minecraft (new app) ---------------- */
+.tiny-mc { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #d8ffe9; font-family: var(--eaoin-pixel-font, monospace); outline: none; }
+.tiny-mc-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #07150e; border-bottom: 1px solid #0f4a2c; color: #9fffd0; }
+.tiny-mc-hud { font-size: 10px; color: #6a9a7a; }
+.tiny-mc-hotbar { display: flex; gap: 6px; padding: 6px 8px; background: rgba(4,12,8,0.9); border-bottom: 1px solid #0f4a2c; flex-wrap: wrap; }
+.tiny-mc-slot { width: 44px; height: 44px; border-radius: 6px; border: 2px solid #0a2a1a; cursor: pointer; position: relative; }
+.tiny-mc-slot.sel { border-color: #4dff9e; box-shadow: 0 0 10px rgba(77,255,158,0.5); }
+.tiny-mc-slot-name { position: absolute; left: 0; right: 0; bottom: 0; font-size: 7px; background: rgba(0,0,0,0.6); color: #fff; text-align: center; }
+.tiny-mc-world { flex: 1; display: grid; grid-template-columns: repeat(32, 1fr); grid-template-rows: repeat(22, 1fr); min-height: 0; position: relative; background: #01040a; }
+.tiny-mc-cell { position: relative; border: 1px solid rgba(0,0,0,0.15); }
+.tiny-mc-cell.hover { outline: 1px solid #4dff9e; }
+.tiny-mc-player { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; z-index: 2; filter: drop-shadow(0 0 4px #000); }
+.tiny-mc-cross { position: absolute; inset: 0; display: grid; place-items: center; color: #4dff9e; font-size: 12px; z-index: 3; }
+.tiny-mc-hint { padding: 5px 8px; font-size: 10px; color: #5a8a70; }
