@@ -269,6 +269,8 @@
   border-left: 3px solid #62d8ff;
 }
 .menu-btn.is-horizonos:hover { border-left-color: #a9ecff; }
+.menu-btn.is-alpha { background: linear-gradient(180deg,#8a3a4a,#6a2a3a 52%,#4a1c26 100%); }
+.menu-btn.is-alpha:hover { border-left-color: #ffb0b0; }
 
 /* --- News feed (left) ----------------------------------------------------- */
 

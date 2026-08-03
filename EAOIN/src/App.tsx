@@ -376,6 +376,7 @@ export default function App() {
             onSingleplayer={() => setAppPhase('worlds')}
             onMultiplayer={() => setAppPhase('multiplayer')}
             onHorizonOS={() => setAppPhase('horizonos')}
+            onAlphaLauncher={() => { window.location.assign('./alpha/'); }}
             onMods={() => setAppPhase('mods')}
             onMarketplace={() => setAppPhase('marketplace')}
             onEditorMode={() => setAppPhase('editor')}

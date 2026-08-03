@@ -25,6 +25,8 @@ export interface TitleScreenProps {
   onMultiplayer: () => void;
   /** Launch HorizonOS — the in-game virtual desktop / OS. */
   onHorizonOS: () => void;
+  /** Launch the EAOIN 2.0 alpha build (served from ./alpha/). */
+  onAlphaLauncher: () => void;
   onMods: () => void;
   onMarketplace: () => void;
   onEditorMode: () => void;
@@ -41,7 +43,7 @@ export interface TitleScreenProps {
 }
 
 export default function TitleScreen({
-  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onHorizonOS, onMods,
+  appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onHorizonOS, onAlphaLauncher, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends,
 }: TitleScreenProps) {
@@ -148,6 +150,12 @@ export default function TitleScreen({
         </button>
         <button className="menu-btn is-editor" onClick={onEditorMode}>
           Editor Mode<span className="btn-icon">🛠</span>
+        </button>
+
+        {/* ---- separate launcher section (bottom) ---- */}
+        <div className="menu-section-divider"><span>ALPHA LAUNCHER</span></div>
+        <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
+          Alpha Launcher<span className="btn-icon">🚀</span>
         </button>
 
         <button className="menu-btn" onClick={onQuit}>
