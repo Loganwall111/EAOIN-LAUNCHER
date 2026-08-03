@@ -164,12 +164,41 @@ export class DimensionTerrainGenerator {
 
         let surface: number;
         switch (this.archetype) {
+          case 'nether': {
+            // 2.0 — Nether overhaul: a jagged cave floor with rolling lava basins
+            // and scattered soul-sand valleys, all under a netherrack ceiling.
+            const n = this.noise.fbm2D(wx, wz, 4, 2.0, 0.5, 31);
+            const lava = this.noise.fbm2D(wx * 0.7, wz * 0.7, 3, 2.0, 0.5, 32);
+            // Lava oceans form wide basins below the floor.
+            if (lava > 0.62) {
+              surface = Math.floor(s.seaLevel - 8 - (lava - 0.62) * 18);
+            } else {
+              surface = Math.floor(s.seaLevel + (n - 0.5) * s.amplitude * 2);
+            }
+            break;
+          }
           case 'end': {
-            // Floating isles over the void: blobby 3D height.
-            const n = this.noise.fbm2D(wx, wz, 3, 2.0, 0.5, 7);
-            surface = Math.floor(s.seaLevel + (n - 0.5) * s.amplitude);
-            // Lower the column centre so islands are detached globs.
-            if (surface > s.seaLevel + 6) surface = s.seaLevel + 6 + Math.floor(n * 4);
+            // 2.0 — End overhaul: rings of thick floating islands around a
+            // central dragon island, with an infinite galaxy of outer rings.
+            const dist = Math.hypot(wx, wz);
+            const ring = Math.floor(dist / 60);            // which ring band
+            const ringPos = (dist % 60) / 60;               // 0..1 inside the band
+            const n = this.noise.fbm2D(wx, wz, 3, 2.0, 0.5, 7 + ring);
+            // Central island (dist < 24) is a solid dragon platform.
+            if (dist < 24) {
+              surface = Math.floor(s.seaLevel + (n - 0.5) * s.amplitude * 1.6 + 4);
+            } else {
+              // Ring islands: dense near the ring centre, with a void gap between
+              // each ring band so the rings read as separate galactic arms.
+              const inGap = ringPos < 0.12 || ringPos > 0.88;
+              if (inGap) surface = -1;
+              else {
+                const dense = this.noise.fbm2D(wx * 1.4, wz * 1.4, 3, 2.0, 0.5, 41 + ring);
+                surface = dense > 0.5
+                  ? Math.floor(s.seaLevel + (dense - 0.5) * 26)
+                  : -1;
+              }
+            }
             break;
           }
           case 'void': {
@@ -230,6 +259,18 @@ export class DimensionTerrainGenerator {
           if (this.archetype === 'rift' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12) {
             this.placeRiftStructures(chunk, lx, surfaceClamped, lz, wx, wz);
           }
+          // 2.0 — End dragon island: obsidian pillars topped with end crystals on
+          // the central platform, so the Ender Dragon has its classic arena.
+          if (this.archetype === 'end' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12 && Math.hypot(wx, wz) < 22) {
+            const pillar = this.endPillarAt(wx, wz);
+            if (pillar) {
+              const pillarH = pillar.h;
+              for (let y = surfaceClamped + 1; y <= surfaceClamped + pillarH; y++) {
+                if (y < CHUNK_HEIGHT) chunk.setBlock(lx, y, lz, B.OBSIDIAN);
+              }
+              if (surfaceClamped + pillarH + 1 < CHUNK_HEIGHT) chunk.setBlock(lx, surfaceClamped + pillarH + 1, lz, B.CRYSTAL);
+            }
+          }
           continue;
         }
 
@@ -245,6 +286,15 @@ export class DimensionTerrainGenerator {
           for (let y = surfaceClamped + 1; y < s.seaLevel; y++) {
             if (chunk.getBlock(lx, y, lz) === B.AIR) chunk.setBlock(lx, y, lz, s.fillBlock);
           }
+        }
+
+        // 2.0 — Nether ceiling: a bedrock roof across the very top so the nether
+        // reads as a sealed cave world (you fly up to a hard roof, like vanilla).
+        if (this.archetype === 'nether' && surfaceClamped < CHUNK_HEIGHT - 2) {
+          chunk.setBlock(lx, CHUNK_HEIGHT - 2, lz, B.BASALT);
+          chunk.setBlock(lx, CHUNK_HEIGHT - 1, lz, B.BLACKSTONE);
+          // Occasional ceiling glowstone veins for light.
+          if (this.noise.hash(wx, 9, wz) > 0.9) chunk.setBlock(lx, CHUNK_HEIGHT - 3, lz, B.GLOWSTONE);
         }
 
         // Surface decor scattered deterministically.
@@ -300,6 +350,47 @@ export class DimensionTerrainGenerator {
         this.setSafe(chunk, lx + dx, base, lz + dz, this.noise.hash(wx + dx, 13, wz + dz) > 0.5 ? 335 : 336);
       }
     }
+  }
+
+  /**
+   * Determine whether an obsidian pillar stands at this central-island column.
+   * Pillars sit in a ring around the dragon platform (like vanilla End).
+   */
+  private endPillarAt(wx: number, wz: number): { h: number } | null {
+    const dist = Math.hypot(wx, wz);
+    if (dist < 4 || dist > 20) return null;
+    // Deterministic ring of 8 pillar sites.
+    const slots = 8;
+    const angle = Math.atan2(wz, wx);
+    const slot = Math.round((angle + Math.PI) / ((Math.PI * 2) / slots));
+    const slotAngle = -Math.PI + slot * ((Math.PI * 2) / slots);
+    const px = Math.cos(slotAngle) * 13;
+    const pz = Math.sin(slotAngle) * 13;
+    // Only the exact pillar column (within half a block) gets the pillar.
+    if (Math.abs(wx - px) > 0.6 || Math.abs(wz - pz) > 0.6) return null;
+    const h = 3 + Math.floor(this.noise.hash(slot, 5, 0) * 6); // 3..8 tall
+    return { h };
+  }
+
+  /** Nether forest trees: crimson/warped stems with a few blocks of canopy. */
+  private placeNetherForest(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
+    const r = this.noise.hash(wx, 7, wz);
+    if (r < 0.7) return;
+    const crimson = this.noise.hash(wx, 8, wz) > 0.5;
+    const stem = crimson ? B.CRIMSON_STEM : B.WARPED_STEM;
+    const h = 3 + Math.floor(this.noise.hash(wx, 6, wz) * 3);
+    const base = surfaceY + 1;
+    for (let y = base; y <= base + h; y++) {
+      if (y < CHUNK_HEIGHT) chunk.setBlock(lx, y, lz, stem);
+    }
+    // Canopy blob (fungus-like) of warped/crimson blocks.
+    const canopy = crimson ? 55 : 56;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        this.setSafe(chunk, lx + dx, base + h + 1, lz + dz, canopy);
+      }
+    }
+    this.setSafe(chunk, lx, base + h + 2, lz, canopy);
   }
 
   private placeHumorousStructures(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
@@ -365,6 +456,10 @@ export class DimensionTerrainGenerator {
         chunk.setBlock(lx, surfaceY + 1, lz, B.OAK_LOG);
       }
     } else if (s.decor === B.BASALT) {
+      // 2.0 — Nether: crimson/warped forest trees on the netherrack floor.
+      if (this.archetype === 'nether') {
+        this.placeNetherForest(chunk, lx, surfaceY, lz, wx, wz);
+      }
       if (r > 0.94) chunk.setBlock(lx, surfaceY + 1, lz, B.BASALT);
       if (r > 0.988) { for (let y = surfaceY + 2; y <= surfaceY + 6; y++) chunk.setBlock(lx, y, lz, B.BASALT); }
     } else if (s.decor === B.CRYSTAL) {
