@@ -1735,10 +1735,15 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             endBlackHole.ensure(holePos);
             endBlackHole.tick(deltaSeconds, performance.now(), camera.position);
             endBlackHole.pull(camera.position, tempRiftPull);
-            camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 2));
+            // Gentle tug only — the hole pulls animals hard, but the player is
+            // nudged so they can always escape (never killed, never trapped).
+            camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 0.4));
 
             // Crossing the event horizon = entering the black hole. It is a
-            // physical portal, not a solid block.
+            // physical portal, not a solid block. The player is NEVER killed by
+            // the End black hole (it must not prevent you beating the game) —
+            // in creative it opens a black void to explore; in survival it just
+            // pulls you gently back to the island edge so you live.
             if (endBlackHole.entered(camera.position)) {
               const blackHoleEnteredRef = enteredBlackHoleRef.current;
               if (!blackHoleEnteredRef) {
@@ -1753,12 +1758,12 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
                   audio.play('ui', settingsRef.current);
                   showActionMessage('You fall into the black hole — an endless black void surrounds you.');
                 } else {
-                  // Survival: spaghettification — torn apart and killed.
-                  showActionMessage('☠ Spaghettification — the black hole pulls you apart…');
-                  const next = applyDamage(survivalStatsRef.current, 9999);
-                  survivalStatsRef.current = next; publishSurvivalStats(next);
-                  setDead(true);
-                  audio.play('explosion', settingsRef.current);
+                  // Survival: you survive — pushed back out to the island edge.
+                  const hc = endBlackHole.centre();
+                  camera.position.set(hc.x, camera.position.y + 3, hc.z + endBlackHole.radius + 3);
+                  streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+                  showActionMessage('🌌 The black hole surges around you — but you slip free and survive.');
+                  audio.play('ui', settingsRef.current);
                 }
               }
             }

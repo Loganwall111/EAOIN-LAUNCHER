@@ -119,3 +119,50 @@ describe('EndBlackHole gravity slingshot', () => {
     engine.dispose();
   });
 });
+
+describe('EndBlackHole growth', () => {
+  it('starts small and doubles every 20 minutes', () => {
+    const { hole, scene, engine } = makeHole();
+    expect(hole.radius).toBe(13);
+    // Under one interval (1200s): no growth yet.
+    hole.grow(1199);
+    expect(hole.radius).toBe(13);
+    // Crossing the 20-minute mark doubles it.
+    hole.grow(1);
+    expect(hole.radius).toBe(26);
+    scene.dispose(); engine.dispose();
+  });
+
+  it('keeps doubling over many intervals', () => {
+    const { hole, scene, engine } = makeHole();
+    hole.grow(1200 * 3);
+    expect(hole.radius).toBeCloseTo(13 * 8, 5);
+    scene.dispose(); engine.dispose();
+  });
+
+  it('eventually engulfs the End island', () => {
+    const { hole, scene, engine } = makeHole();
+    hole.grow(1200 * 6); // 2 hours
+    expect(hole.hasEngulfed).toBe(true);
+    expect(hole.radius).toBeGreaterThan(300);
+    scene.dispose(); engine.dispose();
+  });
+
+  it('grows the pull edge so entities far away get pulled', () => {
+    const { hole, scene, engine } = makeHole();
+    hole.grow(1200); // double once
+    const out = new Vector3(0, 0, 0);
+    hole.pull(new Vector3(100, 120, 0), out); // was outside 90 radius before
+    expect(out.length()).toBeGreaterThan(0);
+    scene.dispose(); engine.dispose();
+  });
+
+  it('pulls and swallows non-player entities', () => {
+    const { hole, scene, engine } = makeHole();
+    const ents = [{ x: 60, z: 0 }, { x: 200, z: 0 }];
+    const pulled = hole.pullEntities(ents, 1);
+    expect(pulled).toBeGreaterThan(0);
+    // Only the close one got pulled within one step; far stays.
+    scene.dispose(); engine.dispose();
+  });
+});

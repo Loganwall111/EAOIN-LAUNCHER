@@ -33,6 +33,54 @@ export class EndBlackHole {
   private pullRadius = 90;
   /** Event horizon radius — crossing it means you entered the hole. */
   private horizonRadius = 13;
+  /** How many seconds the hole has been active (drives growth). */
+  private elapsed = 0;
+  /** Doubling interval: the hole doubles in size every this many seconds (20 min). */
+  private readonly GROW_INTERVAL = 1200;
+  /** Hard cap on horizon radius so it can't overflow (an "extent"). */
+  private readonly MAX_RADIUS = 4096;
+  /** Radius beyond which the hole has fully swallowed the main End island. */
+  private readonly SWALLOW_RADIUS = 300;
+
+  /** True once the black hole has grown to engulf the central End island. */
+  private get engulfed(): boolean { return this.horizonRadius >= this.SWALLOW_RADIUS; }
+
+  /**
+   * Start small and DOUBLE every 20 minutes, forever (up to the MAX_RADIUS
+   * extent), so the hole eventually swallows the End island and keeps growing.
+   * Returns the current growth stage (how many doublings have occurred).
+   */
+  grow(deltaSeconds: number): number {
+    if (!this.active) return 0;
+    this.elapsed += deltaSeconds;
+    if (this.elapsed >= this.GROW_INTERVAL) {
+      const doublings = Math.floor(this.elapsed / this.GROW_INTERVAL);
+      const target = Math.min(this.MAX_RADIUS, this.horizonRadius * Math.pow(2, doublings));
+      this.horizonRadius = Math.max(this.horizonRadius, target);
+      this.applySize();
+      return doublings;
+    }
+    return 0;
+  }
+
+  /** Resize all the visible meshes to match the current horizon radius. */
+  private applySize(): void {
+    if (!this.core || !this.lens || !this.disc || !this.voidSphere || !this.warpRing || !this.echoRing) return;
+    const r = this.horizonRadius;
+    this.core.scaling.setAll(r / 13);
+    this.lens.scaling.setAll(r / 13);
+    this.disc.scaling.setAll(r / 13);
+    this.voidSphere.scaling.setAll(r / 13);
+    this.warpRing.scaling.setAll(r / 13);
+    this.echoRing.scaling.setAll(r / 13);
+  }
+
+  /** Current horizon radius (used for collision + display). */
+  get radius(): number { return this.horizonRadius; }
+  /** Current pull radius (the edge of gravitational influence). */
+  get edge(): number { return this.pullRadius * Math.max(1, this.horizonRadius / 13); }
+  /** True once the hole has grown to swallow the main End island. */
+  get hasEngulfed(): boolean { return this.engulfed; }
 
   constructor(private readonly scene: Scene, private readonly camera?: Camera) {
     Effect.ShadersStore[`${LENS_SHADER}FragmentShader`] = `
@@ -242,6 +290,8 @@ void main(void){
   /** Spin the lens/disc + pulse the ring + feed the lensing post-process. */
   tick(deltaSeconds: number, time = performance.now(), playerPosition?: Vector3): void {
     if (!this.active) return;
+    // Grow: double every 20 minutes up to the extent (doesn't kill the player).
+    this.grow(deltaSeconds);
     if (this.lens) this.lens.rotation.z += deltaSeconds * 0.6;
     if (this.disc) this.disc.rotation.z += deltaSeconds * 0.2;
     if (this.warpRing) this.warpRing.rotation.z -= deltaSeconds * 0.35;
@@ -288,8 +338,10 @@ void main(void){
   }
 
   /**
-   * Pull the player toward the black hole with growing strength (so the closer
-   * you get, the harder it tugs — spaghettification). Returns a pull force.
+   * Pull an entity toward the black hole with growing strength (so the closer
+   * you get, the harder it tugs — spaghettification). This applies to NON-player
+   * entities (sheep, cows, pigs, etc.) — the player is NEVER killed by it.
+   * Returns a pull force.
    */
   pull(player: Vector3, out: Vector3): Vector3 {
     out.set(0, 0, 0);
@@ -297,21 +349,47 @@ void main(void){
     const dx = -player.x;
     const dz = -player.z;
     const dist = Math.hypot(dx, dz);
+    const edge = this.edge;
     if (dist < 2) return out; // centred on the axis
-    if (dist > this.pullRadius) return out;
+    if (dist > edge) return out;
     // Strength grows as you approach — stronger than before, so you get
-    // visibly pulled in and stretched (spaghettified).
-    const falloff = Math.max(0, (this.pullRadius - dist) / this.pullRadius);
-    const strength = falloff * falloff * 6.0;
+    // visibly pulled in and stretched (spaghettified). Scaled with the hole.
+    const falloff = Math.max(0, (edge - dist) / edge);
+    const strength = falloff * falloff * 6.0 * Math.max(1, this.horizonRadius / 13);
     out.x = (dx / Math.max(1, dist)) * strength;
     out.z = (dz / Math.max(1, dist)) * strength;
     return out;
   }
 
-  /** True when the player has crossed the event horizon (entered the hole). */
+  /** True when the entity has crossed the event horizon (entered the hole). */
   entered(player: Vector3): boolean {
     if (!this.active || !this.core) return false;
     return Math.hypot(player.x, player.z) < this.horizonRadius;
+  }
+
+  /**
+   * Pull every nearby creature toward the hole (the "End swallows the
+   * overworld's animals" behaviour). `positions` is a list of {x,y,z} entities
+   * to move; entities that get swallowed are removed. Returns the number pulled.
+   */
+  pullEntities(entities: { x: number; z: number }[], step: number): number {
+    if (!this.active || !this.core) return 0;
+    let pulled = 0;
+    for (let i = entities.length - 1; i >= 0; i--) {
+      const e = entities[i];
+      const dx = -e.x, dz = -e.z;
+      const dist = Math.hypot(dx, dz);
+      const edge = this.edge;
+      if (dist > edge) continue;
+      const falloff = Math.max(0, (edge - dist) / edge);
+      const strength = falloff * falloff * 8.0 * Math.max(1, this.horizonRadius / 13);
+      e.x += (dx / Math.max(1, dist)) * strength * step;
+      e.z += (dz / Math.max(1, dist)) * strength * step;
+      pulled++;
+      // Swallowed once past the horizon.
+      if (Math.hypot(e.x, e.z) < this.horizonRadius) entities.splice(i, 1);
+    }
+    return pulled;
   }
 
   /**
