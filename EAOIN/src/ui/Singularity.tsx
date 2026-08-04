@@ -324,19 +324,19 @@ const FRAG = `
   // Lava tunnels: a bubbling lava floor with a rising magma sphere.
   float mapLava(vec3 p, out int mat){
     mat = 1;
-    float floor = p.y + 2.0 + noise(p.xz*0.3 + u_worldParam)*0.4;
+    float ground = p.y + 2.0 + noise(p.xz*0.3 + u_worldParam)*0.4;
     float bubble = sdSphere(p - vec3(0.0, 1.2, 0.0), 0.9);
-    return min(floor, bubble);
+    return min(ground, bubble);
   }
 
   // Ice cavern: icy floor studded with columns.
   float mapIce(vec3 p, out int mat){
     mat = 1;
-    float floor = p.y + 2.5;
+    float ground = p.y + 2.5;
     vec3 g = floor(p*0.4);
     vec3 l = fract(p*0.4)-0.5;
     float col = sdBox(l - vec3(0.0, 1.0, 0.0), vec3(0.3, 1.5, 0.3));
-    return min(floor, col)/0.4;
+    return min(ground, col)/0.4;
   }
 
   // Mushroom grove: glowing mushroom caps on stems.
