@@ -26,6 +26,7 @@ export class EndBlackHole {
   private voidSphere: Mesh | null = null;
   private stars: ParticleSystem | null = null;
   private warpRing: Mesh | null = null;
+  private echoRing: Mesh | null = null;
   private lensPP: PostProcess | null = null;
   private active = false;
   /** Distance at which the black hole starts pulling the player (the Edge). */
@@ -75,6 +76,7 @@ void main(void){
       this.disc?.setEnabled(active);
       this.voidSphere?.setEnabled(active);
       this.warpRing?.setEnabled(active);
+      this.echoRing?.setEnabled(active);
       if (this.stars) {
         if (active && !this.stars.isStarted()) this.stars.start();
         if (!active && this.stars.isStarted()) this.stars.stop();
@@ -204,6 +206,20 @@ void main(void){
     this.warpRing.position.copyFrom(position);
     this.warpRing.rotation.x = Math.PI / 2;
     this.warpRing.isPickable = false;
+
+    // Lensed sky echo — a large, faint mirror of the accretion disk reflected
+    // around the hole (the Interstellar "echo" of distant sky), pulsing softly.
+    this.echoRing = MeshBuilder.CreateTorus('end_black_hole_echo', { diameter: this.horizonRadius * 6.2, thickness: 1.0, tessellation: 72 }, this.scene);
+    const echoMat = new StandardMaterial('end_black_hole_echo_mat', this.scene);
+    echoMat.emissiveColor = new Color3(1.0, 0.5, 0.18);
+    echoMat.diffuseColor = new Color3(0.5, 0.2, 0.05);
+    echoMat.alpha = 0.18;
+    echoMat.disableLighting = true;
+    this.echoRing.material = echoMat;
+    this.echoRing.position.copyFrom(position);
+    this.echoRing.rotation.x = Math.PI / 2;
+    this.echoRing.rotation.z = 0.6;
+    this.echoRing.isPickable = false;
   }
 
   private makeDotTexture(): Texture | null {
@@ -229,6 +245,12 @@ void main(void){
     if (this.lens) this.lens.rotation.z += deltaSeconds * 0.6;
     if (this.disc) this.disc.rotation.z += deltaSeconds * 0.2;
     if (this.warpRing) this.warpRing.rotation.z -= deltaSeconds * 0.35;
+    if (this.echoRing) {
+      // slow counter-spin + gentle brightness pulse (the sky echo)
+      this.echoRing.rotation.z += deltaSeconds * 0.08;
+      const echoPulse = 0.55 + 0.25 * Math.sin(time * 0.0012);
+      (this.echoRing.material as StandardMaterial).alpha = 0.10 + 0.12 * echoPulse;
+    }
     if (this.lens) {
       // gentle brightness pulse on the photon ring
       const pulse = 0.9 + 0.1 * Math.sin(time * 0.002);
@@ -335,8 +357,8 @@ void main(void){
 
   dispose(): void {
     this.core?.dispose(); this.lens?.dispose(); this.disc?.dispose(); this.voidSphere?.dispose();
-    this.warpRing?.dispose(); this.stars?.dispose(); this.disposeLens();
-    this.core = this.lens = this.disc = this.voidSphere = this.warpRing = null;
+    this.warpRing?.dispose(); this.echoRing?.dispose(); this.stars?.dispose(); this.disposeLens();
+    this.core = this.lens = this.disc = this.voidSphere = this.warpRing = this.echoRing = null;
     this.stars = null;
   }
 }
