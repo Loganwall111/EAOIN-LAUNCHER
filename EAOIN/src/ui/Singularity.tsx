@@ -167,17 +167,17 @@ const FRAG = `
   // through the hole you fell through; looking INWARD shows the deeper void.
   vec3 renderVoid(vec3 ro, vec3 rd){
     vec3 outDir = normalize(ro);              // from centre toward the camera
-    float out = clamp(dot(rd, outDir), 0.0, 1.0);
-    float in = clamp(dot(rd, -outDir), 0.0, 1.0);
+    float outLook = clamp(dot(rd, outDir), 0.0, 1.0);
+    float inLook = clamp(dot(rd, -outDir), 0.0, 1.0);
     vec3 col = vec3(0.004, 0.002, 0.008);
     // Looking back out → see the universe (stars) through the exit.
-    col += starfield(rd) * out * 1.2;
+    col += starfield(rd) * outLook * 1.2;
     // The exit accretion ring hangs on the horizon of the outward direction.
     vec3 perp = rd - outDir * dot(rd, outDir);
-    float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35)) * out;
+    float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35)) * outLook;
     col += vec3(1.0, 0.72, 0.38) * ring * 0.9;
     // Looking deeper → the glowing way to the next world.
-    float deep = smoothstep(0.12, 0.02, abs(length(perp) - 0.30)) * in;
+    float deep = smoothstep(0.12, 0.02, abs(length(perp) - 0.30)) * inLook;
     col += vec3(0.6, 0.9, 1.0) * deep * 0.9;
     // Faint dust / motes drifting in the void.
     float motes = noise(rd.xy * 14.0 + u_time * 0.1);
