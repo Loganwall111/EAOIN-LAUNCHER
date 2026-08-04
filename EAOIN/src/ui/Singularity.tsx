@@ -162,22 +162,23 @@ const FRAG = `
     return mapMonitor(p, mat);
   }
 
-  // Void interior: you are inside the black hole. An endless black void
-  // surrounds you, and the accretion ring (the way back out) hangs at a FIXED
-  // world direction so you can free-look around with the mouse and spot it —
-  // looking "out" shows the ring you fell through; the way deeper glows ahead.
+  // Void interior: you are inside the black hole. Looking OUTWARD (radially
+  // away from the centre — back the way you came) shows the outside universe
+  // through the hole you fell through; looking INWARD shows the deeper void.
   vec3 renderVoid(vec3 ro, vec3 rd){
+    vec3 outDir = normalize(ro);              // from centre toward the camera
+    float out = clamp(dot(rd, outDir), 0.0, 1.0);
+    float in = clamp(dot(rd, -outDir), 0.0, 1.0);
     vec3 col = vec3(0.004, 0.002, 0.008);
-    // The way back out is "up" (+Y) — the ring you fell past glows there.
-    float up = clamp(dot(rd, vec3(0.0,1.0,0.0)), 0.0, 1.0);
-    vec3 perp = rd - vec3(0.0,1.0,0.0) * dot(rd, vec3(0.0,1.0,0.0));
-    float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35));
-    col += vec3(1.0, 0.72, 0.38) * (0.18 + 0.9 * up) * ring;
-    // The way deeper — a glowing ring "down" (-Y), the light at the bottom.
-    float down = clamp(dot(rd, vec3(0.0,-1.0,0.0)), 0.0, 1.0);
-    vec3 downPerp = rd - vec3(0.0,-1.0,0.0) * dot(rd, vec3(0.0,-1.0,0.0));
-    float downRing = smoothstep(0.12, 0.02, abs(length(downPerp) - 0.30));
-    col += vec3(0.6, 0.9, 1.0) * down * downRing * 0.9;
+    // Looking back out → see the universe (stars) through the exit.
+    col += starfield(rd) * out * 1.2;
+    // The exit accretion ring hangs on the horizon of the outward direction.
+    vec3 perp = rd - outDir * dot(rd, outDir);
+    float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35)) * out;
+    col += vec3(1.0, 0.72, 0.38) * ring * 0.9;
+    // Looking deeper → the glowing way to the next world.
+    float deep = smoothstep(0.12, 0.02, abs(length(perp) - 0.30)) * in;
+    col += vec3(0.6, 0.9, 1.0) * deep * 0.9;
     // Faint dust / motes drifting in the void.
     float motes = noise(rd.xy * 14.0 + u_time * 0.1);
     col += vec3(0.3,0.5,0.7) * motes * 0.05;
@@ -368,31 +369,54 @@ const JOURNEY_STAGES = [
 ] as const;
 
 interface Camera {
+  x: number;
+  y: number;
+  z: number;
   yaw: number;
   pitch: number;
-  dist: number;
+}
+
+/** The order of areas you travel through: black hole → void → neural → … → monitor. */
+const STAGE_ORDER = [0, 6, 1, 2, 3, 4, 5] as const;
+
+/** Radius at which flying toward the centre (while looking into it) advances. */
+export const PORTAL_IN_RADIUS = 1.0;
+/** Radius at which flying to the centre and looking away retreats a stage. */
+export const PORTAL_BACK_RADIUS = 0.6;
+/** How directly you must be looking at the centre to go deeper. */
+export const LOOK_IN = 0.5;
+/** How directly you must be looking away to go back. */
+export const LOOK_OUT = -0.5;
+
+/** Advance to the next area in the journey order. */
+export function nextStageOf(stage: number): number {
+  const i = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number]);
+  if (i < 0 || i >= STAGE_ORDER.length - 1) return stage;
+  return STAGE_ORDER[i + 1];
+}
+
+/** Retreat to the previous area in the journey order. */
+export function prevStageOf(stage: number): number {
+  const i = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number]);
+  if (i <= 0) return stage;
+  return STAGE_ORDER[i - 1];
 }
 
 /**
- * Map camera distance to a journey stage, purely physical (no buttons):
- *   - far out  → black hole (stage 0)
- *   - zoom in  → neural (1) → asteroids (2) → planet (3) → house (4) → monitor (5)
- *   - zoom out / look back → reverse, seeing everything again.
+ * Portal decision: 1 = advance deeper, -1 = retreat, 0 = stay.
+ * Only happens near the centre AND while looking into (advance) or away (retreat)
+ * from it — so moving sideways / up / down never pops you to the next area.
  */
-export function stageFromDist(dist: number): number {
-  if (dist >= 1.4) return 0;      // black hole — approachable, never vanishes
-  if (dist >= 0.9) return 6;      // void interior — inside the hole, look back out
-  if (dist >= 0.75) return 1;     // neural network (hole opened)
-  if (dist >= 0.6) return 2;      // asteroid field
-  if (dist >= 0.45) return 3;     // Minecraft planet
-  if (dist >= 0.32) return 4;     // house
-  return 5;                        // monitor (deepest)
+export function portalTransition(dist: number, lookDot: number): number {
+  if (dist < PORTAL_IN_RADIUS && lookDot > LOOK_IN) return 1;
+  if (dist < PORTAL_BACK_RADIUS && lookDot < LOOK_OUT) return -1;
+  return 0;
 }
 
 /**
- * Camera orbit radius used to FRAME each journey world. The black-hole zoom
- * distance (`dist`) only decides WHICH stage you're on; each world then frames
- * itself at a comfortable viewing distance so it isn't too zoomed in.
+ * A comfortable spawn for each area so you start facing the world. The void is
+ * a special case: you spawn just inside the hole looking toward the centre so
+ * you can turn around and see the universe back out.
  */
 export function viewDistForStage(stage: number): number {
   switch (stage) {
@@ -401,9 +425,14 @@ export function viewDistForStage(stage: number): number {
     case 3: return 8;   // Minecraft planet (planet is big — pull back)
     case 4: return 6;   // house
     case 5: return 5;   // monitor
-    case 6: return 0.4; // void interior — inside the horizon
     default: return 4;  // black hole external
   }
+}
+
+function spawnForStage(stage: number): Camera {
+  if (stage === 6) return { x: 0, y: 0, z: -1.5, yaw: 0, pitch: 0 }; // void, look inward
+  const d = viewDistForStage(stage);
+  return { x: 0, y: d * 0.25, z: -d, yaw: 0, pitch: 0.2 };
 }
 
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
@@ -422,10 +451,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   diskThicknessRef.current = diskThickness;
   gravityRef.current = gravity;
 
-  const camRef = useRef<Camera>({ yaw: 0.6, pitch: 0.32, dist: 11 });
+  const camRef = useRef<Camera>({ x: 0, y: 0, z: -4, yaw: 0, pitch: 0.2 });
   const stageRef = useRef(0);
-  const lastStageRef = useRef(0);
   const setStageIdxProxy = useRef<(s: number) => void>(() => {});
+  /** Tracks held movement keys (WASD / arrows / Space / Shift). */
+  const keysRef = useRef<Set<string>>(new Set());
+  /** Accumulates scroll input so the render loop can apply it. */
+  const scrollAccumRef = useRef(0);
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -439,14 +471,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   };
 
   // --- Camera INPUT effect (always runs, independent of WebGL) ------------
-  // Physical zoom: camera distance drives the stage. Zoom in past each
-  // threshold and you fall into the next world; zoom back out (or turn
-  // around / look back) and you reverse to see everything again.
-  //
-  // This is a SEPARATE effect from the WebGL renderer so that mouse drag +
-  // scroll/keyboard zoom always work — even if the GPU can't compile the
-  // lensing shader. Previously the listeners were attached inside the render
-  // effect after shader setup, so a shader failure left the view stuck.
+  // Free-fly 3D camera: WASD / arrows move forward/back/strafe, Space/Shift
+  // move up/down, scroll flies forward/back, and dragging LOOKS around in any
+  // direction. The stage only changes when you fly into the centre and look
+  // into it (deeper) or look away (back) — moving sideways/up/down never pops
+  // you to the next area.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -463,33 +492,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
     };
     const onPointerUp = () => { drag.down = false; };
-    const applyZoom = () => {
-      const stage = stageFromDist(camRef.current.dist);
-      if (stage !== lastStageRef.current) {
-        lastStageRef.current = stage;
-        stageRef.current = stage;
-        setStageIdxProxy.current(stage);
-      }
-    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const c = camRef.current;
-      c.dist = Math.max(0.2, Math.min(40, c.dist + e.deltaY * 0.02));
-      applyZoom();
+      scrollAccumRef.current += e.deltaY * 0.02;
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      const c = camRef.current;
-      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(0.2, c.dist - 0.06);
-      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.06);
-      if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
-      if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
-      applyZoom();
-    };
+    const keyOf = (k: string) => k.toLowerCase();
+    const onKeyDown = (e: KeyboardEvent) => keysRef.current.add(keyOf(e.key));
+    const onKeyUp = (e: KeyboardEvent) => keysRef.current.delete(keyOf(e.key));
     canvas.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
 
     return () => {
       canvas.removeEventListener('pointerdown', onPointerDown);
@@ -497,6 +512,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       window.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   }, []);
 
@@ -557,34 +573,57 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     window.addEventListener('resize', resize);
 
     let raf = 0;
+    let last = performance.now();
     const start = performance.now();
     const render = () => {
-      const t = (performance.now() - start) / 1000;
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const t = (now - start) / 1000;
       const c = camRef.current;
       const stage = stageRef.current;
-      // Smooth zoom: for the black hole (0) and the void interior (6), the
-      // camera radius is the ACTUAL scroll distance `c.dist`, so zooming in/out
-      // visibly moves the camera toward/away from the hole. Journey worlds
-      // (1-5) are framed at a comfortable fixed distance.
-      const viewDist = (stage >= 1 && stage <= 5) ? viewDistForStage(stage) : c.dist;
-      const cp = Math.cos(c.pitch);
-      const sp = Math.sin(c.pitch);
-      const sy = Math.sin(c.yaw);
-      const cy = Math.cos(c.yaw);
-      const eye = new Float32Array([
-        sy * cp * viewDist,
-        sp * viewDist,
-        cy * cp * viewDist,
-      ]);
-      // Aim: normally at the origin. In the void we FREE-LOOK — the camera
-      // faces the yaw/pitch direction so turning the mouse reveals the exit.
-      let target = new Float32Array([0, 0, 0]);
-      if (stage === 6) {
-        const fx = -sy * cp;
-        const fy = sp;
-        const fz = -cy * cp;
-        target = new Float32Array([eye[0] + fx, eye[1] + fy, eye[2] + fz]);
+
+      // Build the free-fly look basis from yaw/pitch.
+      const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
+      const sy = Math.sin(c.yaw), cy = Math.cos(c.yaw);
+      const fwd = { x: sy * cp, y: sp, z: cy * cp };          // forward
+      const right = { x: cy, y: 0, z: -sy };                    // right
+      const up = { x: -sy * sp, y: cp, z: -cy * sp };           // world-up-adjusted
+
+      // Movement (units/sec).
+      const speed = 2.6;
+      const k = keysRef.current;
+      const f = (k.has('w') ? 1 : 0) - (k.has('s') ? 1 : 0);
+      const r = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0);
+      const v = (k.has(' ') ? 1 : 0) - (k.has('shift') ? 1 : 0);
+      c.x += (fwd.x * f + right.x * r) * speed * dt;
+      c.y += (fwd.y * f + up.y * v) * speed * dt;
+      c.z += (fwd.z * f + right.z * r + up.z * v) * speed * dt;
+      // Scroll flies forward/back.
+      if (Math.abs(scrollAccumRef.current) > 0.0001) {
+        const s = scrollAccumRef.current * 3;
+        c.x += fwd.x * s; c.y += fwd.y * s; c.z += fwd.z * s;
+        scrollAccumRef.current = 0;
       }
+
+      // Portal transition: only when near the centre AND looking into/away.
+      const dist = Math.hypot(c.x, c.y, c.z);
+      let lookDot = 0;
+      if (dist > 1e-4) lookDot = (fwd.x * -c.x + fwd.y * -c.y + fwd.z * -c.z) / dist;
+      const dir = portalTransition(dist, lookDot);
+      if (dir !== 0) {
+        const next = dir === 1 ? nextStageOf(stage) : prevStageOf(stage);
+        if (next !== stage) {
+          const s = spawnForStage(next);
+          c.x = s.x; c.y = s.y; c.z = s.z; c.yaw = s.yaw; c.pitch = s.pitch;
+          stageRef.current = next;
+          setStageIdxProxy.current(next);
+        }
+      }
+
+      // Camera eye + free-look target (pos + forward), so you can look around.
+      const eye = new Float32Array([c.x, c.y, c.z]);
+      const target = new Float32Array([c.x + fwd.x, c.y + fwd.y, c.z + fwd.z]);
       gl.useProgram(prog);
       gl.uniform2f(U.res, gl.canvas.width, gl.canvas.height);
       gl.uniform1f(U.time, t);
@@ -593,7 +632,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.diskThickness, diskThicknessRef.current);
       gl.uniform1f(U.gravity, gravityRef.current);
       gl.uniform1f(U.aspect, gl.canvas.width / Math.max(1, gl.canvas.height));
-      gl.uniform1i(U.stage, stage);
+      gl.uniform1i(U.stage, stageRef.current);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -608,19 +647,20 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     return cleanup;
   }, []);
 
-  // Physical, button-free journey: stage is driven purely by camera zoom.
-  // Zoom in → fall deeper; zoom out / look back → reverse and see everything.
-  const isJourney = stageIdx >= 1;
+  // Free-fly journey: stage is driven by flying through the centre portal while
+  // looking into it (deeper) or away (back). Moving sideways/up/down explores
+  // freely within the current area.
+  const isJourney = stageIdx !== 0;
 
-  // Bridge so the render-loop's applyZoom can update React state.
+  // Bridge so the render-loop's portal transition can update React state.
   setStageIdxProxy.current = (stage: number) => {
     setStageIdx(stage);
-    setJourney(stage >= 1);
+    setJourney(stage !== 0);
   };
 
   const currentStage = stageIdx === 6
-    ? { id: 'void', title: 'The Void', desc: 'Endless blackness. Look back to see the ring you fell through — the light ahead is the way deeper.' }
-    : JOURNEY_STAGES[Math.max(0, Math.min(stageIdx, JOURNEY_STAGES.length - 1))];
+    ? { id: 'void', title: 'The Void', desc: 'Inside the hole. Look around — back out you see the universe; the way deeper glows ahead.' }
+    : JOURNEY_STAGES[Math.max(0, Math.min(stageIdx - 1, JOURNEY_STAGES.length - 1))];
 
   const submitPassword = () => {
     const answer = password.trim().toLowerCase();
@@ -649,8 +689,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
 
       <div className="singularity-hint">
         {isJourney
-          ? `Descending: ${currentStage.title} — zoom out or look back to surface`
-          : 'Drag to orbit • Scroll / W-S / arrows to zoom • Zoom all the way in to fall through'}
+          ? `Inside: ${currentStage.title} — fly freely • look back out through the hole to return`
+          : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • fly into the centre while looking at it to fall through'}
       </div>
 
       {/* Camera-control sliders */}

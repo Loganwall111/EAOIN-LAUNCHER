@@ -3,13 +3,15 @@
  * Singularity — the ray-marched black-hole simulator tab.
  *
  * It renders a full-screen canvas, camera/disk/gravity sliders, and drives the
- * ARG journey purely by camera zoom (no buttons). WebGL itself is browser-only,
- * so the effect's render loop can't run in jsdom; these tests pin the
- * button-free UI structure and the stage-mapping helper.
+ * ARG journey by free 3D flight through a central portal. WebGL itself is
+ * browser-only, so the effect's render loop can't run in jsdom; these tests pin
+ * the button-free UI structure and the portal-transition helpers.
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import Singularity, { stageFromDist, viewDistForStage } from '../../src/ui/Singularity';
+import Singularity, {
+  nextStageOf, prevStageOf, portalTransition, viewDistForStage,
+} from '../../src/ui/Singularity';
 
 afterEach(() => {
   cleanup();
@@ -25,7 +27,7 @@ describe('Singularity', () => {
     expect(screen.getByText(/Disk thickness/)).toBeTruthy();
     expect(screen.getByText(/Gravity strength/)).toBeTruthy();
     expect(document.querySelector('.singularity-canvas')).toBeTruthy();
-    // No "Fall Through" / "Deeper" buttons — the journey is physical zoom.
+    // No navigation buttons — the journey is free flight.
     expect(screen.queryByRole('button', { name: /Fall Through/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Deeper/ })).toBeNull();
   });
@@ -36,45 +38,51 @@ describe('Singularity', () => {
     fireEvent.click(screen.getByText('← Back'));
     expect(onBack).toHaveBeenCalled();
   });
+});
 
-  it('responds to scroll-wheel zoom (input listeners always wired)', () => {
-    render(<Singularity onBack={noop} />);
-    const canvas = document.querySelector('.singularity-canvas')!;
-    // Wheel down (deltaY>0) zooms OUT; wheel up (deltaY<0) zooms IN. After many
-    // inward scrolls the camera distance drops far enough to leave the black
-    // hole stage, so the journey HUD appears. This proves the wheel handler
-    // attached (previously it was inside the WebGL effect and never bound).
-    for (let i = 0; i < 30; i++) {
-      fireEvent.wheel(canvas, { deltaY: -100 });
-    }
-    // With deltaY -100 * 0.02 = -2 per scroll, 30 scrolls take dist 11 -> ~0.2,
-    // crossing into the deepest journey (stage 5 / monitor). The depth HUD shows.
-    expect(document.querySelector('.singularity-stage')).toBeTruthy();
+describe('nextStageOf / prevStageOf — journey order', () => {
+  it('travels black hole → void → neural → asteroids → planet → house → monitor', () => {
+    expect(nextStageOf(0)).toBe(6);
+    expect(nextStageOf(6)).toBe(1);
+    expect(nextStageOf(1)).toBe(2);
+    expect(nextStageOf(2)).toBe(3);
+    expect(nextStageOf(3)).toBe(4);
+    expect(nextStageOf(4)).toBe(5);
+    expect(nextStageOf(5)).toBe(5); // deepest stays
+  });
+  it('reverses on retreat', () => {
+    expect(prevStageOf(5)).toBe(4);
+    expect(prevStageOf(4)).toBe(3);
+    expect(prevStageOf(1)).toBe(6);
+    expect(prevStageOf(6)).toBe(0);
+    expect(prevStageOf(0)).toBe(0);
   });
 });
 
-describe('stageFromDist — physical zoom mapping', () => {
-  it('keeps the black hole visible across a wide approach range (does not vanish early)', () => {
-    expect(stageFromDist(40)).toBe(0);
-    expect(stageFromDist(11)).toBe(0);
-    expect(stageFromDist(1.5)).toBe(0);
+describe('portalTransition — look-gated transitions', () => {
+  it('advances only when near the centre AND looking into it', () => {
+    // far away: never advances no matter how you look
+    expect(portalTransition(5, 0.9)).toBe(0);
+    // near centre, looking in → advance
+    expect(portalTransition(0.5, 0.8)).toBe(1);
+    // near centre, looking away → retreat
+    expect(portalTransition(0.5, -0.8)).toBe(-1);
+    // near centre but looking sideways → stay
+    expect(portalTransition(0.5, 0)).toBe(0);
+    // just outside advance radius → stay
+    expect(portalTransition(1.2, 0.8)).toBe(0);
   });
-  it('enters the void interior only when deep inside, then the next worlds open', () => {
-    expect(stageFromDist(1.1)).toBe(6);  // void interior (inside the hole)
-    expect(stageFromDist(0.8)).toBe(1);  // neural (hole opened)
-    expect(stageFromDist(0.65)).toBe(2); // asteroids
-    expect(stageFromDist(0.5)).toBe(3);  // planet
-    expect(stageFromDist(0.4)).toBe(4);  // house
-    expect(stageFromDist(0.2)).toBe(5);  // monitor (deepest)
+  it('retreats only when very close and looking away', () => {
+    // within back radius and looking away
+    expect(portalTransition(0.4, -0.8)).toBe(-1);
+    // close but looking sideways
+    expect(portalTransition(0.4, 0)).toBe(0);
   });
 });
 
 describe('viewDistForStage — journey worlds are framed, not too zoomed', () => {
   it('frames the planet far back so it is visible', () => {
     expect(viewDistForStage(3)).toBeGreaterThanOrEqual(7);
-  });
-  it('uses a tiny radius for the void interior (inside the horizon)', () => {
-    expect(viewDistForStage(6)).toBeLessThan(1);
   });
   it('gives each world a distinct comfortable distance', () => {
     const planet = viewDistForStage(3);
