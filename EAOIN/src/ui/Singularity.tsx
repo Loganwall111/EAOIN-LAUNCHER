@@ -1914,6 +1914,29 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       : { id: 'hole', title: 'The Black Hole', emoji: '🕳️', desc: '' };
   const phase = stageIdx === 6 ? 1 : stageIdx >= WORLD_START ? stageIdx - WORLD_START + 1 : 0;
 
+  /** "Next" — jump straight to the next world without zooming all the way in. */
+  const goNext = () => {
+    const next = nextStageOf(stageRef.current);
+    if (next === stageRef.current) return;
+    lastTransitionRef.current = performance.now();
+    const s = spawnForStage(next);
+    const c = camRef.current;
+    c.x = s.x; c.y = s.y; c.z = s.z; c.yaw = s.yaw; c.pitch = s.pitch;
+    stageRef.current = next;
+    setStageIdxProxy.current(next);
+  };
+  /** "Prev" — step back a world. */
+  const goPrev = () => {
+    const prev = prevStageOf(stageRef.current);
+    if (prev === stageRef.current) return;
+    lastTransitionRef.current = performance.now();
+    const s = spawnForStage(prev);
+    const c = camRef.current;
+    c.x = s.x; c.y = s.y; c.z = s.z; c.yaw = s.yaw; c.pitch = s.pitch;
+    stageRef.current = prev;
+    setStageIdxProxy.current(prev);
+  };
+
   const submitPassword = () => {
     const answer = password.trim().toLowerCase();
     const correct = answer === 'eaoin' || answer === '32646';
@@ -1974,6 +1997,12 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         {isJourney
           ? `Inside: ${currentStage.title} — roam freely • dive STRAIGHT into the centre to fall to the next phase (${phase}/${JOURNEY_WORLDS.length})`
           : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • dive DEEP into the centre and look straight into it to fall through'}
+      </div>
+
+      {/* Quick travel — jump to the next/prev world without zooming. */}
+      <div className="singularity-quicktravel">
+        <button className="singularity-qbtn prev" onClick={goPrev} disabled={stageIdx === 0} aria-label="Previous phase">◀</button>
+        <button className="singularity-qbtn next" onClick={goNext} disabled={stageIdx === MONITOR_STAGE} aria-label="Next phase">Next ▶</button>
       </div>
 
       {/* LEFT STUDIO — tons of tiny tunable bars (X to hide for a clean view) */}

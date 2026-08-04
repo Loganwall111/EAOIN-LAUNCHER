@@ -3345,6 +3345,19 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-x { margin-left: auto; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-size: 18px; }
 .singularity-x:hover { background: rgba(168,121,255,0.25); }
 .singularity-hint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 13px; color: rgba(220,230,250,0.85); text-align: center; background: rgba(0,0,0,0.5); padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
+/* Quick-travel Next/Prev — jump a phase without zooming all the way in. */
+.singularity-quicktravel {
+  position: absolute; bottom: 130px; right: 24px; z-index: 7;
+  display: flex; gap: 8px;
+}
+.singularity-qbtn {
+  padding: 10px 16px; cursor: pointer; font-weight: 800; font-size: 13px;
+  background: rgba(20,16,36,0.9); border: 1px solid #a879ff; color: #e6e6ff;
+  border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.singularity-qbtn:hover:not(:disabled) { background: rgba(168,121,255,0.3); }
+.singularity-qbtn.next { background: linear-gradient(90deg, rgba(168,121,255,0.35), rgba(77,255,158,0.25)); border-color: #4dff9e; color: #fff; }
+.singularity-qbtn:disabled { opacity: 0.35; cursor: not-allowed; }
 .singularity-actions { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 10px; }
 .singularity-dive {
   padding: 14px 30px; border-radius: 12px; cursor: pointer; border: none; font: 800 16px var(--ui-font, sans-serif);
@@ -3564,4 +3577,18 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   background:
     radial-gradient(circle at 50% 50%, rgba(120,10,10,0) 0%, rgba(180,20,10,0.35) 60%, rgba(90,0,40,0.6) 100%);
   transition: opacity 0.15s linear;
+}
+
+/* Ender Dragon death — screen flash for the shockwave. */
+.dragon-shockwave-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.98), rgba(255,200,120,0.7) 55%, rgba(255,160,60,0) 100%);
+  animation: dragon-shockwave-flash 0.9s ease-out forwards;
+}
+@keyframes dragon-shockwave-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }

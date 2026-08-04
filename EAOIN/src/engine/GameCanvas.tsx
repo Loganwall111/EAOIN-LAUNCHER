@@ -279,6 +279,9 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const aiNpcRef = useRef<((name: string, x: number, y: number, z: number, colours?: { shirt: string; hair: string; skin: string; pants: string }) => void) | null>(null);
   /** True once the player has entered the End black hole this session. */
   const enteredBlackHoleRef = useRef(false);
+  /** True while the Ender Dragon is alive in the End — drives the black fog
+   *  that hides the distant islands during the fight. */
+  const endDragonAliveRef = useRef(false);
   /** Event-horizon time-scale multiplier (1 = normal) and redshift target. */
   const timeScaleRef = useRef(1);
   const redshiftTarget = useRef(0);
@@ -833,6 +836,59 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         setBossState(null);
       };
 
+      /**
+       * Ender Dragon death — a giant, immersive shockwave: an expanding glowing
+       * ring mesh, a screen flash, and camera shake, then it fades out.
+       */
+      const triggerDragonShockwave = (position: Vector3): void => {
+        try {
+          const ring = MeshBuilder.CreateTorus('dragon_shockwave', { diameter: 2, thickness: 1.6, tessellation: 48 }, scene);
+          ring.position.copyFrom(position);
+          ring.position.y += 2;
+          ring.rotation.x = Math.PI / 2;
+          const mat = new StandardMaterial('dragon_shockwave_mat', scene);
+          mat.emissiveColor = new Color3(1, 0.72, 0.38);
+          mat.diffuseColor = new Color3(1, 0.6, 0.2);
+          mat.disableLighting = true;
+          mat.alpha = 0.95;
+          ring.material = mat;
+          ring.isPickable = false;
+
+          // Flash the screen white briefly.
+          const flashDiv = document.createElement('div');
+          flashDiv.className = 'dragon-shockwave-flash';
+          document.body.appendChild(flashDiv);
+          window.setTimeout(() => flashDiv.remove(), 900);
+
+          // Expand + fade the ring outward, then dispose.
+          let age = 0;
+          const step = () => {
+            age += 0.016;
+            const p = Math.min(1, age / 1.6);
+            ring.scaling.setAll(1 + p * 90);
+            mat.alpha = Math.max(0, 0.95 * (1 - p));
+            if (p < 1) window.requestAnimationFrame(step);
+            else ring.dispose();
+          };
+          step();
+
+          // Camera shake.
+          const shakeMs = 700;
+          const shakeStart = performance.now();
+          const shake = () => {
+            const el = performance.now() - shakeStart;
+            if (el > shakeMs) return;
+            const a = (1 - el / shakeMs) * 0.5;
+            camera.position.x += (Math.random() - 0.5) * a;
+            camera.position.y += (Math.random() - 0.5) * a;
+            window.requestAnimationFrame(shake);
+          };
+          shake();
+        } catch (e) {
+          console.warn('[GameCanvas] dragon shockwave failed', e);
+        }
+      };
+
       const publishBoss = (): void => {
         setBossState(activeBoss ? activeBoss.getState() : null);
       };
@@ -854,6 +910,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         spawnAt.y = terrain.getSurfaceHeight(spawnAt.x, spawnAt.z) + 1;
 
         const boss = new BossEncounter(scene, def, spawnAt);
+
+        // Ender Dragon alive → thicken the black fog over the End island until
+        // it dies and the shockwave clears the sky.
+        if (def.id === 'ender_dragon') endDragonAliveRef.current = true;
 
         boss.onPhase = (phase, bossDef) => {
           showActionMessage(`${bossDef.name} enters phase ${phase} of ${bossDef.phases}!`);
@@ -886,6 +946,13 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           showActionMessage(`${bossDef.name} defeated! Drops: ${bossDef.drops.join(', ')}`);
           audio.play('creature_down', settingsRef.current);
           onGameplayEvent('creaturesDefeated');
+          // Ender Dragon: unleash a giant shockwave and clear the black fog that
+          // hid the distant islands during the fight.
+          if (bossDef.id === 'ender_dragon') {
+            endDragonAliveRef.current = false;
+            triggerDragonShockwave(position);
+            showActionMessage('💥 The dragon bursts — a shockwave ripples across the End, and the black fog clears to reveal the islands.');
+          }
           // Registry drops are lore item names; award a themed block stack so
           // the kill has a tangible reward in the inventory.
           const reward = bossDef.tier === 'final' ? 16 : bossDef.tier === 'world' ? 11 : 10;
@@ -1784,6 +1851,15 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
               }
             }
           }
+        }
+        // End dragon black fog: while the Ender Dragon is alive, thick black fog
+        // cloaks the distant islands (you can't see the floor/far islands through
+        // it). Killing the dragon clears it.
+        if (chunkSource.getDimension() === 'end') {
+          const target = endDragonAliveRef.current ? 0.05 : 0.008;
+          const delta = (target - scene.fogDensity) * Math.min(1, deltaSeconds * 0.6);
+          scene.fogDensity = Math.max(0.008, Math.min(0.08, scene.fogDensity + delta));
+          scene.fogColor = Color3.Lerp(scene.fogColor, new Color3(0.02, 0.01, 0.04), endDragonAliveRef.current ? Math.min(1, deltaSeconds * 0.6) : 0);
         }
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
