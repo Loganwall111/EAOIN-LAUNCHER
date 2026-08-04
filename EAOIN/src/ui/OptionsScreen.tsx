@@ -267,10 +267,10 @@ export default function OptionsScreen({ settings, onChange, onBack, onOpenSuperS
                 <Row label="World border radius" hint={`${settings.worldBorderRadius} blocks`}>
                   <input type="range" min={32} max={2000} step={8} value={settings.worldBorderRadius} onChange={(e) => patch({ worldBorderRadius: Number(e.target.value) })} aria-label="World border radius" />
                 </Row>
-                <Row label="Super Settings" hint="The deep config layer — coloured lighting, cameras, ray tracing, debug & more.">
+                <Row label="Full Game Settings" hint="Hundreds of toggles across sky, textures, blocks, particles, audio, gameplay, creative, performance, UI, controls, multiplayer, modding and more.">
                   {onOpenSuperSettings
-                    ? <button className="confirm-btn wide" style={{ margin: 0 }} onClick={onOpenSuperSettings}>⚡ Open Super Settings</button>
-                    : <Toggle checked={false} onChange={() => {}} label="Super Settings (unavailable here)" />}
+                    ? <button className="confirm-btn wide" style={{ margin: 0 }} onClick={onOpenSuperSettings}>⚙️ Open Full Game Settings</button>
+                    : <Toggle checked={false} onChange={() => {}} label="Full Game Settings (unavailable here)" />}
                 </Row>
               </>
             )}

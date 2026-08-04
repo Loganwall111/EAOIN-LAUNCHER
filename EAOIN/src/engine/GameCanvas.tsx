@@ -1996,10 +1996,15 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           }
 
           // Look: right stick (controller) / drag (touch) rotates the camera.
-          const lookSens = usingController ? 0.0026 : 0.006;
+          // Full Game Settings: mouse sensitivity + invert X/Y.
+          const ssCtl = superSettingsRef.current;
+          const sensMul = ssCtl?.mouseSensitivity ?? 1;
+          const lookSens = (usingController ? 0.0026 : 0.006) * Math.max(0.1, sensMul);
+          const invX = ssCtl?.invertX ? -1 : 1;
+          const invY = ssCtl?.invertY ? -1 : 1;
           if (Math.abs(lookX) > 0.001 || Math.abs(lookY) > 0.001) {
-            camera.rotation.y -= lookX * lookSens * 60 * deltaSeconds;
-            camera.rotation.x -= lookY * lookSens * 60 * deltaSeconds;
+            camera.rotation.y -= lookX * lookSens * 60 * deltaSeconds * invX;
+            camera.rotation.x -= lookY * lookSens * 60 * deltaSeconds * invY;
             const halfPi = Math.PI / 2 - 0.01;
             camera.rotation.x = Math.max(-halfPi, Math.min(halfPi, camera.rotation.x));
           }

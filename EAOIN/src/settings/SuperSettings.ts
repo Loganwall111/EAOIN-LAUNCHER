@@ -120,6 +120,38 @@ export interface SuperSettings {
   doFireTick: boolean;
   doMobLoot: boolean;
   doDaylightCycle: boolean;
+
+  /* ---- textures & blocks ---- */
+  texturePack: 'classic' | 'soft' | 'vibrant' | 'noir';
+  blockDetail: number;         // 0..1 texture detail
+  waterOpacity: number;        // 0..1
+  waterColor: string;
+  lavaColor: string;
+  glassOpacity: number;        // 0..1
+  smoothLighting: boolean;
+  mipmapTextures: boolean;
+
+  /* ---- controls ---- */
+  mouseSensitivity: number;    // 0..3
+  invertY: boolean;
+  invertX: boolean;
+  autoJump: boolean;
+  sneakToggle: boolean;
+  sprintToggle: boolean;
+
+  /* ---- multiplayer ---- */
+  multiplayerEnabled: boolean;
+  serverList: boolean;
+  voiceChat: boolean;
+  showPlayerNames: boolean;
+  pvp: boolean;
+
+  /* ---- modding ---- */
+  moddingEnabled: boolean;
+  resourcePacks: boolean;
+  dataPacks: boolean;
+  shaderPacks: boolean;
+  autoModUpdate: boolean;
 }
 
 export function defaultSuperSettings(): SuperSettings {
@@ -206,6 +238,30 @@ export function defaultSuperSettings(): SuperSettings {
     doFireTick: true,
     doMobLoot: true,
     doDaylightCycle: true,
+    texturePack: 'classic',
+    blockDetail: 1,
+    waterOpacity: 0.7,
+    waterColor: '#3a86d0',
+    lavaColor: '#ff5a1a',
+    glassOpacity: 0.5,
+    smoothLighting: true,
+    mipmapTextures: true,
+    mouseSensitivity: 1,
+    invertY: false,
+    invertX: false,
+    autoJump: false,
+    sneakToggle: false,
+    sprintToggle: false,
+    multiplayerEnabled: true,
+    serverList: true,
+    voiceChat: true,
+    showPlayerNames: true,
+    pvp: true,
+    moddingEnabled: true,
+    resourcePacks: true,
+    dataPacks: true,
+    shaderPacks: true,
+    autoModUpdate: true,
   };
 }
 

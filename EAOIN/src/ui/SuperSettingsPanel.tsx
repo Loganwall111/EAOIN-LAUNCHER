@@ -11,18 +11,22 @@ import { useState } from 'react';
 import { SuperSettings, defaultSuperSettings } from '../settings/SuperSettings';
 import { getGodMode } from '../arg/GodMode';
 
-type Tab = 'sky' | 'world' | 'lighting' | 'fx' | 'audio' | 'gameplay' | 'creative' | 'perf' | 'ui' | 'misc' | 'camera' | 'rt' | 'god' | 'debug' | 'mods';
+type Tab = 'sky' | 'world' | 'lighting' | 'textures' | 'fx' | 'audio' | 'gameplay' | 'creative' | 'perf' | 'ui' | 'controls' | 'multiplayer' | 'modding' | 'misc' | 'camera' | 'rt' | 'god' | 'debug' | 'mods';
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'sky', label: 'Sky', icon: '🌌' },
   { id: 'world', label: 'World', icon: '🌍' },
   { id: 'lighting', label: 'Lighting', icon: '💡' },
+  { id: 'textures', label: 'Textures & Blocks', icon: '🧱' },
   { id: 'fx', label: 'Particles & FX', icon: '✨' },
   { id: 'audio', label: 'Audio', icon: '🔊' },
   { id: 'gameplay', label: 'Gameplay', icon: '🎮' },
   { id: 'creative', label: 'Creative & Build', icon: '🏗️' },
   { id: 'perf', label: 'Performance', icon: '⚡' },
   { id: 'ui', label: 'UI', icon: '🖥️' },
+  { id: 'controls', label: 'Controls', icon: '🎮' },
+  { id: 'multiplayer', label: 'Multiplayer', icon: '🌐' },
+  { id: 'modding', label: 'Modding', icon: '🧩' },
   { id: 'misc', label: 'Misc / Rules', icon: '🧩' },
   { id: 'camera', label: 'Camera', icon: '📷' },
   { id: 'rt', label: 'Ray Tracing', icon: '🔆' },
@@ -82,6 +86,103 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
         </div>
 
         <div className="super-body">
+          {tab === 'textures' && (
+            <>
+              <Row label="Texture pack" hint="Overall block/terrain art style.">
+                <select className="ui-input" value={merged.texturePack} onChange={(e) => patch({ texturePack: e.target.value as SuperSettings['texturePack'] })}>
+                  <option value="classic">Classic</option>
+                  <option value="soft">Soft</option>
+                  <option value="vibrant">Vibrant</option>
+                  <option value="noir">Noir</option>
+                </select>
+              </Row>
+              <Row label="Block detail" hint={`${Math.round(merged.blockDetail * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.blockDetail} onChange={(e) => patch({ blockDetail: Number(e.target.value) })} />
+              </Row>
+              <Row label="Smooth lighting" hint="Blend light across block faces.">
+                <Toggle on={merged.smoothLighting} onClick={() => patch({ smoothLighting: !merged.smoothLighting })} label="Smooth lighting" />
+              </Row>
+              <Row label="Mipmap textures" hint="Sharper distant textures (small memory cost).">
+                <Toggle on={merged.mipmapTextures} onClick={() => patch({ mipmapTextures: !merged.mipmapTextures })} label="Mipmap textures" />
+              </Row>
+              <Row label="Water opacity" hint={`${Math.round(merged.waterOpacity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.waterOpacity} onChange={(e) => patch({ waterOpacity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Water colour">
+                <input type="color" value={merged.waterColor} onChange={(e) => patch({ waterColor: e.target.value })} />
+              </Row>
+              <Row label="Lava colour">
+                <input type="color" value={merged.lavaColor} onChange={(e) => patch({ lavaColor: e.target.value })} />
+              </Row>
+              <Row label="Glass opacity" hint={`${Math.round(merged.glassOpacity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.glassOpacity} onChange={(e) => patch({ glassOpacity: Number(e.target.value) })} />
+              </Row>
+            </>
+          )}
+
+          {tab === 'controls' && (
+            <>
+              <Row label="Mouse sensitivity" hint={`${merged.mouseSensitivity.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.mouseSensitivity} onChange={(e) => patch({ mouseSensitivity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Invert Y" hint="Look up when you move the mouse down.">
+                <Toggle on={merged.invertY} onClick={() => patch({ invertY: !merged.invertY })} label="Invert Y" />
+              </Row>
+              <Row label="Invert X" hint="Look left when you move the mouse right.">
+                <Toggle on={merged.invertX} onClick={() => patch({ invertX: !merged.invertX })} label="Invert X" />
+              </Row>
+              <Row label="Auto-jump" hint="Jump automatically when you hit a block.">
+                <Toggle on={merged.autoJump} onClick={() => patch({ autoJump: !merged.autoJump })} label="Auto-jump" />
+              </Row>
+              <Row label="Sneak toggle" hint="Sneak stays on until you press it again.">
+                <Toggle on={merged.sneakToggle} onClick={() => patch({ sneakToggle: !merged.sneakToggle })} label="Sneak toggle" />
+              </Row>
+              <Row label="Sprint toggle" hint="Sprint stays on until you press it again.">
+                <Toggle on={merged.sprintToggle} onClick={() => patch({ sprintToggle: !merged.sprintToggle })} label="Sprint toggle" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'multiplayer' && (
+            <>
+              <Row label="Multiplayer" hint="Master switch for servers, guilds and nations.">
+                <Toggle on={merged.multiplayerEnabled} onClick={() => patch({ multiplayerEnabled: !merged.multiplayerEnabled })} label="Multiplayer" />
+              </Row>
+              <Row label="Server browser" hint="Show the official server list.">
+                <Toggle on={merged.serverList} onClick={() => patch({ serverList: !merged.serverList })} label="Server browser" />
+              </Row>
+              <Row label="Voice chat" hint="Proximity voice chat on servers.">
+                <Toggle on={merged.voiceChat} onClick={() => patch({ voiceChat: !merged.voiceChat })} label="Voice chat" />
+              </Row>
+              <Row label="Show player names" hint="Show name tags above players.">
+                <Toggle on={merged.showPlayerNames} onClick={() => patch({ showPlayerNames: !merged.showPlayerNames })} label="Show player names" />
+              </Row>
+              <Row label="PvP" hint="Players can damage each other.">
+                <Toggle on={merged.pvp} onClick={() => patch({ pvp: !merged.pvp })} label="PvP" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'modding' && (
+            <>
+              <Row label="Modding" hint="Master switch for loading mods.">
+                <Toggle on={merged.moddingEnabled} onClick={() => patch({ moddingEnabled: !merged.moddingEnabled })} label="Modding" />
+              </Row>
+              <Row label="Resource packs" hint="Custom textures and models.">
+                <Toggle on={merged.resourcePacks} onClick={() => patch({ resourcePacks: !merged.resourcePacks })} label="Resource packs" />
+              </Row>
+              <Row label="Data packs" hint="Custom recipes, loot and world rules.">
+                <Toggle on={merged.dataPacks} onClick={() => patch({ dataPacks: !merged.dataPacks })} label="Data packs" />
+              </Row>
+              <Row label="Shader packs" hint="Custom shader presets.">
+                <Toggle on={merged.shaderPacks} onClick={() => patch({ shaderPacks: !merged.shaderPacks })} label="Shader packs" />
+              </Row>
+              <Row label="Auto-mod update" hint="Check for mod updates automatically.">
+                <Toggle on={merged.autoModUpdate} onClick={() => patch({ autoModUpdate: !merged.autoModUpdate })} label="Auto-mod update" />
+              </Row>
+            </>
+          )}
+
           {tab === 'sky' && (
             <>
               <Row label="Sky mode" hint="Pick the atmosphere look for the world.">
