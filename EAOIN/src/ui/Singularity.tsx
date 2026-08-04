@@ -61,6 +61,21 @@ const FRAG = `
   uniform float u_showNebula;
   uniform float u_fovScale;
 
+  // ---- Wacky toggles + fluid + motion (Black Hole Studio, Part 2) ----
+  uniform vec2 u_pan;         // screen-space pan — drag moves the hole across the screen
+  uniform float u_cycleSpeed; // animated colour cycling (colour-changing version)
+  uniform float u_fluid;      // fluid-turbulence swirl amount
+  uniform float u_breath;     // horizon "breathing" pulsation
+  uniform float u_bright;     // brightness / luminescence multiplier
+  uniform float u_invert;     // 0/1 colour invert
+  uniform float u_mono;       // 0..1 monochrome
+  uniform float u_rainbow;    // rainbow hue sweep
+  uniform float u_mirror;     // 0/1 mirror the screen
+  uniform float u_vhs;        // 0..1 VHS scanlines
+  uniform float u_flicker;    // 0..1 random flicker
+  uniform float u_twist;      // 0..1 radial screen swirl
+  uniform float u_glitch;     // 0..1 glitch bands
+
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
   const int MAX_STEPS = 260;
@@ -73,6 +88,41 @@ const FRAG = `
     f=f*f*(3.0-2.0*f);
     return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
                mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+  }
+
+  // Fractal Brownian motion — flowing, fluid-like turbulence for the disk.
+  float fbm(vec2 p){
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+      v += a * noise(p);
+      p = p*2.03 + vec2(1.7, 9.2);
+      a *= 0.5;
+    }
+    return v;
+  }
+
+  // Rotate a colour's hue by h radians (keeps luminance steady).
+  vec3 hueShift(vec3 col, float h){
+    vec3 k = vec3(0.57735, 0.57735, 0.57735);
+    float c = cos(h), s = sin(h);
+    return col*c + cross(k, col)*s + k*dot(k, col)*(1.0-c);
+  }
+
+  // Shared final colour-grading: luminescence, cycling, rainbow, invert,
+  // monochrome, VHS, flicker + a soft vignette. Applied to every stage.
+  vec3 grade(vec3 col, vec2 uv, vec2 ndc){
+    if (u_cycleSpeed > 0.001) col = hueShift(col, u_time * u_cycleSpeed);
+    if (u_rainbow > 0.001) col = hueShift(col, u_rainbow * (uv.x*6.28318 + u_time*0.5));
+    col *= u_bright;
+    if (u_invert > 0.5) col = vec3(1.0) - col;
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, vec3(lum), u_mono);
+    float scan = 0.5 + 0.5*sin(uv.y*220.0 - u_time*70.0);
+    col *= 1.0 - u_vhs * 0.18 * (1.0 - scan);
+    col *= 1.0 - u_flicker * 0.2 * step(0.985, hash(vec2(floor(u_time*24.0), 1.0)));
+    col *= 0.6 + 0.4*smoothstep(1.3, 0.15, length(ndc));
+    return col;
   }
 
   // A starfield sampled in the ray's final (escaped) direction.
@@ -285,7 +335,19 @@ const FRAG = `
 
   void main(){
     vec2 uv = v_uv;
-    vec2 ndc = (uv - 0.5) * vec2(u_aspect, 1.0);
+    // ---- Wacky screen-space tricks: mirror, twist swirl, glitch bands ----
+    if (u_mirror > 0.5) uv.x = 1.0 - uv.x;
+    vec2 uvC = uv - 0.5;                          // -0.5..0.5
+    float rad = length(uvC) * 2.0;
+    float tw = u_twist * rad * 1.2;
+    float ctw = cos(tw), stw = sin(tw);
+    uvC = vec2(ctw*uvC.x - stw*uvC.y, stw*uvC.x + ctw*uvC.y);
+    // Drag moves the hole across the screen (screen-space pan).
+    uvC += u_pan;
+    // Glitch bands flicker random horizontal slices.
+    uvC.x += (u_glitch * step(0.985, hash(vec2(floor(u_time*16.0), floor(uvC.y*48.0)))) - 0.5*u_glitch) * 0.1;
+    uv = uvC + 0.5;
+    vec2 ndc = uvC * vec2(u_aspect, 1.0);
 
     // Build a right-handed camera basis from eye→target.
     vec3 fwd = normalize(u_camTarget - u_camPos);
@@ -294,75 +356,72 @@ const FRAG = `
     float fov = 1.35 * u_fovScale; // ~1/tan(fov/2); bigger = wider
     vec3 dir = normalize(ndc.x*right + ndc.y*up + fwd*fov);
 
+    vec3 col;
     // ---- Void interior (stage 6): inside the black hole ----
     if (u_stage == 6) {
-      vec3 col = renderVoid(u_camPos, dir);
-      col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
-      gl_FragColor = vec4(col, 1.0);
-      return;
+      col = renderVoid(u_camPos, dir);
     }
     // ---- Journey worlds: render a distinct scene per stage ----
-    if (u_stage >= 1) {
-      vec3 col = renderWorld(u_camPos, dir);
-      col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
-      gl_FragColor = vec4(col, 1.0);
-      return;
+    else if (u_stage >= 1) {
+      col = renderWorld(u_camPos, dir);
     }
+    // ---- Black hole: ray-march with gravitational lensing ----
+    else {
+      vec3 pos = u_camPos;
+      vec3 ray = dir;
+      col = vec3(0.0);
+      bool escaped = false;
+      float t = 0.0;
+      for (int i = 0; i < MAX_STEPS; i++) {
+        float r = length(pos);
+        // Horizon "breathes" — pulses when the breath toggle is on.
+        float h = RS * u_gravity * (1.0 + u_breath * 0.35 * sin(u_time * 2.0));
 
-    vec3 pos = u_camPos;
-    vec3 ray = dir;
-    vec3 col = vec3(0.0);
-    bool escaped = false;
-    float t = 0.0;
+        float stepLen = clamp((r - h) * 0.4, 0.012, 1.4);
+        if (r < h * 1.25) stepLen = 0.01;
 
-    // ---- Ray-march with gravitational lensing (Schwarzschild metric) ----
-    for (int i = 0; i < MAX_STEPS; i++) {
-      float r = length(pos);
-      float h = RS * u_gravity; // scaled horizon
+        // Gravitational deflection: bend the ray toward the hole ~ 1/r^2.
+        vec3 gAcc = -h * 0.8 / max(r*r, 1e-4) * (pos / max(r, 1e-4));
+        ray = normalize(ray + gAcc * stepLen * 0.5);
 
-      float stepLen = clamp((r - h) * 0.4, 0.012, 1.4);
-      if (r < h * 1.25) stepLen = 0.01;
+        // Accretion disk with extra glow (fluid turbulence mixes in).
+        float diskRad = length(pos.xz);
+        float y = pos.y;
+        if (abs(y) < u_diskThickness && diskRad > u_diskInner && diskRad < u_diskOuter) {
+          float innerT = 1.0 - (diskRad - u_diskInner)/max(u_diskOuter - u_diskInner, 1e-4);
+          float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*u_swirlSpeed);
+          float flow = fbm(pos.xz*0.7 + vec2(u_time*0.3, u_time*0.18));
+          swirl = mix(swirl, 0.5 + 0.5*flow, u_fluid);
+          float edge = smoothstep(0.0, 1.0, innerT);
+          vec3 diskCol = u_diskCol*edge + u_diskCol2*u_swirlAmt;
+          float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
+          col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk;
+        }
 
-      // Gravitational deflection: bend the ray toward the hole ~ 1/r^2.
-      vec3 gAcc = -h * 0.8 / max(r*r, 1e-4) * (pos / max(r, 1e-4));
-      ray = normalize(ray + gAcc * stepLen * 0.5);
+        // Photon-ring / bloom halo around the horizon for extra glow.
+        float rglow = max(r - h, 0.0);
+        col += u_glowCol * exp(-rglow*8.0) * u_glow * u_showGlow;
 
-      // Accretion disk with extra glow.
-      float diskRad = length(pos.xz);
-      float y = pos.y;
-      if (abs(y) < u_diskThickness && diskRad > u_diskInner && diskRad < u_diskOuter) {
-        float innerT = 1.0 - (diskRad - u_diskInner)/max(u_diskOuter - u_diskInner, 1e-4);
-        float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*u_swirlSpeed);
-        float edge = smoothstep(0.0, 1.0, innerT);
-        vec3 diskCol = u_diskCol*edge + u_diskCol2*u_swirlAmt;
-        float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
-        col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk;
+        pos += ray * stepLen;
+        t += stepLen;
+
+        if (r < h) {
+          col += vec3(1.0,0.95,0.85) * smoothstep(h, h*1.5, r) * 0.35;
+          col *= 0.0;
+          escaped = false;
+          break;
+        }
+        if (t > MAX_DIST) { escaped = true; break; }
       }
 
-      // Photon-ring / bloom halo around the horizon for extra glow.
-      float rglow = max(r - h, 0.0);
-      col += u_glowCol * exp(-rglow*8.0) * u_glow * u_showGlow;
-
-      pos += ray * stepLen;
-      t += stepLen;
-
-      if (r < h) {
-        col += vec3(1.0,0.95,0.85) * smoothstep(h, h*1.5, r) * 0.35;
-        col *= 0.0;
-        escaped = false;
-        break;
+      if (escaped || t >= MAX_DIST) {
+        col += starfield(ray);
       }
-      if (t > MAX_DIST) { escaped = true; break; }
+      // Glow bloom / lift so the hole reads bright and luminous.
+      col += col*col*u_bloom;
     }
 
-    if (escaped || t >= MAX_DIST) {
-      col += starfield(ray);
-    }
-
-    // Glow bloom / lift so the hole reads bright and luminous.
-    col += col*col*u_bloom;
-    col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
-
+    col = grade(col, uv, ndc);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -477,6 +536,19 @@ export interface BlackHoleOpts {
   showStars: boolean;
   showNebula: boolean;
   resScale: number; // render scale × devicePixelRatio (higher = sharper)
+  // Wacky / fluid / motion (Part 2)
+  cycleSpeed: number;  // animated colour cycling (0 = off)
+  fluid: number;       // fluid-turbulence swirl 0..1
+  breath: number;      // horizon breathing 0..1
+  bright: number;      // brightness / luminescence multiplier
+  invert: boolean;     // colour invert
+  mono: boolean;       // monochrome
+  rainbow: number;     // rainbow sweep 0..1
+  mirror: boolean;     // mirror the screen
+  vhs: number;         // VHS scanlines 0..1
+  flicker: number;     // random flicker 0..1
+  twist: number;       // radial screen swirl 0..1
+  glitch: number;      // glitch bands 0..1
 }
 
 const DEFAULT_OPTS: BlackHoleOpts = {
@@ -502,10 +574,25 @@ const DEFAULT_OPTS: BlackHoleOpts = {
   showStars: true,
   showNebula: true,
   resScale: 1.5,
+  cycleSpeed: 0,
+  fluid: 0,
+  breath: 0,
+  bright: 1,
+  invert: false,
+  mono: false,
+  rainbow: 0,
+  mirror: false,
+  vhs: 0,
+  flicker: 0,
+  twist: 0,
+  glitch: 0,
 };
 
 /** Preset looks for the black hole — one click applies a full mood. */
-export const BLACK_HOLE_PRESETS: { id: string; label: string; emoji: string; opts: Partial<BlackHoleOpts> }[] = [
+export interface BlackHolePreset { id: string; label: string; emoji: string; opts: Partial<BlackHoleOpts>; }
+
+/** The original signature looks — always pinned at the top of the library. */
+const FEATURED_PRESETS: BlackHolePreset[] = [
   { id: 'classic', label: 'Classic', emoji: '🕳', opts: { diskCol: '#ff9d4d', diskCol2: '#993d1f', glowCol: '#ffd9a0', starCol: '#b3d9ff', nebulaCol: '#3a1066', gravity: 1.0, diskThickness: 0.35, glow: 0.35, bloom: 0.4, swirlAmt: 1.0 } },
   { id: 'interstellar', label: 'Interstellar', emoji: '🌌', opts: { diskCol: '#ff9d4d', diskCol2: '#c0392b', glowCol: '#ffe7b0', starCol: '#ffffff', nebulaCol: '#141a38', gravity: 1.0, diskThickness: 0.2, glow: 0.5, bloom: 0.5, swirlSpeed: 0.7, swirlAmt: 1.0 } },
   { id: 'gargantua', label: 'Gargantua', emoji: '🔥', opts: { diskCol: '#ffb86b', diskCol2: '#7a2a1a', glowCol: '#ffe7b0', starCol: '#cfd8ff', nebulaCol: '#101c40', gravity: 1.25, diskThickness: 0.16, glow: 0.6, bloom: 0.5, swirlSpeed: 0.5 } },
@@ -515,6 +602,88 @@ export const BLACK_HOLE_PRESETS: { id: string; label: string; emoji: string; opt
   { id: 'emerald', label: 'Emerald', emoji: '💚', opts: { diskCol: '#4dffb0', diskCol2: '#005a2e', glowCol: '#b0ffdd', starCol: '#e0fff0', nebulaCol: '#05201a', gravity: 1.0, diskThickness: 0.3, glow: 0.5, bloom: 0.5 } },
   { id: 'sunrise', label: 'Sunrise', emoji: '🌅', opts: { diskCol: '#ffd14d', diskCol2: '#ff5a3c', glowCol: '#fff3c0', starCol: '#ffffff', nebulaCol: '#3a2026', gravity: 0.95, diskThickness: 0.25, glow: 0.55, bloom: 0.55 } },
 ];
+
+/** Rotate a hex colour's hue by `deg` degrees (exact RGB hue rotation). */
+function rotRGB(hex: string, deg: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const rad = (deg * Math.PI) / 180;
+  const k = 1 / Math.sqrt(3);
+  const c = Math.cos(rad), s = Math.sin(rad);
+  const dotk = (r + g + b) * k;
+  const cx = k * b - k * g, cy = k * r - k * b, cz = k * g - k * r;
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const nr = clamp01(r * c + cx * s + k * dotk * (1 - c));
+  const ng = clamp01(g * c + cy * s + k * dotk * (1 - c));
+  const nb = clamp01(b * c + cz * s + k * dotk * (1 - c));
+  const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
+}
+
+/** 12 hue colour-names used to name each generated variant. */
+const HUE_NAMES = [
+  { name: 'Scarlet', angle: 0 }, { name: 'Ember', angle: 30 }, { name: 'Solar', angle: 60 },
+  { name: 'Verdant', angle: 110 }, { name: 'Jade', angle: 150 }, { name: 'Cyan', angle: 180 },
+  { name: 'Azure', angle: 210 }, { name: 'Cobalt', angle: 240 }, { name: 'Violet', angle: 275 },
+  { name: 'Magenta', angle: 300 }, { name: 'Rose', angle: 330 }, { name: 'Crimson', angle: 15 },
+];
+
+/** Personality families — each spawns a full hue family of black holes. */
+const THEMES: { name: string; emoji: string; off: number; diskCol: string; diskCol2: string; glowCol: string; starCol: string; nebulaCol: string; extra?: Partial<BlackHoleOpts> }[] = [
+  { name: 'Flare', emoji: '☀️', off: 0, diskCol: '#ff9d4d', diskCol2: '#993d1f', glowCol: '#ffd9a0', starCol: '#ffffff', nebulaCol: '#3a1066', extra: { bloom: 0.55, glow: 0.5 } },
+  { name: 'Vortex', emoji: '🌀', off: 40, diskCol: '#7f6bff', diskCol2: '#ff4d9a', glowCol: '#d9a8ff', starCol: '#e6e6ff', nebulaCol: '#141a38', extra: { swirlSpeed: 1.2, swirlAmt: 1.3, bloom: 0.7 } },
+  { name: 'Ember', emoji: '🔥', off: 0, diskCol: '#ff4d4d', diskCol2: '#5a0000', glowCol: '#ffb0a0', starCol: '#ffe0e0', nebulaCol: '#2a0505', extra: { glow: 0.5, bloom: 0.5 } },
+  { name: 'Jade', emoji: '💎', off: 130, diskCol: '#4dffb0', diskCol2: '#005a2e', glowCol: '#b0ffdd', starCol: '#e0fff0', nebulaCol: '#05201a' },
+  { name: 'Solar', emoji: '🌅', off: 55, diskCol: '#ffd14d', diskCol2: '#ff5a3c', glowCol: '#fff3c0', starCol: '#ffffff', nebulaCol: '#3a2026' },
+  { name: 'Abyss', emoji: '🕳', off: 170, diskCol: '#4dffc4', diskCol2: '#0a3d33', glowCol: '#9fffd8', starCol: '#ffffff', nebulaCol: '#05121a', extra: { starDensity: 0.5, nebulaAmt: 0.15 } },
+  { name: 'Serpent', emoji: '🐍', off: 90, diskCol: '#b0ff4d', diskCol2: '#3c5a00', glowCol: '#e0ffb0', starCol: '#f0ffe0', nebulaCol: '#1a2005', extra: { fluid: 0.4, swirlSpeed: 0.9 } },
+  { name: 'Ghost', emoji: '👻', off: 250, diskCol: '#c9c4ff', diskCol2: '#5a4d9a', glowCol: '#e6e0ff', starCol: '#f2f0ff', nebulaCol: '#16122e', extra: { glow: 0.6, bloom: 0.55 } },
+  { name: 'Photon', emoji: '✨', off: 200, diskCol: '#4dd9ff', diskCol2: '#005a99', glowCol: '#b0f2ff', starCol: '#e6fbff', nebulaCol: '#051f2a', extra: { glow: 0.55 } },
+  { name: 'Tide', emoji: '🌊', off: 215, diskCol: '#4d7fff', diskCol2: '#0a1f5a', glowCol: '#b0c9ff', starCol: '#e6edff', nebulaCol: '#050f2a', extra: { fluid: 0.6, swirlSpeed: 0.6 } },
+  { name: 'Comet', emoji: '☄️', off: 20, diskCol: '#ffd9b0', diskCol2: '#7a4d1f', glowCol: '#ffe6cc', starCol: '#ffffff', nebulaCol: '#2a1a0a', extra: { glow: 0.6, bloom: 0.6 } },
+  { name: 'Eclipse', emoji: '🌑', off: 270, diskCol: '#a8a8b8', diskCol2: '#33334a', glowCol: '#e0e0ee', starCol: '#ffffff', nebulaCol: '#0a0a14', extra: { nebulaAmt: 0.3 } },
+];
+
+/** Wacky / colour-changing / fluid black-hole presets. */
+const WACKY_PRESETS: BlackHolePreset[] = [
+  { id: 'pulse', label: 'Pulse', emoji: '💫', opts: { diskCol: '#ff9d4d', diskCol2: '#c0392b', cycleSpeed: 1.6 } },
+  { id: 'rainbow', label: 'Rainbow', emoji: '🌈', opts: { diskCol: '#ff4d4d', diskCol2: '#4dff4d', glowCol: '#4d4dff', rainbow: 1, cycleSpeed: 0.8 } },
+  { id: 'liquid', label: 'Liquid', emoji: '💧', opts: { diskCol: '#4dd9ff', diskCol2: '#005a99', fluid: 1, swirlSpeed: 0.4, glow: 0.5 } },
+  { id: 'breathe', label: 'Breathe', emoji: '🫧', opts: { diskCol: '#4dffc4', diskCol2: '#0a3d33', breath: 1, glow: 0.5 } },
+  { id: 'mono', label: 'Monochrome', emoji: '⬛', opts: { diskCol: '#c9c9d6', diskCol2: '#66667a', mono: true, starCol: '#ffffff' } },
+  { id: 'negative', label: 'Negative', emoji: '🔄', opts: { diskCol: '#ff9d4d', diskCol2: '#c0392b', invert: true, bright: 1.2 } },
+  { id: 'mirror', label: 'Mirror', emoji: '🪞', opts: { diskCol: '#7f6bff', diskCol2: '#ff4d9a', mirror: true } },
+  { id: 'vhs', label: 'VHS', emoji: '📼', opts: { diskCol: '#ff5a3c', diskCol2: '#993d1f', vhs: 1, glitch: 0.3 } },
+  { id: 'glitch', label: 'Glitch', emoji: '📡', opts: { diskCol: '#4dd9ff', diskCol2: '#ff4d4d', glitch: 1, flicker: 0.6 } },
+  { id: 'twister', label: 'Twister', emoji: '🌪', opts: { diskCol: '#b0ff4d', diskCol2: '#005a99', twist: 1, swirlSpeed: 1.5 } },
+  { id: 'neon', label: 'Neon', emoji: '🟢', opts: { diskCol: '#39ff88', diskCol2: '#00c8ff', glowCol: '#b0ffdd', bright: 1.4, bloom: 1.2, cycleSpeed: 0.6, nebulaAmt: 0.6 } },
+  { id: 'chaos', label: 'Chaos', emoji: '🎇', opts: { diskCol: '#ff4d4d', diskCol2: '#4d4dff', flicker: 1, glitch: 0.5, cycleSpeed: 2.2, fluid: 0.5, vhs: 0.4 } },
+];
+
+function buildPresetLibrary(): BlackHolePreset[] {
+  const generated: BlackHolePreset[] = [];
+  for (const theme of THEMES) {
+    for (const h of HUE_NAMES) {
+      const deg = (h.angle + theme.off) % 360;
+      generated.push({
+        id: `bh_${theme.name.toLowerCase()}_${h.name.toLowerCase()}`,
+        label: `${h.name} ${theme.name}`,
+        emoji: theme.emoji,
+        opts: {
+          diskCol: rotRGB(theme.diskCol, deg),
+          diskCol2: rotRGB(theme.diskCol2, deg),
+          glowCol: rotRGB(theme.glowCol, deg),
+          starCol: rotRGB(theme.starCol, deg),
+          nebulaCol: rotRGB(theme.nebulaCol, deg),
+          ...theme.extra,
+        },
+      });
+    }
+  }
+  return [...FEATURED_PRESETS, ...generated, ...WACKY_PRESETS];
+}
+
+/** The full black-hole library: 8 featured + 144 generated + 12 wacky = 164. */
+export const BLACK_HOLE_PRESETS: BlackHolePreset[] = buildPresetLibrary();
 
 /** A single slider/toggle/colour control entry rendered inside the Studio panels. */
 export interface StudioControl {
@@ -542,6 +711,22 @@ export const STUDIO_TUNES: StudioControl[] = [
   { key: 'camSpeed', label: 'Flight speed', kind: 'slider', min: 1, max: 8, step: 0.1 },
 ];
 
+/** Wacky & fluid knobs — colour-changing, fluid sim, luminescence, glitch. */
+export const STUDIO_WACKY: StudioControl[] = [
+  { key: 'cycleSpeed', label: 'Colour cycle', kind: 'slider', min: 0, max: 3, step: 0.05 },
+  { key: 'fluid', label: 'Fluid swirl', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'breath', label: 'Breathing', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'bright', label: 'Luminescence', kind: 'slider', min: 0.2, max: 2.4, step: 0.05 },
+  { key: 'rainbow', label: 'Rainbow', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'vhs', label: 'VHS scanlines', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'flicker', label: 'Flicker', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'twist', label: 'Screen swirl', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'glitch', label: 'Glitch', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'invert', label: 'Invert', kind: 'toggle' },
+  { key: 'mono', label: 'Monochrome', kind: 'toggle' },
+  { key: 'mirror', label: 'Mirror', kind: 'toggle' },
+];
+
 /** Parse '#rrggbb' into [r,g,b] in 0..1. */
 export function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
@@ -563,6 +748,9 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   optsRef.current = opts;
   const [tuneOpen, setTuneOpen] = useState(true);      // left studio panel
   const [presetOpen, setPresetOpen] = useState(true);  // right studio panel
+  const [dragMode, setDragMode] = useState<'look' | 'move'>('look');
+  const dragModeRef = useRef<'look' | 'move'>('look');
+  dragModeRef.current = dragMode;
 
   const camRef = useRef<Camera>({ x: 0, y: 0, z: -4, yaw: 0, pitch: 0.2 });
   const stageRef = useRef(0);
@@ -571,11 +759,22 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const keysRef = useRef<Set<string>>(new Set());
   /** Accumulates scroll input so the render loop can apply it. */
   const scrollAccumRef = useRef(0);
+  /** Screen-space pan offset — dragging in "move" mode slides the hole around. */
+  const panRef = useRef({ x: 0, y: 0 });
 
   const patchOpts = (patch: Partial<BlackHoleOpts>) => setOpts((o) => ({ ...o, ...patch }));
   const applyPreset = (id: string) => {
     const p = BLACK_HOLE_PRESETS.find((x) => x.id === id);
     if (p) setOpts((o) => ({ ...o, ...p.opts }));
+  };
+  const applyRandomPreset = () => {
+    const p = BLACK_HOLE_PRESETS[Math.floor(Math.random() * BLACK_HOLE_PRESETS.length)];
+    if (p) setOpts((o) => ({ ...o, ...p.opts }));
+  };
+  const resetView = () => {
+    panRef.current = { x: 0, y: 0 };
+    const s = spawnForStage(stageRef.current);
+    Object.assign(camRef.current, s);
   };
 
   const collectFragment = (dimension: string) => {
@@ -606,6 +805,12 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       const dx = e.clientX - drag.lastX;
       const dy = e.clientY - drag.lastY;
       drag.lastX = e.clientX; drag.lastY = e.clientY;
+      if (dragModeRef.current === 'move') {
+        // Move the black hole across the screen (screen-space pan).
+        panRef.current.x = Math.max(-2.2, Math.min(2.2, panRef.current.x + (dx / Math.max(1, window.innerWidth)) * 2.2));
+        panRef.current.y = Math.max(-1.4, Math.min(1.4, panRef.current.y - (dy / Math.max(1, window.innerHeight)) * 2.2));
+        return;
+      }
       const c = camRef.current;
       c.yaw -= dx * 0.006;
       c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
@@ -699,6 +904,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       showStars: gl.getUniformLocation(prog, 'u_showStars'),
       showNebula: gl.getUniformLocation(prog, 'u_showNebula'),
       fovScale: gl.getUniformLocation(prog, 'u_fovScale'),
+      pan: gl.getUniformLocation(prog, 'u_pan'),
+      cycleSpeed: gl.getUniformLocation(prog, 'u_cycleSpeed'),
+      fluid: gl.getUniformLocation(prog, 'u_fluid'),
+      breath: gl.getUniformLocation(prog, 'u_breath'),
+      bright: gl.getUniformLocation(prog, 'u_bright'),
+      invert: gl.getUniformLocation(prog, 'u_invert'),
+      mono: gl.getUniformLocation(prog, 'u_mono'),
+      rainbow: gl.getUniformLocation(prog, 'u_rainbow'),
+      mirror: gl.getUniformLocation(prog, 'u_mirror'),
+      vhs: gl.getUniformLocation(prog, 'u_vhs'),
+      flicker: gl.getUniformLocation(prog, 'u_flicker'),
+      twist: gl.getUniformLocation(prog, 'u_twist'),
+      glitch: gl.getUniformLocation(prog, 'u_glitch'),
     };
 
     // Render at a higher resolution than CSS size (devicePixelRatio × resScale)
@@ -807,6 +1025,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.showStars, o.showStars ? 1 : 0);
       gl.uniform1f(U.showNebula, o.showNebula ? 1 : 0);
       gl.uniform1f(U.fovScale, o.fov);
+      gl.uniform2f(U.pan, panRef.current.x, panRef.current.y);
+      gl.uniform1f(U.cycleSpeed, o.cycleSpeed);
+      gl.uniform1f(U.fluid, o.fluid);
+      gl.uniform1f(U.breath, o.breath);
+      gl.uniform1f(U.bright, o.bright);
+      gl.uniform1f(U.invert, o.invert ? 1 : 0);
+      gl.uniform1f(U.mono, o.mono ? 1 : 0);
+      gl.uniform1f(U.rainbow, o.rainbow);
+      gl.uniform1f(U.mirror, o.mirror ? 1 : 0);
+      gl.uniform1f(U.vhs, o.vhs);
+      gl.uniform1f(U.flicker, o.flicker);
+      gl.uniform1f(U.twist, o.twist);
+      gl.uniform1f(U.glitch, o.glitch);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -875,6 +1106,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
             <button className="singularity-panel-x" onClick={() => setTuneOpen(false)} aria-label="Close tune panel">✕</button>
           </div>
           <div className="singularity-panel-body">
+            <div className="singularity-studio-sec">Shape & Light</div>
             {STUDIO_TUNES.map((ctrl) => (
               <label className="singularity-slider" key={ctrl.key}>
                 <span>{ctrl.label}</span>
@@ -883,6 +1115,24 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
                   onChange={(e) => patchOpts({ [ctrl.key]: Number(e.target.value) } as Partial<BlackHoleOpts>)} />
                 <b>{(opts[ctrl.key] as number).toFixed(2)}</b>
               </label>
+            ))}
+            <div className="singularity-studio-sec">Wacky & Fluid</div>
+            {STUDIO_WACKY.map((ctrl) => (
+              ctrl.kind === 'toggle' ? (
+                <label className="singularity-wacky-toggle" key={ctrl.key}>
+                  <input type="checkbox" checked={opts[ctrl.key] as boolean}
+                    onChange={(e) => patchOpts({ [ctrl.key]: e.target.checked } as Partial<BlackHoleOpts>)} />
+                  <span>{ctrl.label}</span>
+                </label>
+              ) : (
+                <label className="singularity-slider" key={ctrl.key}>
+                  <span>{ctrl.label}</span>
+                  <input type="range" min={ctrl.min} max={ctrl.max} step={ctrl.step}
+                    value={opts[ctrl.key] as number}
+                    onChange={(e) => patchOpts({ [ctrl.key]: Number(e.target.value) } as Partial<BlackHoleOpts>)} />
+                  <b>{(opts[ctrl.key] as number).toFixed(2)}</b>
+                </label>
+              )
             ))}
           </div>
         </div>
@@ -899,16 +1149,29 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
             <button className="singularity-panel-x" onClick={() => setPresetOpen(false)} aria-label="Close studio panel">✕</button>
           </div>
           <div className="singularity-panel-body">
-            <div className="singularity-studio-sec">Presets</div>
-            <div className="singularity-preset-grid">
-              {BLACK_HOLE_PRESETS.map((p) => (
-                <button key={p.id}
-                  className={`singularity-preset ${opts.diskCol === p.opts.diskCol ? 'active' : ''}`}
-                  onClick={() => applyPreset(p.id)}>
-                  <span className="singularity-preset-emoji">{p.emoji}</span>
-                  <span>{p.label}</span>
-                </button>
-              ))}
+            <div className="singularity-studio-sec">Mouse</div>
+            <div className="singularity-mode-row">
+              <button className={`singularity-mode-btn ${dragMode === 'look' ? 'active' : ''}`}
+                onClick={() => setDragMode('look')}>🔭 Look</button>
+              <button className={`singularity-mode-btn ${dragMode === 'move' ? 'active' : ''}`}
+                onClick={() => setDragMode('move')}>🖐 Move hole</button>
+              <button className="singularity-mode-btn" onClick={resetView} title="Reset camera & hole">↺ Reset</button>
+            </div>
+            <p className="singularity-studio-note">Drag to {dragMode === 'move' ? 'slide the black hole around the screen' : 'look around freely'}.</p>
+
+            <div className="singularity-studio-sec">Presets · {BLACK_HOLE_PRESETS.length}</div>
+            <button className="singularity-preset-random" onClick={applyRandomPreset}>🎲 Random black hole</button>
+            <div className="singularity-preset-scroll">
+              <div className="singularity-preset-grid">
+                {BLACK_HOLE_PRESETS.map((p) => (
+                  <button key={p.id}
+                    className={`singularity-preset ${opts.diskCol === p.opts.diskCol ? 'active' : ''}`}
+                    onClick={() => applyPreset(p.id)}>
+                    <span className="singularity-preset-emoji">{p.emoji}</span>
+                    <span>{p.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="singularity-studio-sec">Colours</div>

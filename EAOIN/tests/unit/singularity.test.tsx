@@ -105,12 +105,17 @@ describe('hexToRgb — studio colour helper', () => {
 });
 
 describe('BLACK_HOLE_PRESETS — the Black Hole Studio', () => {
-  it('offers a set of preset looks, each with a disk colour', () => {
-    expect(BLACK_HOLE_PRESETS.length).toBeGreaterThanOrEqual(4);
+  it('offers 100+ preset looks, each with a disk colour', () => {
+    expect(BLACK_HOLE_PRESETS.length).toBeGreaterThan(100);
     for (const p of BLACK_HOLE_PRESETS) {
       expect(p.id).toBeTruthy();
+      expect(p.label).toBeTruthy();
       expect(p.opts.diskCol).toMatch(/^#/);
     }
+  });
+  it('gives every preset a unique id', () => {
+    const ids = new Set(BLACK_HOLE_PRESETS.map((p) => p.id));
+    expect(ids.size).toBe(BLACK_HOLE_PRESETS.length);
   });
 });
 
