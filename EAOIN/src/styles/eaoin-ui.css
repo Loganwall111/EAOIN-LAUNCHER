@@ -918,6 +918,37 @@
   pointer-events: none;
 }
 
+/* Lensed minimap bubbles — magnified warp-rings over distant landmarks so the
+   minimap reads like it is being pulled through a gravitational lens. */
+.minimap-bubble {
+  position: absolute;
+  width: 14px; height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.7);
+  pointer-events: none;
+  animation: bubblePulse 2.4s ease-in-out infinite;
+}
+.minimap-bubble i {
+  position: absolute; inset: 3px;
+  border-radius: 50%;
+  display: block;
+}
+.minimap-bubble.landmark {
+  border-color: rgba(255,209,102,0.9);
+  box-shadow: 0 0 8px rgba(255,209,102,0.7), inset 0 0 6px rgba(255,209,102,0.4);
+}
+.minimap-bubble.landmark i { background: radial-gradient(circle, rgba(255,230,150,0.9), rgba(200,140,40,0.2) 70%); }
+.minimap-bubble.rift {
+  border-color: rgba(120,180,255,0.9);
+  box-shadow: 0 0 8px rgba(120,180,255,0.7), inset 0 0 6px rgba(120,180,255,0.4);
+}
+.minimap-bubble.rift i { background: radial-gradient(circle, rgba(160,210,255,0.9), rgba(60,90,200,0.2) 70%); }
+@keyframes bubblePulse {
+  0%,100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.25); opacity: 0.6; }
+}
+
 .minimap-footer {
   display: flex;
   justify-content: space-between;

@@ -149,6 +149,18 @@ export default function HudFrame({
     ctx.putImageData(image, 0, 0);
   }, [position.x, position.z, biome]);
 
+  // Lensed minimap bubbles — deterministic pseudo-landmarks positioned in the
+  // minimap, each drawn as a magnified warp-ring (a "gravitational lens" bubble).
+  const minimapBubbles = useMemo(() => {
+    const rand = (n: number) => { const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); };
+    return [
+      { id: 'b1', kind: 'landmark', x: 12 + rand(1) * 20, y: 18 + rand(2) * 24 },
+      { id: 'b2', kind: 'rift', x: 60 + rand(3) * 22, y: 14 + rand(4) * 22 },
+      { id: 'b3', kind: 'landmark', x: 68 + rand(5) * 18, y: 60 + rand(6) * 22 },
+      { id: 'b4', kind: 'rift', x: 16 + rand(7) * 22, y: 64 + rand(8) * 20 },
+    ];
+  }, []);
+
   const sendChat = () => {
     const text = chatDraft.trim();
     if (!text) return;
@@ -214,6 +226,16 @@ export default function HudFrame({
         <div className="minimap-canvas">
           <canvas ref={minimapRef} />
           <span className="minimap-player" style={{ transform: `translate(-50%,-50%) rotate(${headingDeg}deg)` }}>▲</span>
+          {/* Lensed minimap bubbles — a few deterministic 'distant landmarks'
+              rendered as magnified warp-rings, so the minimap reads like the
+              world is being pulled through a lens. */}
+          {minimapBubbles.map((b) => (
+            <span key={b.id} className={`minimap-bubble ${b.kind}`}
+              style={{ left: `${b.x}%`, top: `${b.y}%` }}
+              title={`${b.kind === 'landmark' ? 'Landmark' : 'Rift anomaly'} (lensed)`}>
+              <i />
+            </span>
+          ))}
         </div>
         <div className="minimap-footer">
           <span>Biome: {biome}</span>
