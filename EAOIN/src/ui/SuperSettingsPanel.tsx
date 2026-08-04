@@ -211,6 +211,14 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
 
           {tab === 'sky' && (
             <>
+              <Row label="One-click atmosphere presets" hint="Instantly set a whole sky mood.">
+                <span className="super-preset-row">
+                  <button className="super-btn" onClick={() => patch({ skyMode: 'default', sunBrightness: 1, cloudDensity: 0.5, starDensity: 1, auroraStrength: 0.5 })}>🌅 Golden Hour</button>
+                  <button className="super-btn" onClick={() => patch({ skyMode: 'night', starDensity: 1, sunBrightness: 0.1, moonBrightness: 1.4, cloudDensity: 0.4 })}>🌙 Midnight</button>
+                  <button className="super-btn" onClick={() => patch({ skyMode: 'default', cloudDensity: 0.95, sunBrightness: 0.5, auroraStrength: 1 })}>⛈️ Storm</button>
+                  <button className="super-btn" onClick={() => patch({ skyMode: 'aurora', auroraStrength: 1, starDensity: 1, cloudDensity: 0.2 })}>🌌 Aurora</button>
+                </span>
+              </Row>
               <Row label="Sky mode" hint="Pick the atmosphere look for the world.">
                 <select className="ui-input" value={merged.skyMode} onChange={(e) => patch({ skyMode: e.target.value as SuperSettings['skyMode'] })}>
                   <option value="default">Default</option>

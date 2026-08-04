@@ -56,7 +56,7 @@ describe('TitleScreen', () => {
     expect(container.textContent).toContain('Triple A Sandbox Experience');
 
     const menu = within(container.querySelector('.title-menu') as HTMLElement);
-    for (const label of ['Singleplayer', 'Tutorial World', 'Multiplayer', 'Game Hub', 'Portal Gallery', 'Singularity', 'Back to Stable', 'Alpha Launcher', 'HorizonOS', 'Mods', 'Options', 'Quit Game']) {
+    for (const label of ['Singleplayer', 'Tutorial World', 'Multiplayer', 'Game Hub', 'Nexus', 'Singularity', 'Back to Stable', 'Alpha Launcher', 'HorizonOS', 'Mods', 'Options', 'Quit Game']) {
       expect(menu.getByRole('button', { name: new RegExp(label, 'i') })).toBeTruthy();
     }
   });

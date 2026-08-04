@@ -155,7 +155,7 @@ export default function TitleScreen({
           Game Hub<span className="btn-icon">🎮</span>
         </button>
         <button className="menu-btn is-portals" onClick={onPortalGallery}>
-          Portal Gallery<span className="btn-icon">🌀</span>
+          Nexus<span className="btn-icon">🌀</span>
         </button>
         <button className="menu-btn is-singularity" onClick={onSingularity}>
           Singularity<span className="btn-icon">🕳</span>
