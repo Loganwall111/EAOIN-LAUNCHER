@@ -1844,23 +1844,17 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
               const blackHoleEnteredRef = enteredBlackHoleRef.current;
               if (!blackHoleEnteredRef) {
                 enteredBlackHoleRef.current = true;
-                if (isCreativeMode(gameModeRef.current)) {
-                  // Creative: portal into a black void you can explore freely.
-                  endBlackHole.showVoid();
-                  const hc = endBlackHole.centre();
-                  camera.position.set(hc.x, hc.y - 1, hc.z);
-                  streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
-                  forceTerrainCoverage = true;
-                  audio.play('ui', settingsRef.current);
-                  showActionMessage('You fall into the black hole — an endless black void surrounds you.');
-                } else {
-                  // Survival: you survive — pushed back out to the island edge.
-                  const hc = endBlackHole.centre();
-                  camera.position.set(hc.x, camera.position.y + 3, hc.z + endBlackHole.radius + 3);
-                  streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
-                  showActionMessage('🌌 The black hole surges around you — but you slip free and survive.');
-                  audio.play('ui', settingsRef.current);
-                }
+                // Enter the hole in ANY game mode: you fall INSIDE to a dark
+                // void and can look back out at the world through the hole's
+                // translucent shell. You are never killed or trapped.
+                endBlackHole.showVoid();
+                const hc = endBlackHole.centre();
+                camera.position.set(hc.x, hc.y - 1, hc.z);
+                camera.setTarget(new Vector3(hc.x + 4, hc.y - 1, hc.z));
+                streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+                forceTerrainCoverage = true;
+                audio.play('ui', settingsRef.current);
+                showActionMessage('You fall inside the black hole — turn around to look back out at the End.');
               }
             }
           }

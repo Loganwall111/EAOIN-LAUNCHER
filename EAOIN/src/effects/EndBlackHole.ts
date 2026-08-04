@@ -428,9 +428,20 @@ void main(void){
     return this.core ? this.core.position.clone() : Vector3.Zero();
   }
 
-  /** Show the black-void interior (creative mode after entering). */
+  /** Show the black-void interior (after entering the hole). The void shell is
+   *  semi-transparent so you are inside the hole but can look BACK OUT at the
+   *  world you came from — not a solid black box. */
   showVoid(): void {
-    if (this.voidSphere) this.voidSphere.isVisible = true;
+    if (this.voidSphere) {
+      this.voidSphere.isVisible = true;
+      this.voidSphere.isPickable = false;
+      const vm = this.voidSphere.material as StandardMaterial;
+      if (vm) {
+        vm.backFaceCulling = false;
+        vm.alpha = 0.28;          // dark haze, but see-through outward
+        vm.disableLighting = true;
+      }
+    }
   }
 
   dispose(): void {
