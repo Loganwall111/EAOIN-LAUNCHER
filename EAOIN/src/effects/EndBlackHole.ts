@@ -293,6 +293,20 @@ void main(void){
   }
 
   /**
+   * Gravity slingshot — if the player is within the black hole's influence when
+   * they launch a rocket, the hole whips them to higher speed. Returns a bonus
+   * launch-power multiplier, or null if they are too far away.
+   */
+  gravitySlingshot(player: Vector3): number | null {
+    if (!this.active || !this.core) return null;
+    const dist = Math.hypot(player.x, player.z);
+    if (dist > this.pullRadius) return null;
+    const t = Math.max(0, Math.min(1, 1 - dist / this.pullRadius));
+    const bonus = Math.round(1.3 + t * 2.2);
+    return bonus;
+  }
+
+  /**
    * Event-horizon time distortion — gravity dilates time and red-shifts light
    * as the player approaches the hole. Returns a time-scale multiplier (1 = no
    * distortion) and a 0..1 redshift amount, based on the player's distance.

@@ -105,3 +105,17 @@ describe('EndBlackHole time distortion', () => {
     engine.dispose();
   });
 });
+
+describe('EndBlackHole gravity slingshot', () => {
+  it('returns a launch-power bonus near the hole and null far away', () => {
+    const { engine, scene, hole } = makeHole();
+    const near = hole.gravitySlingshot(new Vector3(10, 120, 0));
+    const far = hole.gravitySlingshot(new Vector3(500, 120, 0));
+    expect(near).not.toBeNull();
+    expect(far).toBeNull();
+    if (near) expect(near).toBeGreaterThan(1);
+    hole.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+});
