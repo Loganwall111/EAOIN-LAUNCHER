@@ -36,6 +36,21 @@ describe('Singularity', () => {
     fireEvent.click(screen.getByText('← Back'));
     expect(onBack).toHaveBeenCalled();
   });
+
+  it('responds to scroll-wheel zoom (input listeners always wired)', () => {
+    render(<Singularity onBack={noop} />);
+    const canvas = document.querySelector('.singularity-canvas')!;
+    // Wheel down (deltaY>0) zooms OUT; wheel up (deltaY<0) zooms IN. After many
+    // inward scrolls the camera distance drops far enough to leave the black
+    // hole stage, so the journey HUD appears. This proves the wheel handler
+    // attached (previously it was inside the WebGL effect and never bound).
+    for (let i = 0; i < 30; i++) {
+      fireEvent.wheel(canvas, { deltaY: -100 });
+    }
+    // With deltaY -100 * 0.02 = -2 per scroll, 30 scrolls take dist 11 -> ~0.2,
+    // crossing into the deepest journey (stage 5 / monitor). The depth HUD shows.
+    expect(document.querySelector('.singularity-stage')).toBeTruthy();
+  });
 });
 
 describe('stageFromDist — physical zoom mapping', () => {

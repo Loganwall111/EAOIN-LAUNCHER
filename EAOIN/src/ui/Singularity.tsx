@@ -163,20 +163,21 @@ const FRAG = `
   }
 
   // Void interior: you are inside the black hole. An endless black void
-  // surrounds you; a faint glow and the accretion ring are visible behind you
-  // (look back out), and a "hole" of light ahead is the way through.
+  // surrounds you, and the accretion ring (the way back out) hangs at a FIXED
+  // world direction so you can free-look around with the mouse and spot it —
+  // looking "out" shows the ring you fell through; the way deeper glows ahead.
   vec3 renderVoid(vec3 ro, vec3 rd){
-    vec3 col = vec3(0.0);
-    // Deep near-black gradient.
-    col = vec3(0.004, 0.002, 0.008);
-    // The way back out — a faint accretion-ring glow behind the camera.
-    float back = clamp(dot(rd, vec3(0.0,0.0,1.0)), 0.0, 1.0);
-    col += vec3(1.0, 0.72, 0.38) * back * back * 0.18;
-    // The "hole" ahead — a glowing ring in the forward direction.
-    float fwd = clamp(dot(rd, vec3(0.0,0.0,-1.0)), 0.0, 1.0);
-    vec2 ringP = rd.xy / max(rd.z, 0.001);
-    float ring = smoothstep(0.12, 0.02, abs(length(ringP) - 0.35));
-    col += vec3(0.6, 0.9, 1.0) * fwd * ring * 0.9;
+    vec3 col = vec3(0.004, 0.002, 0.008);
+    // The way back out is "up" (+Y) — the ring you fell past glows there.
+    float up = clamp(dot(rd, vec3(0.0,1.0,0.0)), 0.0, 1.0);
+    vec3 perp = rd - vec3(0.0,1.0,0.0) * dot(rd, vec3(0.0,1.0,0.0));
+    float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35));
+    col += vec3(1.0, 0.72, 0.38) * (0.18 + 0.9 * up) * ring;
+    // The way deeper — a glowing ring "down" (-Y), the light at the bottom.
+    float down = clamp(dot(rd, vec3(0.0,-1.0,0.0)), 0.0, 1.0);
+    vec3 downPerp = rd - vec3(0.0,-1.0,0.0) * dot(rd, vec3(0.0,-1.0,0.0));
+    float downRing = smoothstep(0.12, 0.02, abs(length(downPerp) - 0.30));
+    col += vec3(0.6, 0.9, 1.0) * down * downRing * 0.9;
     // Faint dust / motes drifting in the void.
     float motes = noise(rd.xy * 14.0 + u_time * 0.1);
     col += vec3(0.3,0.5,0.7) * motes * 0.05;
@@ -560,24 +561,39 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     const render = () => {
       const t = (performance.now() - start) / 1000;
       const c = camRef.current;
-      // Orbit camera: yaw around Y, pitch up/down. The framing radius uses the
-      // current stage's view distance so journey worlds aren't too zoomed in.
-      const viewDist = viewDistForStage(stageRef.current);
+      const stage = stageRef.current;
+      // Smooth zoom: for the black hole (0) and the void interior (6), the
+      // camera radius is the ACTUAL scroll distance `c.dist`, so zooming in/out
+      // visibly moves the camera toward/away from the hole. Journey worlds
+      // (1-5) are framed at a comfortable fixed distance.
+      const viewDist = (stage >= 1 && stage <= 5) ? viewDistForStage(stage) : c.dist;
       const cp = Math.cos(c.pitch);
+      const sp = Math.sin(c.pitch);
+      const sy = Math.sin(c.yaw);
+      const cy = Math.cos(c.yaw);
       const eye = new Float32Array([
-        Math.sin(c.yaw) * cp * viewDist,
-        Math.sin(c.pitch) * viewDist,
-        Math.cos(c.yaw) * cp * viewDist,
+        sy * cp * viewDist,
+        sp * viewDist,
+        cy * cp * viewDist,
       ]);
+      // Aim: normally at the origin. In the void we FREE-LOOK — the camera
+      // faces the yaw/pitch direction so turning the mouse reveals the exit.
+      let target = new Float32Array([0, 0, 0]);
+      if (stage === 6) {
+        const fx = -sy * cp;
+        const fy = sp;
+        const fz = -cy * cp;
+        target = new Float32Array([eye[0] + fx, eye[1] + fy, eye[2] + fz]);
+      }
       gl.useProgram(prog);
       gl.uniform2f(U.res, gl.canvas.width, gl.canvas.height);
       gl.uniform1f(U.time, t);
       gl.uniform3f(U.camPos, eye[0], eye[1], eye[2]);
-      gl.uniform3f(U.camTarget, 0, 0, 0);
+      gl.uniform3f(U.camTarget, target[0], target[1], target[2]);
       gl.uniform1f(U.diskThickness, diskThicknessRef.current);
       gl.uniform1f(U.gravity, gravityRef.current);
       gl.uniform1f(U.aspect, gl.canvas.width / Math.max(1, gl.canvas.height));
-      gl.uniform1i(U.stage, stageRef.current);
+      gl.uniform1i(U.stage, stage);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
