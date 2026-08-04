@@ -236,6 +236,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const devTuningRef = useRef<DeveloperWorldTuning>(developerTuningStore.get());
   /** God Console no-clip toggle (ghost mode through terrain). */
   const devNoClipRef = useRef(false);
+  /** Multiple black holes for the Warped dimension. */
+  const warpBlackHolesRef = useRef<EndBlackHole[]>([]);
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
   const loadingProgressRef = useRef(onLoadingProgress);
@@ -1822,41 +1824,48 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           tempRiftPull.set(bhPull.x * deltaSeconds, bhPull.y * deltaSeconds, bhPull.z * deltaSeconds);
           camera.position.addInPlace(tempRiftPull);
         }
-        // 2.0 — End black-hole sky: gravitational-lensing hole above the dragon
-        // island that pulls the player toward the central end portal (never
-        // destroys blocks). Active only in The End.
+        // Black-hole sky: gravitational-lensing holes in the dark dimensions.
+        // The End keeps its central dragon-island hole. The Warped dimension is
+        // littered with MANY black holes of various sizes. The Abyss/void
+        // (cosmic_void, shadow_realm), chaos and corrupted lands also get holes.
+        // Peaceful dimensions and the backrooms do NOT.
         {
-          const inEnd = chunkSource.getDimension() === 'end';
-          endBlackHole.setActive(inEnd);
-          if (inEnd) {
-            const holePos = camera.position.clone().add(new Vector3(0, 120, 0));
-            endBlackHole.ensure(holePos);
-            endBlackHole.tick(deltaSeconds, performance.now(), camera.position);
-            endBlackHole.pull(camera.position, tempRiftPull);
-            // Gentle tug only — the hole pulls animals hard, but the player is
-            // nudged so they can always escape (never killed, never trapped).
-            camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 0.4));
+          const dim = chunkSource.getDimension();
+          const darkDims = new Set(['end', 'warped', 'cosmic_void', 'shadow_realm', 'chaos_dimension', 'corrupted_lands']);
+          const hasHoles = darkDims.has(dim);
+          endBlackHole.setActive(hasHoles);
+          if (hasHoles) {
+            if (dim === 'warped') {
+              // Multiple black holes scattered around the regular world.
+              warpBlackHolesRef.current.forEach((h, i) => {
+                h.tick(deltaSeconds, performance.now(), camera.position);
+                const pull = Vector3.Zero();
+                h.pull(camera.position, pull);
+                camera.position.addInPlace(pull.scale(deltaSeconds * 0.12 * (1 - i * 0.1)));
+              });
+            } else {
+              const holePos = camera.position.clone().add(new Vector3(0, 120, 0));
+              endBlackHole.ensure(holePos);
+              endBlackHole.tick(deltaSeconds, performance.now(), camera.position);
+              endBlackHole.pull(camera.position, tempRiftPull);
+              camera.position.addInPlace(tempRiftPull.scale(deltaSeconds * 0.4));
 
-            // Crossing the event horizon = entering the black hole. It is a
-            // physical portal, not a solid block. The player is NEVER killed by
-            // the End black hole (it must not prevent you beating the game) —
-            // in creative it opens a black void to explore; in survival it just
-            // pulls you gently back to the island edge so you live.
-            if (endBlackHole.entered(camera.position)) {
-              const blackHoleEnteredRef = enteredBlackHoleRef.current;
-              if (!blackHoleEnteredRef) {
-                enteredBlackHoleRef.current = true;
-                // Enter the hole in ANY game mode: you fall INSIDE to a dark
-                // void and can look back out at the world through the hole's
-                // translucent shell. You are never killed or trapped.
-                endBlackHole.showVoid();
-                const hc = endBlackHole.centre();
-                camera.position.set(hc.x, hc.y - 1, hc.z);
-                camera.setTarget(new Vector3(hc.x + 4, hc.y - 1, hc.z));
-                streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
-                forceTerrainCoverage = true;
-                audio.play('ui', settingsRef.current);
-                showActionMessage('You fall inside the black hole — turn around to look back out at the End.');
+              // Crossing the event horizon = entering the black hole. In any
+              // mode you fall INSIDE to a dark void and can look back out
+              // through the hole's translucent shell (never killed/trapped).
+              if (endBlackHole.entered(camera.position)) {
+                const blackHoleEnteredRef = enteredBlackHoleRef.current;
+                if (!blackHoleEnteredRef) {
+                  enteredBlackHoleRef.current = true;
+                  endBlackHole.showVoid();
+                  const hc = endBlackHole.centre();
+                  camera.position.set(hc.x, hc.y - 1, hc.z);
+                  camera.setTarget(new Vector3(hc.x + 4, hc.y - 1, hc.z));
+                  streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+                  forceTerrainCoverage = true;
+                  audio.play('ui', settingsRef.current);
+                  showActionMessage(`You fall inside the black hole — turn around to look back out at ${dim === 'end' ? 'the End' : 'the world'}.`);
+                }
               }
             }
           }
@@ -2853,6 +2862,28 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         atmosphere.setDimension(dimensionId);
         chunkSource.setDimension(dimensionId);
 
+        // Warped dimension: (re)build the scattered black holes around the world.
+        if (dimensionId === 'warped') {
+          for (const h of warpBlackHolesRef.current) h.dispose();
+          warpBlackHolesRef.current = [];
+          const positions: [number, number, number][] = [
+            [60, 70, 60], [-70, 75, 40], [0, 90, -80],
+            [-55, 60, -55], [80, 85, -35], [-30, 100, 30],
+          ];
+          for (const [hx, hy, hz] of positions) {
+            const hole = new EndBlackHole(scene, camera);
+            hole.ensure(new Vector3(hx, hy, hz));
+            hole.setActive(true);
+            warpBlackHolesRef.current.push(hole);
+          }
+        } else if (warpBlackHolesRef.current.length > 0) {
+          for (const h of warpBlackHolesRef.current) h.dispose();
+          warpBlackHolesRef.current = [];
+        }
+
+        // End: always spawn the four fixed rifts around the main island.
+        if (dimensionId === 'end') realityRifts.spawnFixedEndRifts();
+
         if (dimensionId === 'corrupted_lands') {
             showActionMessage('Reality begins to bend...');
             setTimeout(() => {
@@ -2961,7 +2992,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         window.removeEventListener('eaoin-travel-dimension', handleTravelEvent);
         window.removeEventListener('mouseup', handleMouseUp); window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); window.removeEventListener('eaoin-toggle-flight', handleFlightButton); window.removeEventListener('resize', handleResize);
         breakOverlay.dispose(); viewModel.dispose(); activeBoss?.dispose();
-        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); severeWeather.dispose(); endBlackHole.dispose(); worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
+        audio.stopMusic(); ambience.dispose(); endGame.dispose(); rayTracer.dispose(); itemDrops.dispose(); atmosphere.dispose(); weatherEffects.dispose(); severeWeather.dispose(); endBlackHole.dispose(); for (const h of warpBlackHolesRef.current) h.dispose(); warpBlackHolesRef.current = []; worldInteractions.dispose(); nextGenRuntime.dispose(); physicalPlanets.dispose(); creatureManager.dispose(); settlementRuntime.dispose(); logicRuntime.dispose(); dimensionRuntime.dispose(); portalSystem.dispose(); realityRifts.dispose(); screenSystem.dispose(); coloredLighting.dispose(); renderer.dispose(); scene.dispose(); engine.dispose();
       };
     };
 

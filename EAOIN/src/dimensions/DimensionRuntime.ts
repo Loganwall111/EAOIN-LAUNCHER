@@ -50,7 +50,8 @@ export type RuntimeDimensionID =
   | 'aether'
   | 'backrooms'
   | 'corrupted_lands'
-  | 'rift_dimension';
+  | 'rift_dimension'
+  | 'warped';
 
 export interface RuntimeDimensionDefinition {
   id: RuntimeDimensionID;
@@ -686,6 +687,25 @@ const DIMENSIONS: RuntimeDimensionDefinition[] = [
     hazards: ['Falling into the void', 'Jelly sting', 'Gravity flux'],
     lore: 'When a reality rift forms it spits you out somewhere else entirely — a pocket dimension where the hills are made of colour and great jellyfish drift overhead.',
     message: 'Torn through reality — entered The Rift Dimension',
+  },
+  {
+    id: 'warped',
+    name: 'The Warped',
+    emoji: '🕳️',
+    description: 'A regular Minecraft world turned inside-out by gravity. Black holes of every size hang in the sky, lensing the light so distant terrain echoes and duplicates all around you. Walk the forests and mountains as space itself bends.',
+    sky: new Color4(0.02, 0.01, 0.06, 1),
+    fog: new Color3(0.06, 0.03, 0.12),
+    gravity: new Vector3(0, -0.50, 0),
+    tint: new Color3(0.8, 0.6, 1.0),
+    weather: 'Warped aurora, drifting gravity echoes',
+    music: 'Deep, humming warped ambient',
+    exclusiveBlocks: ['warped_stone', 'obsidian'],
+    exclusiveMobs: ['Void Wolf', 'Warped Strider'],
+    boss: 'The Singularity Herald',
+    structures: ['Warped Village', 'Black Hole Crater', 'Gravity Spire'],
+    hazards: ['Gravity wells', 'Black-hole suction', 'Lensed illusions'],
+    lore: 'The world you know, but every horizon is a lie — mirrors of terrain hang in the sky, bent by the holes that stud the land.',
+    message: 'Space bends — entered The Warped dimension',
   },
 ];
 

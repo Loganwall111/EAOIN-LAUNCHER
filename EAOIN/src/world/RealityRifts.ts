@@ -136,6 +136,35 @@ export class RealityRiftSystem {
 
   constructor(scene: Scene) { this.scene = scene; }
 
+  /**
+   * Spawn the four FIXED rifts around the End's main island — always present,
+   * never expire, so you can see distant worlds through them every time.
+   */
+  spawnFixedEndRifts(): void {
+    this.rifts = this.rifts.filter((r) => r.def.lifetime > 1e9);
+    const rifts: RealityRift[] = [];
+    const spots: [number, number][] = [[34, 0], [-34, 0], [0, 34], [0, -34]];
+    for (let i = 0; i < spots.length; i++) {
+      const [x, z] = spots[i];
+      const def: RiftDef = {
+        position: new Vector3(x, 55, z),
+        size: 9,
+        content: i % 2 === 0 ? 'dimension' : 'galaxy',
+        color1: new Color3(0.6, 0.2, 1),
+        color2: new Color3(0.2, 0.05, 0.6),
+        rotationSpeed: 0.2 + i * 0.05,
+        lifetime: 1e9,      // permanent
+        maxLifetime: 1e9,
+        intensity: 1,
+      };
+      const rift = new RealityRift(this.scene, def);
+      rift.def.lifetime = 1e9;
+      rift.def.maxLifetime = 1e9;
+      rifts.push(rift);
+    }
+    this.rifts.push(...rifts);
+  }
+
   spawnRandomRift(playerPos: Vector3): RealityRift | null {
     if (this.spawnCooldown > 0) return null;
     if (Math.random() > 0.015) return null; // subtle ambient chance per call

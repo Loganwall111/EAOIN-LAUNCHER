@@ -94,7 +94,7 @@ const B = {
 
 export function dimensionArchetype(dimensionId: string): DimensionArchetype {
   switch (dimensionId) {
-    case 'overworld': case 'nature_dimension': return 'hills';
+    case 'overworld': case 'nature_dimension': case 'warped': return 'hills';
     case 'nether': return 'nether';
     case 'end': return 'end';
     case 'moon': case 'sun': case 'gas_giant': case 'alien_worlds': return 'space';

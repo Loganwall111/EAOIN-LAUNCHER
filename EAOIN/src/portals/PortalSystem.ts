@@ -65,7 +65,7 @@ export const PORTAL_BLOCKS = {
 const WORMHOLE_DESTINATIONS: RuntimeDimensionID[] = [
   'nether', 'end', 'aether', 'rift_dimension', 'crystal_realm', 'sky_kingdom',
   'alien_worlds', 'chaos_dimension', 'dream_realm', 'mushroom_kingdom',
-  'storm_dimension', 'astral_plane', 'cosmic_void',
+  'storm_dimension', 'astral_plane', 'cosmic_void', 'warped',
 ];
 
 /** Pick a random wormhole destination. */
@@ -87,6 +87,7 @@ export const PORTAL_DEFS: PortalDef[] = [
   { dimension: 'dream_realm', name: 'Dream Gate', emoji: '🌈', color1: new Color3(0.95, 0.55, 0.85), color2: new Color3(0.55, 0.95, 0.95), size: 2.6, frameBlock: 64, particleCount: 22, description: 'A soft arch of pastel light.' },
   { dimension: 'machine_dimension', name: 'Machine Gate', emoji: '🤖', color1: new Color3(0.55, 0.55, 0.7), color2: new Color3(1, 1, 1), size: 2.6, frameBlock: 229, particleCount: 18, description: 'A ring of gears and circuit-trace light.' },
   { dimension: 'cosmic_void', name: 'Infinite Nexus', emoji: '🌀', color1: new Color3(0.05, 0.0, 0.15), color2: new Color3(0.7, 0.2, 0.95), size: 4.0, frameBlock: 12, particleCount: 50, description: 'A central nexus connecting every dimension.' },
+  { dimension: 'warped', name: 'Warped Portal', emoji: '🕳️', color1: new Color3(0.1, 0.0, 0.25), color2: new Color3(0.7, 0.3, 0.95), size: 3.0, frameBlock: 12, particleCount: 40, description: 'A lensed rift into the black-hole world.' },
   { dimension: 'toxic_wasteland', name: 'Toxic Gate', emoji: '☢', color1: new Color3(0.4, 0.85, 0.2), color2: new Color3(0.95, 0.95, 0.2), size: 2.6, frameBlock: 12, particleCount: 24, description: 'A noxious green ring of acid-light.' },
   { dimension: 'frozen_wasteland', name: 'Frost Gate', emoji: '❄', color1: new Color3(0.4, 0.65, 0.95), color2: new Color3(0.95, 0.95, 1), size: 2.6, frameBlock: 220, particleCount: 22, description: 'A frozen arch of blue ice.' },
   { dimension: 'volcanic_realm', name: 'Volcanic Gate', emoji: '🌋', color1: new Color3(0.85, 0.2, 0.05), color2: new Color3(1, 0.65, 0.05), size: 2.6, frameBlock: 88, particleCount: 30, description: 'A basalt arch of magma light.' },

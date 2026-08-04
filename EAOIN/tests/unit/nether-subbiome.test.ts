@@ -39,3 +39,10 @@ describe('Nether sub-biome reporting', () => {
     expect(src.getBiomeAt(5, 5)).toBe('crystal_realm');
   });
 });
+
+describe('Warped dimension + fixed End rifts', () => {
+  it('warped maps to a regular hills (Minecraft) world', () => {
+    const src = new DimensionChunkSource('seed123', overworld);
+    expect(src.hasOwnTerrain('warped')).toBe(false); // uses regular overworld-style world
+  });
+});

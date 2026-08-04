@@ -53,6 +53,7 @@ const ALL_PORTALS: PortalEntry[] = [
   { id: 'spirit', dimension: 'spirit_realm', name: 'Spirit Realm', emoji: '👻', colour: '#b0a8e8', style: 'Ghost gate', blurb: 'A spectral world between worlds.' },
   { id: 'undead', dimension: 'undead_realm', name: 'Undead Realm', emoji: '💀', colour: '#6a6a6a', style: 'Bone arch', blurb: 'A cursed land of the restless dead.' },
   { id: 'moon', dimension: 'moon', name: 'The Moon', emoji: '🌙', colour: '#c8ccd8', style: 'Space gate', blurb: 'A low-gravity lunar surface.' },
+  { id: 'warped', dimension: 'warped', name: 'The Warped', emoji: '🕳️', colour: '#4a2a8a', style: 'Lensed rift', blurb: 'A regular Minecraft world bent by black holes — lensed sky echoes and gravity wells everywhere.' },
 ];
 
 const PORTALS: PortalEntry[] = ALL_PORTALS;
