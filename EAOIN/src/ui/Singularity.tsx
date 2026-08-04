@@ -456,12 +456,17 @@ interface Camera {
 /** The order of areas you travel through: black hole → void → neural → … → monitor. */
 const STAGE_ORDER = [0, 6, 1, 2, 3, 4, 5] as const;
 
-/** Radius at which flying toward the centre (while looking into it) advances. */
-export const PORTAL_IN_RADIUS = 1.0;
+/**
+ * How deep you must be before flying toward the centre (while looking STRAIGHT
+ * into it) advances to the next area. Making this small means entering the
+ * black hole doesn't snap you to the void/next world — you have to fly really
+ * deep and look directly into the centre to fall through.
+ */
+export const PORTAL_IN_RADIUS = 0.55;
 /** Radius at which flying to the centre and looking away retreats a stage. */
 export const PORTAL_BACK_RADIUS = 0.6;
-/** How directly you must be looking at the centre to go deeper. */
-export const LOOK_IN = 0.5;
+/** How directly you must be looking at the centre to go deeper (near-straight). */
+export const LOOK_IN = 0.7;
 /** How directly you must be looking away to go back. */
 export const LOOK_OUT = -0.5;
 
@@ -507,7 +512,7 @@ export function viewDistForStage(stage: number): number {
 }
 
 function spawnForStage(stage: number): Camera {
-  if (stage === 6) return { x: 0, y: 0, z: -1.5, yaw: 0, pitch: 0 }; // void, look inward
+  if (stage === 6) return { x: 0, y: 0, z: -9, yaw: 0, pitch: 0 }; // void — far out, look back at the hole
   const d = viewDistForStage(stage);
   return { x: 0, y: d * 0.25, z: -d, yaw: 0, pitch: 0.2 };
 }
@@ -734,6 +739,40 @@ export function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
+// ---- Throw / Grab items physics --------------------------------------------
+
+/** A thing you can throw into the black hole and watch get spaghettified. */
+interface Item {
+  id: number;
+  emoji: string;
+  color: string;
+  size: number;
+  x: number; y: number;   // screen-space position (canvas CSS px)
+  vx: number; vy: number; // velocity (px/s)
+  grabbed: boolean;
+  stretch: number;        // spaghettification stretch
+  kind: 'item' | 'particle';
+  life?: number;          // particle lifetime (s)
+}
+
+/** Random junk you can grab and fling into the hole — fruit, rockets, more. */
+const ITEM_TYPES: { e: string; c: string }[] = [
+  { e: '🍎', c: '#ff5252' }, { e: '🍌', c: '#ffd54f' }, { e: '🍉', c: '#69f0ae' },
+  { e: '🍊', c: '#ffab40' }, { e: '🍇', c: '#b388ff' }, { e: '🍑', c: '#ff8a80' },
+  { e: '🍓', c: '#ff5252' }, { e: '🍍', c: '#ffca28' }, { e: '🥕', c: '#ff7043' },
+  { e: '🚀', c: '#ff9d4d' }, { e: '🪨', c: '#b0bec5' }, { e: '🪐', c: '#ffd54f' },
+  { e: '💎', c: '#4dd9ff' }, { e: '⚙️', c: '#cfd8dc' }, { e: '🧀', c: '#ffe082' },
+  { e: '🥚', c: '#fff59d' }, { e: '🍦', c: '#f48fb1' }, { e: '🔥', c: '#ff5252' },
+  { e: '⛏️', c: '#a1887f' }, { e: '🍩', c: '#ffcc80' }, { e: '🌍', c: '#69f0ae' },
+  { e: '🛰️', c: '#9fa8da' }, { e: '🦴', c: '#efebe9' }, { e: '🎂', c: '#f8bbd0' },
+];
+
+/** Spawn one item into the physics sim. */
+function makeItem(id: number, x: number, y: number, vx: number, vy: number, emoji?: string): Item {
+  const t = emoji ? { e: emoji, c: '#c4a8ff' } : ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+  return { id, emoji: t.e, color: t.c, size: 20 + Math.random() * 12, x, y, vx, vy, grabbed: false, stretch: 1, kind: 'item' };
+}
+
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -762,6 +801,16 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   /** Screen-space pan offset — dragging in "move" mode slides the hole around. */
   const panRef = useRef({ x: 0, y: 0 });
 
+  // Throw / Grab items physics
+  const [itemsMode, setItemsMode] = useState(false);
+  const itemsModeRef = useRef(false);
+  itemsModeRef.current = itemsMode;
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const itemsRef = useRef<Item[]>([]);
+  const itemIdRef = useRef(1);
+  const aimRef = useRef({ active: false, sx: 0, sy: 0, cx: 0, cy: 0 });
+  const grabRef = useRef<{ idx: number; lx: number; ly: number }>({ idx: -1, lx: 0, ly: 0 });
+
   const patchOpts = (patch: Partial<BlackHoleOpts>) => setOpts((o) => ({ ...o, ...patch }));
   const applyPreset = (id: string) => {
     const p = BLACK_HOLE_PRESETS.find((x) => x.id === id);
@@ -776,6 +825,28 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     const s = spawnForStage(stageRef.current);
     Object.assign(camRef.current, s);
   };
+
+  const spawnItem = (x: number, y: number, vx: number, vy: number, emoji?: string) => {
+    const it = makeItem(itemIdRef.current++, x, y, vx, vy, emoji);
+    itemsRef.current.push(it);
+  };
+  const spawnItemRef = useRef(spawnItem);
+  spawnItemRef.current = spawnItem;
+
+  const spawnRandomItem = () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    const cx = w / 2 + panRef.current.x * w;
+    const cy = h / 2 + panRef.current.y * h;
+    const ang = Math.random() * Math.PI * 2;
+    const r = 130 + Math.random() * 190;
+    const x = cx + Math.cos(ang) * r;
+    const y = cy + Math.sin(ang) * r;
+    // tangential + random kick so they swing around the hole like meteors
+    const vx = -Math.sin(ang) * 55 + (Math.random() - 0.5) * 80;
+    const vy = Math.cos(ang) * 55 + (Math.random() - 0.5) * 80;
+    spawnItemRef.current(x, y, vx, vy);
+  };
+  const clearItems = () => { itemsRef.current = []; };
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -799,23 +870,80 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     if (!canvas) return;
 
     const drag = { down: false, lastX: 0, lastY: 0 };
-    const onPointerDown = (e: PointerEvent) => { drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY; };
+    const pt = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const findItem = (x: number, y: number, rad: number): number => {
+      const its = itemsRef.current;
+      for (let i = its.length - 1; i >= 0; i--) {
+        const it = its[i];
+        if (it.kind === 'item' && Math.hypot(it.x - x, it.y - y) < rad) return i;
+      }
+      return -1;
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (itemsModeRef.current) {
+        const p = pt(e);
+        const i = findItem(p.x, p.y, 46);
+        if (i >= 0) {
+          const it = itemsRef.current[i];
+          it.grabbed = true;
+          grabRef.current = { idx: i, lx: p.x, ly: p.y };
+        } else {
+          aimRef.current = { active: true, sx: p.x, sy: p.y, cx: p.x, cy: p.y };
+        }
+        return;
+      }
+      drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY;
+    };
     const onPointerMove = (e: PointerEvent) => {
+      if (itemsModeRef.current) {
+        const p = pt(e);
+        const g = grabRef.current;
+        if (g.idx >= 0 && g.idx < itemsRef.current.length) {
+          const it = itemsRef.current[g.idx];
+          const dt = 1 / 60;
+          it.vx = (p.x - g.lx) / dt; it.vy = (p.y - g.ly) / dt;
+          it.x = p.x; it.y = p.y;
+          g.lx = p.x; g.ly = p.y;
+        } else if (aimRef.current.active) {
+          aimRef.current.cx = p.x; aimRef.current.cy = p.y;
+        }
+        return;
+      }
       if (!drag.down) return;
       const dx = e.clientX - drag.lastX;
       const dy = e.clientY - drag.lastY;
       drag.lastX = e.clientX; drag.lastY = e.clientY;
       if (dragModeRef.current === 'move') {
         // Move the black hole across the screen (screen-space pan).
-        panRef.current.x = Math.max(-2.2, Math.min(2.2, panRef.current.x + (dx / Math.max(1, window.innerWidth)) * 2.2));
-        panRef.current.y = Math.max(-1.4, Math.min(1.4, panRef.current.y - (dy / Math.max(1, window.innerHeight)) * 2.2));
+        panRef.current.x = Math.max(-1.0, Math.min(1.0, panRef.current.x + (dx / Math.max(1, window.innerWidth)) * 1.0));
+        panRef.current.y = Math.max(-0.7, Math.min(0.7, panRef.current.y - (dy / Math.max(1, window.innerHeight)) * 1.0));
         return;
       }
       const c = camRef.current;
       c.yaw -= dx * 0.006;
       c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
     };
-    const onPointerUp = () => { drag.down = false; };
+    const onPointerUp = (e: PointerEvent) => {
+      if (itemsModeRef.current) {
+        const p = pt(e);
+        const g = grabRef.current;
+        if (g.idx >= 0 && g.idx < itemsRef.current.length) {
+          const it = itemsRef.current[g.idx];
+          it.grabbed = false;
+          grabRef.current = { idx: -1, lx: 0, ly: 0 };
+        } else if (aimRef.current.active) {
+          const dx = p.x - aimRef.current.sx;
+          const dy = p.y - aimRef.current.sy;
+          spawnItemRef.current(aimRef.current.sx, aimRef.current.sy, dx * 8, dy * 8);
+          aimRef.current.active = false;
+        }
+        return;
+      }
+      drag.down = false;
+    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       scrollAccumRef.current += e.deltaY * 0.02;
@@ -1052,6 +1180,119 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     return cleanup;
   }, []);
 
+  // --- Throw / Grab items physics loop (2D overlay above the shader) -------
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let last = performance.now();
+    const GRAV = 3.6e6;        // px^3/s^2 pull toward the hole
+    const SWALLOW = 46;        // px — event-horizon screen radius
+    const loop = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const bw = Math.floor(w * dpr), bh = Math.floor(h * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      const hx = w / 2 + panRef.current.x * w;
+      const hy = h / 2 + panRef.current.y * h;
+
+      const items = itemsRef.current;
+      // Physics update
+      for (const it of items) {
+        if (it.kind !== 'item') continue;
+        if (it.grabbed) continue;
+        const dx = hx - it.x, dy = hy - it.y;
+        const r = Math.hypot(dx, dy) || 1;
+        if (r < SWALLOW) {  // ripped apart at the event horizon
+          it.kind = 'particle';
+          it.life = 0.6;
+          it.stretch = 1;
+          it.vx = (dx / r) * 320 + (Math.random() - 0.5) * 220;
+          it.vy = (dy / r) * 320 + (Math.random() - 0.5) * 220;
+          continue;
+        }
+        const a = GRAV / (r * r + 60 * 60);
+        it.vx += (dx / r) * a * dt;
+        it.vy += (dy / r) * a * dt;
+        it.vx *= 0.999; it.vy *= 0.999;
+        it.x += it.vx * dt;
+        it.y += it.vy * dt;
+        // spaghettification: stretch grows sharply as you near the hole
+        it.stretch = Math.min(20, 1 + 4e4 / Math.pow(Math.max(r, 24), 1.6));
+      }
+      for (const it of items) {
+        if (it.kind === 'particle' && it.life !== undefined) {
+          it.life -= dt;
+          it.x += it.vx * dt; it.y += it.vy * dt;
+        }
+      }
+      itemsRef.current = items.filter((it) => !(it.kind === 'particle' && (it.life ?? 0) <= 0));
+
+      // Aim preview line (throw direction)
+      const aim = aimRef.current;
+      if (aim.active) {
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(aim.sx, aim.sy);
+        ctx.lineTo(aim.cx, aim.cy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw items + particles
+      for (const it of itemsRef.current) {
+        if (it.kind === 'particle') {
+          ctx.globalAlpha = Math.max(0, Math.min(1, (it.life ?? 0) * 2));
+          ctx.fillStyle = it.color;
+          ctx.beginPath(); ctx.arc(it.x, it.y, 6, 0, 6.283); ctx.fill();
+          ctx.globalAlpha = 1;
+          continue;
+        }
+        // meteor trail along velocity
+        const sp = Math.hypot(it.vx, it.vy);
+        if (sp > 20) {
+          const grad = ctx.createLinearGradient(it.x, it.y, it.x - it.vx * 0.06, it.y - it.vy * 0.06);
+          grad.addColorStop(0, it.color);
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(it.x, it.y);
+          ctx.lineTo(it.x - it.vx * 0.06, it.y - it.vy * 0.06);
+          ctx.stroke();
+          ctx.lineCap = 'butt';
+        }
+        // spaghettified emoji — stretched along the radial direction
+        const dx = hx - it.x, dy = hy - it.y;
+        const ang = Math.atan2(dy, dx);
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate(ang + Math.PI / 2);   // local +Y points radially inward
+        ctx.scale(1, it.stretch);
+        ctx.font = `${it.size}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(it.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   // Free-fly journey: stage is driven by flying through the centre portal while
   // looking into it (deeper) or away (back). Moving sideways/up/down explores
   // freely within the current area.
@@ -1081,6 +1322,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   return (
     <div className={`singularity ${journey ? 'journey' : ''}`}>
       <canvas ref={canvasRef} className="singularity-canvas" />
+      <canvas ref={overlayRef} className="singularity-items-canvas" aria-hidden="true" />
       <div className="singularity-vignette" />
 
       <div className="singularity-head">
@@ -1094,8 +1336,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
 
       <div className="singularity-hint">
         {isJourney
-          ? `Inside: ${currentStage.title} — fly freely • look back out through the hole to return`
-          : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • fly into the centre while looking at it to fall through'}
+          ? `Inside: ${currentStage.title} — fly freely • turn back to look out through the hole • dive STRAIGHT into the centre to go deeper`
+          : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • dive DEEP into the centre and look straight into it to fall through'}
       </div>
 
       {/* LEFT STUDIO — tons of tiny tunable bars (X to hide for a clean view) */}
@@ -1158,6 +1400,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
               <button className="singularity-mode-btn" onClick={resetView} title="Reset camera & hole">↺ Reset</button>
             </div>
             <p className="singularity-studio-note">Drag to {dragMode === 'move' ? 'slide the black hole around the screen' : 'look around freely'}.</p>
+
+            <div className="singularity-studio-sec">Throw / Grab items</div>
+            <div className="singularity-mode-row">
+              <button className={`singularity-mode-btn ${itemsMode ? 'active' : ''}`}
+                onClick={() => setItemsMode((v) => !v)}>🎯 Grab / Throw</button>
+              <button className="singularity-mode-btn" onClick={spawnRandomItem}>🎲 Spawn</button>
+              <button className="singularity-mode-btn" onClick={clearItems}>🗑 Clear</button>
+            </div>
+            <p className="singularity-studio-note">
+              {itemsMode
+                ? 'Drag on empty space to throw a random item • click an item to grab it, then fling it. Watch them spaghettify & rip apart in the hole.'
+                : 'Turn on to grab & throw items (fruit, rockets, rocks…) into the black hole.'}
+            </p>
 
             <div className="singularity-studio-sec">Presets · {BLACK_HOLE_PRESETS.length}</div>
             <button className="singularity-preset-random" onClick={applyRandomPreset}>🎲 Random black hole</button>

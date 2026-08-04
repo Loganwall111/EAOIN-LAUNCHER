@@ -39,6 +39,14 @@ describe('Singularity', () => {
     fireEvent.click(screen.getByText('← Back'));
     expect(onBack).toHaveBeenCalled();
   });
+
+  it('toggles the Grab/Throw items mode', () => {
+    render(<Singularity onBack={noop} />);
+    fireEvent.click(screen.getByText('🎯 Grab / Throw'));
+    expect(screen.getByText(/Drag on empty space to throw a random item/)).toBeTruthy();
+    fireEvent.click(screen.getByText('🎯 Grab / Throw'));
+    expect(screen.getByText(/Turn on to grab & throw items/)).toBeTruthy();
+  });
 });
 
 describe('nextStageOf / prevStageOf — journey order', () => {
@@ -61,17 +69,19 @@ describe('nextStageOf / prevStageOf — journey order', () => {
 });
 
 describe('portalTransition — look-gated transitions', () => {
-  it('advances only when near the centre AND looking into it', () => {
+  it('advances only when deep inside AND looking straight into the centre', () => {
     // far away: never advances no matter how you look
     expect(portalTransition(5, 0.9)).toBe(0);
-    // near centre, looking in → advance
-    expect(portalTransition(0.5, 0.8)).toBe(1);
+    // deep + looking straight into the centre → advance
+    expect(portalTransition(0.4, 0.95)).toBe(1);
+    // deep but only looking partly in (not straight) → stay
+    expect(portalTransition(0.4, 0.6)).toBe(0);
     // near centre, looking away → retreat
-    expect(portalTransition(0.5, -0.8)).toBe(-1);
+    expect(portalTransition(0.4, -0.8)).toBe(-1);
     // near centre but looking sideways → stay
-    expect(portalTransition(0.5, 0)).toBe(0);
-    // just outside advance radius → stay
-    expect(portalTransition(1.2, 0.8)).toBe(0);
+    expect(portalTransition(0.4, 0)).toBe(0);
+    // not deep enough (just outside the small advance radius) → stay
+    expect(portalTransition(1.2, 0.95)).toBe(0);
   });
   it('retreats only when very close and looking away', () => {
     // within back radius and looking away
