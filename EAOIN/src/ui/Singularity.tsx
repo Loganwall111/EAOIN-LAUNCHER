@@ -437,6 +437,68 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     window.setTimeout(() => setArgMsg(null), 4000);
   };
 
+  // --- Camera INPUT effect (always runs, independent of WebGL) ------------
+  // Physical zoom: camera distance drives the stage. Zoom in past each
+  // threshold and you fall into the next world; zoom back out (or turn
+  // around / look back) and you reverse to see everything again.
+  //
+  // This is a SEPARATE effect from the WebGL renderer so that mouse drag +
+  // scroll/keyboard zoom always work — even if the GPU can't compile the
+  // lensing shader. Previously the listeners were attached inside the render
+  // effect after shader setup, so a shader failure left the view stuck.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const drag = { down: false, lastX: 0, lastY: 0 };
+    const onPointerDown = (e: PointerEvent) => { drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY; };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag.down) return;
+      const dx = e.clientX - drag.lastX;
+      const dy = e.clientY - drag.lastY;
+      drag.lastX = e.clientX; drag.lastY = e.clientY;
+      const c = camRef.current;
+      c.yaw -= dx * 0.006;
+      c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
+    };
+    const onPointerUp = () => { drag.down = false; };
+    const applyZoom = () => {
+      const stage = stageFromDist(camRef.current.dist);
+      if (stage !== lastStageRef.current) {
+        lastStageRef.current = stage;
+        stageRef.current = stage;
+        setStageIdxProxy.current(stage);
+      }
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const c = camRef.current;
+      c.dist = Math.max(0.2, Math.min(40, c.dist + e.deltaY * 0.02));
+      applyZoom();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const c = camRef.current;
+      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(0.2, c.dist - 0.06);
+      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.06);
+      if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
+      if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
+      applyZoom();
+    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -493,56 +555,9 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     resize();
     window.addEventListener('resize', resize);
 
-    // --- 3D camera: mouse drag orbits, wheel + keys zoom ---
-    // Physical zoom: camera distance drives the stage. Zoom in past each
-    // threshold and you fall into the next world; zoom back out (or turn
-    // around / look back) and you reverse to see everything again.
-    const drag = { down: false, lastX: 0, lastY: 0 };
-    const onPointerDown = (e: PointerEvent) => { drag.down = true; drag.lastX = e.clientX; drag.lastY = e.clientY; };
-    const onPointerMove = (e: PointerEvent) => {
-      if (!drag.down) return;
-      const dx = e.clientX - drag.lastX;
-      const dy = e.clientY - drag.lastY;
-      drag.lastX = e.clientX; drag.lastY = e.clientY;
-      const c = camRef.current;
-      c.yaw -= dx * 0.006;
-      c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
-    };
-    const onPointerUp = () => { drag.down = false; };
-    const applyZoom = () => {
-      // Recompute stage purely from camera distance.
-      const stage = stageFromDist(camRef.current.dist);
-      if (stage !== lastStageRef.current) {
-        lastStageRef.current = stage;
-        stageRef.current = stage;
-        // Sync React state (only when it changes).
-        setStageIdxProxy.current(stage);
-      }
-    };
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const c = camRef.current;
-      c.dist = Math.max(0.2, Math.min(40, c.dist + e.deltaY * 0.02));
-      applyZoom();
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      const c = camRef.current;
-      if (e.key === 'w' || e.key === 'ArrowUp' || e.key === '=' || e.key === '+') c.dist = Math.max(0.2, c.dist - 0.06);
-      if (e.key === 's' || e.key === 'ArrowDown' || e.key === '-') c.dist = Math.min(40, c.dist + 0.06);
-      if (e.key === 'a' || e.key === 'ArrowLeft') c.yaw += 0.06;
-      if (e.key === 'd' || e.key === 'ArrowRight') c.yaw -= 0.06;
-      applyZoom();
-    };
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('keydown', onKeyDown);
-
     let raf = 0;
     const start = performance.now();
     const render = () => {
-      applyZoom(); // keep the stage in sync with camera distance every frame
       const t = (performance.now() - start) / 1000;
       const c = camRef.current;
       // Orbit camera: yaw around Y, pitch up/down. The framing radius uses the
@@ -570,11 +585,6 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
 
     const cleanup = () => {
       window.removeEventListener('resize', resize);
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      canvas.removeEventListener('wheel', onWheel);
-      window.removeEventListener('keydown', onKeyDown);
       cancelAnimationFrame(raf);
     };
     (window as any).__singularityCleanup = cleanup;
