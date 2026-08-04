@@ -32,6 +32,28 @@ interface WorldEntry {
   worldType?: WorldTypeID;
 }
 
+/** "Seed Department" presets — click one to jump straight to any place/mode. */
+const SEED_PRESETS: { id: string; label: string; emoji: string; seed: string; worldType: WorldTypeID; mode: GameMode; detail: string }[] = [
+  { id: 'classic', label: 'Classic Survival', emoji: '🌍', seed: 'default_seed', worldType: 'default', mode: 'survival', detail: 'Start on grass in a normal overworld' },
+  { id: 'creative', label: 'Creative Sandbox', emoji: '🏗️', seed: 'creative_seed', worldType: 'default', mode: 'creative', detail: 'Fly and build freely' },
+  { id: 'flat', label: 'Superflat Build', emoji: '🧱', seed: 'flat_flat', worldType: 'flat', mode: 'creative', detail: 'Perfect flat world for building' },
+  { id: 'skylands', label: 'Skylands', emoji: '☁️', seed: 'skylands', worldType: 'skylands', mode: 'survival', detail: 'Floating islands above the void' },
+  { id: 'amplified', label: 'Amplified', emoji: '⛰️', seed: 'amplified', worldType: 'amplified', mode: 'survival', detail: 'Massive dramatic mountains' },
+  { id: 'nether', label: 'Nether', emoji: '🔥', seed: 'nether_start', worldType: 'default', mode: 'survival', detail: 'Spawn deep inside the Nether' },
+  { id: 'end', label: 'The End', emoji: '🕳️', seed: 'end_start', worldType: 'default', mode: 'survival', detail: 'The dragon island with the growing black hole' },
+  { id: 'rift', label: 'The Rift', emoji: '🌀', seed: 'rift_dimension', worldType: 'default', mode: 'survival', detail: 'A colourful tear between realities' },
+  { id: 'moon', label: 'The Moon', emoji: '🌙', seed: 'moon', worldType: 'default', mode: 'survival', detail: 'Low-gravity lunar surface' },
+  { id: 'space', label: 'Deep Space', emoji: '🚀', seed: 'space', worldType: 'default', mode: 'creative', detail: 'Drift among the stars' },
+];
+
+/** Apply a preset and start the game immediately (jump straight to a place). */
+function startPreset(
+  preset: typeof SEED_PRESETS[number],
+  onStart: (seed?: string, mode?: GameMode) => void,
+): void {
+  onStart(seedForWorldType(preset.seed, preset.worldType), preset.mode);
+}
+
 const MODE_BACKGROUNDS: Record<GameMode, { label: string; gradient: string; emoji: string; description: string }> = {
   survival: { label: 'Survival', gradient: 'linear-gradient(180deg,#4a8fc7 0%,#76b6e0 28%,#6cc24a 54%,#3f7a2a 60%,#8a5a36 100%)', emoji: '🌄', description: 'Gather, craft, survive' },
   creative: { label: 'Creative', gradient: 'linear-gradient(180deg,#7bb8e8 0%,#a7d8ff 35%,#b0e09a 60%,#d8c07a 100%)', emoji: '🏗️', description: 'Build without limits' },
@@ -313,6 +335,25 @@ export default function MainMenu({ onStart, currentSeed, onBack }: MainMenuProps
                     >
                       <strong>{MODE_BACKGROUNDS[entry.id]?.emoji} {entry.label}</strong>
                       <small>{MODE_BACKGROUNDS[entry.id]?.description}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Seed Department — jump straight to any place in the game. */}
+              <div className="sp-mode-select">
+                <span className="sp-field-label">🎲 Seed Department — jump straight there</span>
+                <div className="sp-type-grid">
+                  {SEED_PRESETS.map(preset => (
+                    <button
+                      key={preset.id}
+                      className="sp-type-card"
+                      title={preset.detail}
+                      onClick={() => startPreset(preset, onStart)}
+                    >
+                      <span className="sp-type-preview" style={{ background: MODE_BACKGROUNDS[preset.mode].gradient }} />
+                      <strong>{preset.emoji} {preset.label}</strong>
+                      <small>{preset.detail}</small>
                     </button>
                   ))}
                 </div>
