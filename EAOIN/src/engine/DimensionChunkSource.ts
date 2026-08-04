@@ -21,6 +21,11 @@ export class DimensionChunkSource {
   private readonly backrooms: BackroomsTerrain;
   private readonly dimensionTerrain = new Map<string, DimensionTerrainGenerator>();
   private activeDimension = 'overworld';
+  /** LRU-ish cache of recently generated chunks, keyed by cx:cz:dim. Generation
+   *  is expensive (full column pass), and getBlockAt/getSurfaceHeightAt were
+   *  calling it fresh every time — the source of heavy frame hitches. */
+  private readonly chunkCache = new Map<string, Chunk>();
+  private static readonly CACHE_LIMIT = 1024;
 
   constructor(
     private readonly seed: string,
@@ -36,6 +41,7 @@ export class DimensionChunkSource {
 
   setDimension(dimensionId: string): void {
     this.activeDimension = dimensionId;
+    this.chunkCache.clear();
   }
 
   /** True when the dimension has genuinely distinct terrain from the overworld. */
@@ -57,24 +63,34 @@ export class DimensionChunkSource {
   /** Bound callback so it can be passed directly to ChunkRenderManager. */
   readonly generateChunk = (cx: number, cz: number): Chunk => {
     const dim = this.activeDimension;
+    const cacheKey = `${cx}:${cz}:${dim}`;
+    const cached = this.chunkCache.get(cacheKey);
+    if (cached) return cached;
 
+    let chunk: Chunk;
     // The Aether and Backrooms use their bespoke generators.
     if (dim === 'aether' || dim === 'backrooms') {
-      const chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
+      chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
       if (dim === 'aether') this.aether.generate(chunk);
       else this.backrooms.generate(chunk);
-      return chunk;
+    } else {
+      // Every other dimension gets its own generated world.
+      const dimensionGen = this.terrainFor(dim);
+      if (dimensionGen) {
+        chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
+        dimensionGen.generate(chunk);
+      } else {
+        chunk = this.overworld.generateChunk(cx, cz);
+      }
     }
 
-    // Every other dimension gets its own generated world.
-    const dimensionGen = this.terrainFor(dim);
-    if (dimensionGen) {
-      const chunk = new Chunk(cx, cz, `${this.seed}:${dim}`, { generate: false });
-      dimensionGen.generate(chunk);
-      return chunk;
+    // Cache with a simple eviction at the limit so memory stays bounded.
+    this.chunkCache.set(cacheKey, chunk);
+    if (this.chunkCache.size > DimensionChunkSource.CACHE_LIMIT) {
+      const oldest = this.chunkCache.keys().next().value;
+      if (oldest !== undefined) this.chunkCache.delete(oldest);
     }
-
-    return this.overworld.generateChunk(cx, cz);
+    return chunk;
   };
 
   /**
