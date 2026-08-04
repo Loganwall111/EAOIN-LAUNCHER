@@ -3677,3 +3677,26 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 /* Full Game Settings — atmosphere preset buttons. */
 .super-preset-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .super-preset-row .super-btn { padding: 6px 10px; font-size: 11px; }
+
+/* Photo Mode. */
+.photo-mode { position: fixed; inset: 0; z-index: 990; display: grid; place-items: center; }
+.photo-panel {
+  width: min(620px, 94vw); max-height: 90vh; display: flex; flex-direction: column;
+  background: linear-gradient(180deg,#10141e,#070a10);
+  border: 2px solid #4a9ad0; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.75); color: #e8f0fc;
+}
+.photo-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(180deg,#234a6a,#123a5a); font-weight: 800; }
+.photo-view {
+  margin: 12px; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;
+  background: repeating-conic-gradient(#111 0 25%, #181818 0 50%) 50%/20px 20px;
+  display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.15);
+}
+.photo-thumb-label { color: #8892b0; font-size: 12px; }
+.photo-controls { padding: 4px 14px 14px; display: grid; gap: 8px; }
+.photo-label { font-size: 12px; color: #bcd0e8; }
+.photo-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.photo-chip { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #d6e4f4; cursor: pointer; font-size: 11px; }
+.photo-chip.active { background: #2a6fd0; color: #fff; border-color: #6f9fff; }
+.photo-controls input[type="range"] { accent-color: #4a9ad0; }
+.photo-actions { margin-top: 4px; }

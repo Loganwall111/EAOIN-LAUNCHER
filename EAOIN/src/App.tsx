@@ -19,6 +19,7 @@ import ModsScreen from './ui/ModsScreen';
 import ModEditorScreen from './ui/ModEditorScreen';
 import SuperSettingsPanel from './ui/SuperSettingsPanel';
 import GodConsole from './ui/GodConsole';
+import PhotoMode from './ui/PhotoMode';
 import { SuperSettings, loadSuperSettings, saveSuperSettings } from './settings/SuperSettings';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
@@ -69,6 +70,7 @@ export default function App() {
   const [superSettings, setSuperSettings] = useState<SuperSettings>(() => loadSuperSettings());
   const [superSettingsOpen, setSuperSettingsOpen] = useState(false);
   const [godConsoleOpen, setGodConsoleOpen] = useState(false);
+  const [photoModeOpen, setPhotoModeOpen] = useState(false);
   useEffect(() => { saveSuperSettings(superSettings); }, [superSettings]);
   const [craftingMessage, setCraftingMessage] = useState('Crafting ready');
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
@@ -288,13 +290,12 @@ export default function App() {
     saveSettings(settings);
   }, [settings]);
 
-  // Creative God Console — open with the ` (backtick) key while in a world.
+  // Creative God Console (tilde) + Photo Mode (P) — while in a world.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '`' && e.key !== '~') return;
       if (!gameStarted) return;
-      e.preventDefault();
-      setGodConsoleOpen((v) => !v);
+      if (e.key === '`' || e.key === '~') { e.preventDefault(); setGodConsoleOpen((v) => !v); return; }
+      if (e.key.toLowerCase() === 'p') { e.preventDefault(); setPhotoModeOpen((v) => !v); return; }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -735,6 +736,12 @@ export default function App() {
           onSpawnMob={() => godAction('spawn')}
           onTeleportSpawn={() => godAction('teleport-spawn')}
           onClose={() => setGodConsoleOpen(false)}
+        />
+      )}
+      {photoModeOpen && gameStarted && !worldLoading && (
+        <PhotoMode
+          canvas={document.querySelector('.game-canvas') as HTMLCanvasElement | null}
+          onClose={() => setPhotoModeOpen(false)}
         />
       )}
       {worldLoading && (
