@@ -282,6 +282,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   /** True while the Ender Dragon is alive in the End — drives the black fog
    *  that hides the distant islands during the fight. */
   const endDragonAliveRef = useRef(false);
+  /** Whether the first Memory Shard (from beating the End) has been claimed. */
+  const endShardClaimedRef = useRef(false);
+  /** EAOIN key letters the player has recovered across dimensions. */
+  const keyLettersRef = useRef<string[]>([]);
   /** Event-horizon time-scale multiplier (1 = normal) and redshift target. */
   const timeScaleRef = useRef(1);
   const redshiftTarget = useRef(0);
@@ -1860,6 +1864,32 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           const delta = (target - scene.fogDensity) * Math.min(1, deltaSeconds * 0.6);
           scene.fogDensity = Math.max(0.008, Math.min(0.08, scene.fogDensity + delta));
           scene.fogColor = Color3.Lerp(scene.fogColor, new Color3(0.02, 0.01, 0.04), endDragonAliveRef.current ? Math.min(1, deltaSeconds * 0.6) : 0);
+        }
+        // End exit portal: with the dragon defeated, stepping onto the central
+        // island's exit pad returns you to the overworld and grants the first
+        // Memory Shard (the start of the EAOIN-key puzzle).
+        if (chunkSource.getDimension() === 'end' && !endDragonAliveRef.current && !endShardClaimedRef.current) {
+          const d = Math.hypot(camera.position.x, camera.position.z);
+          if (d < 8) {
+            endShardClaimedRef.current = true;
+            publishInventory(addToInventory(inventoryRef.current, 308 as BlockID, 1));
+            onGameplayEvent('shardsCollected', 1);
+            // Give the first two EAOIN key letters to begin the scramble puzzle.
+            if (keyLettersRef.current.length === 0) keyLettersRef.current = ['E', 'A'];
+            showActionMessage('💠 First Memory Shard found! You recovered the letters E and A of the EAOIN key — piece the rest together across the dimensions.');
+            audio.play('pickup', settingsRef.current);
+            // Return to the overworld.
+            dimensionRuntime.setDimension('overworld');
+            dimensionRuntime.triggerTransitionEffect(camera.position, true);
+            atmosphere.setDimension('overworld');
+            chunkSource.setDimension('overworld');
+            renderer.clearAll();
+            invalidateRenderSnapshot(engine);
+            const sy = chunkSource.getSurfaceHeightAt(camera.position.x, camera.position.z);
+            camera.position.set(0, sy >= 1 ? sy + 1 + PLAYER_EYE_HEIGHT : 64 + PLAYER_EYE_HEIGHT, 0);
+            streamCenter = toChunkCoordinate(0, 0);
+            renderer.updateVisibleChunks(streamCenter.cx, streamCenter.cz, INITIAL_CHUNK_RADIUS, chunkSource.generateChunk);
+          }
         }
         // 1.0 — tick command-block system (repeating/impulse/chain).
         commandBlockSystem.tick(deltaSeconds);
