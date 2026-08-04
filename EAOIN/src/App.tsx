@@ -667,7 +667,9 @@ export default function App() {
           inventory={inventory}
           survivalStats={survivalStats}
           inventoryOpen={inventoryOpen}
-          settingsOpen={settingsOpen}
+          // In-game Settings now opens the full unified Options overlay, so the
+          // small inline HUD settings panel is suppressed.
+          settingsOpen={false}
           settings={settings}
           runtimeStatus={runtimeStatus}
           objectives={objectives}
@@ -685,6 +687,17 @@ export default function App() {
           onOpenSuperSettings={() => setSuperSettingsOpen(true)}
         />
       </Suspense>
+      {/* Unified Options: the in-game Settings button now opens the SAME full
+          Options screen as the main menu (merged — one Options for everything),
+          shown here as an overlay while playing. */}
+      {settingsOpen && gameStarted && !worldLoading && (
+        <OptionsScreen
+          settings={settings}
+          onChange={setSettings}
+          onBack={closeSettings}
+          onOpenSuperSettings={() => setSuperSettingsOpen(true)}
+        />
+      )}
       {superSettingsOpen && !worldLoading && (
         <SuperSettingsPanel
           settings={superSettings}

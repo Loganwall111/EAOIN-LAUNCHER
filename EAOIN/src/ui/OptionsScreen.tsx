@@ -238,6 +238,35 @@ export default function OptionsScreen({ settings, onChange, onBack, onOpenSuperS
                 <Row label="Touch controls" hint="On-screen mobile buttons (virtual joystick, mine/place/fly/jump/inventory/chat/pause). Off by default.">
                   <Toggle checked={settings.touchControls} onChange={(v) => patch({ touchControls: v })} label="Touch controls" />
                 </Row>
+                <Row label="Auto-save" hint="Save the world automatically as you play">
+                  <Toggle checked={settings.autoSave} onChange={(v) => patch({ autoSave: v })} label="Auto-save" />
+                </Row>
+                <Row label="View bobbing" hint="Head-bob while walking">
+                  <Toggle checked={settings.viewBobbing} onChange={(v) => patch({ viewBobbing: v })} label="View bobbing" />
+                </Row>
+                <Row label="Crosshair" hint="Show the centre crosshair">
+                  <Toggle checked={settings.crosshair} onChange={(v) => patch({ crosshair: v })} label="Crosshair" />
+                </Row>
+                <Row label="Day/night speed" hint={`${settings.daySpeed.toFixed(2)}× — how fast the sun and moon travel`}>
+                  <input type="range" min={0.25} max={8} step={0.25} value={settings.daySpeed} onChange={(e) => patch({ daySpeed: Number(e.target.value) })} aria-label="Day/night speed" />
+                </Row>
+                <Row label="Mob difficulty" hint="How aggressive hostile mobs are">
+                  <select className="ui-input" value={settings.mobDifficulty} onChange={(e) => patch({ mobDifficulty: e.target.value as GameSettings['mobDifficulty'] })}>
+                    <option value="peaceful">Peaceful</option>
+                    <option value="easy">Easy</option>
+                    <option value="normal">Normal</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </Row>
+                <Row label="Keep inventory on death" hint="Don't drop your items when you die">
+                  <Toggle checked={settings.keepInventory} onChange={(v) => patch({ keepInventory: v })} label="Keep inventory" />
+                </Row>
+                <Row label="World border" hint="An invisible edge around the world">
+                  <Toggle checked={settings.worldBorder} onChange={(v) => patch({ worldBorder: v })} label="World border" />
+                </Row>
+                <Row label="World border radius" hint={`${settings.worldBorderRadius} blocks`}>
+                  <input type="range" min={32} max={2000} step={8} value={settings.worldBorderRadius} onChange={(e) => patch({ worldBorderRadius: Number(e.target.value) })} aria-label="World border radius" />
+                </Row>
                 <Row label="Super Settings" hint="The deep config layer — coloured lighting, cameras, ray tracing, debug & more.">
                   {onOpenSuperSettings
                     ? <button className="confirm-btn wide" style={{ margin: 0 }} onClick={onOpenSuperSettings}>⚡ Open Super Settings</button>

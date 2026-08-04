@@ -68,6 +68,23 @@ export interface GameSettings {
    * pause) overlay the world so the game is playable on a phone or tablet.
    */
   touchControls: boolean;
+  // ---- Extended configurable options (unified Options menu) ----
+  /** Auto-save the world periodically. */
+  autoSave: boolean;
+  /** Head-bob when walking. */
+  viewBobbing: boolean;
+  /** Day/night cycle speed multiplier (1 = normal). */
+  daySpeed: number;
+  /** Keep inventory on death. */
+  keepInventory: boolean;
+  /** Show the crosshair. */
+  crosshair: boolean;
+  /** Mob hostility (peaceful .. hard). */
+  mobDifficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+  /** Enable the world border. */
+  worldBorder: boolean;
+  /** World-border radius in blocks. */
+  worldBorderRadius: number;
 }
 
 /** Mirrors `RayTracingQuality` without importing the renderer into settings. */
@@ -111,6 +128,14 @@ export function createDefaultSettings(): GameSettings {
     // Off by default — PC (keyboard + mouse) is the default control scheme.
     controllerSupport: false,
     touchControls: false,
+    autoSave: true,
+    viewBobbing: true,
+    daySpeed: 1,
+    keepInventory: false,
+    crosshair: true,
+    mobDifficulty: 'normal',
+    worldBorder: false,
+    worldBorderRadius: 400,
   };
 }
 
@@ -147,6 +172,14 @@ export function clampSettings(settings: GameSettings): GameSettings {
     rayTracedAO: settings.rayTracedAO ?? true,
     controllerSupport: settings.controllerSupport ?? false,
     touchControls: settings.touchControls ?? false,
+    autoSave: settings.autoSave ?? true,
+    viewBobbing: settings.viewBobbing ?? true,
+    daySpeed: Math.max(0.25, Math.min(8, settings.daySpeed ?? 1)),
+    keepInventory: settings.keepInventory ?? false,
+    crosshair: settings.crosshair ?? true,
+    mobDifficulty: ['peaceful', 'easy', 'normal', 'hard'].includes(settings.mobDifficulty) ? settings.mobDifficulty : 'normal',
+    worldBorder: settings.worldBorder ?? false,
+    worldBorderRadius: Math.max(32, Math.min(100000, settings.worldBorderRadius ?? 400)),
   };
 }
 
