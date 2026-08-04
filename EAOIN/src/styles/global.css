@@ -3724,3 +3724,20 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .boss-rush-stats span { padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; }
 .boss-rush-abilities { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .boss-ability { padding: 4px 8px; border-radius: 6px; background: rgba(122,74,208,0.2); color: #d6c4f4; font-size: 11px; }
+
+/* Custom Dimension creator. */
+.custom-dim { position: fixed; inset: 0; z-index: 900; background: #0a0a14; color: #e8f0fc; display: flex; flex-direction: column; overflow-y: auto; }
+.custom-dim-head { display: flex; align-items: center; gap: 16px; padding: 18px 26px; }
+.custom-dim-body { max-width: 720px; margin: 0 auto; width: 100%; padding: 0 26px 30px; display: grid; gap: 14px; }
+.cd-field { display: grid; gap: 6px; }
+.cd-field span { font-size: 12px; color: #bcd0e8; }
+.cd-section { display: grid; gap: 8px; }
+.cd-label { font-size: 12px; font-weight: 800; color: #7ef7a0; letter-spacing: 1px; text-transform: uppercase; }
+.cd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.cd-card { padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #d6e4f4; cursor: pointer; text-align: center; }
+.cd-card.selected { background: rgba(122,74,208,0.35); border-color: #7a4ad0; }
+.cd-emoji { display: block; font-size: 26px; margin-bottom: 4px; }
+.cd-card strong { display: block; font-size: 13px; }
+.cd-card small { font-size: 11px; color: #8892b0; }
+.cd-toggles { display: flex; gap: 18px; font-size: 13px; color: #d6e4f4; }
+.cd-toggles input { accent-color: #7a4ad0; }

@@ -31,6 +31,8 @@ export interface TitleScreenProps {
   onPortalGallery: () => void;
   /** Launch the Boss Rush — fight every boss. */
   onBossRush: () => void;
+  /** Launch the Custom Dimension creator. */
+  onCustomDim: () => void;
   /** Launch the in-game Alpha Launcher (opens the EAOIN 2.0 alpha build). */
   onAlphaLauncher: () => void;
   /** Open the Singularity — the shader-based black hole. */
@@ -58,7 +60,7 @@ export interface TitleScreenProps {
 
 export default function TitleScreen({
   appearance, signedInUser, onSignIn, onSingleplayer, onMultiplayer, onTutorial, onGameHub,
-  onPortalGallery, onBossRush, onAlphaLauncher, onSingularity, onBackToStable, onHorizonOS, onMods,
+  onPortalGallery, onBossRush, onCustomDim, onAlphaLauncher, onSingularity, onBackToStable, onHorizonOS, onMods,
   onMarketplace, onEditorMode, coinBalance, onOpenCoinStore, onOptions, onQuit,
   onEditCharacter, onOpenNews, onOpenGuide, onOpenStats, onOpenFriends, onOpenCosmicRift,
 }: TitleScreenProps) {
@@ -161,6 +163,9 @@ export default function TitleScreen({
         </button>
         <button className="menu-btn is-bossrush" onClick={onBossRush}>
           Boss Rush<span className="btn-icon">👑</span>
+        </button>
+        <button className="menu-btn is-customdim" onClick={onCustomDim}>
+          Custom World<span className="btn-icon">🌍</span>
         </button>
         <button className="menu-btn is-singularity" onClick={onSingularity}>
           Singularity<span className="btn-icon">🕳</span>

@@ -11,6 +11,7 @@ import TutorialWorld from './ui/TutorialWorld';
 import GameHubScreen from './ui/GameHubScreen';
 import PortalGallery from './ui/PortalGallery';
 import BossRush from './ui/BossRush';
+import CustomDimension from './ui/CustomDimension';
 import AlphaLauncher from './ui/AlphaLauncher';
 import CosmicRift from './ui/CosmicRift';
 import Singularity from './ui/Singularity';
@@ -90,7 +91,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'bossrush' | 'alphaluncher' | 'singularity' | 'cosmicrift';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'bossrush' | 'customdim' | 'alphaluncher' | 'singularity' | 'cosmicrift';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   //
@@ -417,6 +418,7 @@ export default function App() {
             onGameHub={() => setAppPhase('gamehub')}
             onPortalGallery={() => setAppPhase('portalgallery')}
             onBossRush={() => setAppPhase('bossrush')}
+            onCustomDim={() => setAppPhase('customdim')}
             onAlphaLauncher={() => setAppPhase('alphaluncher')}
             onSingularity={() => setAppPhase('singularity')}
             onOpenCosmicRift={() => setAppPhase('cosmicrift')}
@@ -492,6 +494,19 @@ export default function App() {
       return (
         <div className={shellClass}>
           <BossRush onBack={() => setAppPhase('title')} />
+        </div>
+      );
+    }
+    if (appPhase === 'customdim') {
+      return (
+        <div className={shellClass}>
+          <CustomDimension
+            onBack={() => setAppPhase('title')}
+            onStart={(seed, mode, superPatch) => {
+              setSuperSettings((s) => ({ ...s, ...superPatch }));
+              startGame(seed, mode);
+            }}
+          />
         </div>
       );
     }
