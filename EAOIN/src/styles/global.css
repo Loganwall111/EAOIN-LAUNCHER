@@ -3741,3 +3741,30 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .cd-card small { font-size: 11px; color: #8892b0; }
 .cd-toggles { display: flex; gap: 18px; font-size: 13px; color: #d6e4f4; }
 .cd-toggles input { accent-color: #7a4ad0; }
+
+/* Quest Journal. */
+.quest-journal { position: fixed; inset: 0; z-index: 900; background: #0a0c14; color: #e8f0fc; display: flex; flex-direction: column; }
+.quest-journal-head { display: flex; align-items: center; gap: 16px; padding: 18px 26px; }
+.quest-journal-tiers { display: flex; gap: 6px; padding: 0 26px 10px; flex-wrap: wrap; }
+.quest-tier { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #bcd0e8; cursor: pointer; font-size: 12px; text-transform: capitalize; }
+.quest-tier.active { background: #2a6a4a; color: #fff; border-color: #4a9a6a; }
+.quest-journal-body { flex: 1; display: flex; gap: 20px; padding: 0 26px 24px; overflow: hidden; }
+.quest-journal-list { width: min(320px, 40vw); overflow-y: auto; display: grid; gap: 6px; align-content: start; }
+.quest-card { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #d6e4f4; cursor: pointer; text-align: left; }
+.quest-card.selected { background: rgba(74,154,106,0.35); border-color: #4a9a6a; }
+.quest-emoji { font-size: 22px; }
+.quest-card small { display: block; font-size: 11px; color: #8892b0; text-transform: capitalize; }
+.quest-journal-preview { flex: 1; padding: 20px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.quest-journal-preview h2 { margin: 0; }
+.quest-type-badge { color: #4a9a6a; font-weight: 800; font-size: 12px; }
+.quest-desc, .quest-lore { margin: 0; color: #bcd0e8; font-size: 13px; }
+.quest-lore { color: #8892b0; font-style: italic; }
+.quest-steps { display: grid; gap: 6px; }
+.quest-step { display: flex; justify-content: space-between; gap: 10px; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.05); font-size: 12px; }
+.quest-step span:first-child { text-transform: capitalize; color: #ffd166; }
+.quest-step-progress { color: #7ef7a0; }
+.quest-rewards { display: flex; gap: 10px; flex-wrap: wrap; }
+.quest-rewards span { padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; }
+.quest-live { display: grid; gap: 4px; }
+.quest-live-row { display: flex; justify-content: space-between; font-size: 12px; color: #bcd0e8; }
+.quest-live-row.done { color: #7ef7a0; }

@@ -12,6 +12,7 @@ import GameHubScreen from './ui/GameHubScreen';
 import PortalGallery from './ui/PortalGallery';
 import BossRush from './ui/BossRush';
 import CustomDimension from './ui/CustomDimension';
+import QuestJournal from './ui/QuestJournal';
 import AlphaLauncher from './ui/AlphaLauncher';
 import CosmicRift from './ui/CosmicRift';
 import Singularity from './ui/Singularity';
@@ -91,7 +92,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'bossrush' | 'customdim' | 'alphaluncher' | 'singularity' | 'cosmicrift';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'bossrush' | 'customdim' | 'questjournal' | 'alphaluncher' | 'singularity' | 'cosmicrift';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   //
@@ -419,6 +420,7 @@ export default function App() {
             onPortalGallery={() => setAppPhase('portalgallery')}
             onBossRush={() => setAppPhase('bossrush')}
             onCustomDim={() => setAppPhase('customdim')}
+            onQuestJournal={() => setAppPhase('questjournal')}
             onAlphaLauncher={() => setAppPhase('alphaluncher')}
             onSingularity={() => setAppPhase('singularity')}
             onOpenCosmicRift={() => setAppPhase('cosmicrift')}
@@ -507,6 +509,13 @@ export default function App() {
               startGame(seed, mode);
             }}
           />
+        </div>
+      );
+    }
+    if (appPhase === 'questjournal') {
+      return (
+        <div className={shellClass}>
+          <QuestJournal objectives={objectives} onBack={() => setAppPhase('title')} />
         </div>
       );
     }
