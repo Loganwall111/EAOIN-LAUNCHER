@@ -7,7 +7,7 @@
  * (experimental, off by default), debug/developer toggles, a mod rebuilder and
  * an in-game world editor shortcut.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SuperSettings, defaultSuperSettings } from '../settings/SuperSettings';
 import { getGodMode } from '../arg/GodMode';
 
@@ -75,6 +75,17 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
   // saves) never crashes on a missing field.
   const merged: SuperSettings = { ...defaultSuperSettings(), ...settings };
   const patch = (next: Partial<SuperSettings>) => onChange({ ...merged, ...next });
+  // Scroll the active tab into view so the (now scrollable) tab bar never cuts
+  // a tab off mid-way when you switch to it.
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const active = el.querySelector('.super-tab.active') as HTMLElement | null;
+    if (active && typeof active.scrollIntoView === 'function') {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [tab]);
 
   return (
     <div className="super-settings scrim">
@@ -84,7 +95,7 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
           <button className="super-close" onClick={onClose}>✕</button>
         </div>
 
-        <div className="super-tabs">
+        <div className="super-tabs" ref={tabsRef}>
           {TABS.map((t) => (
             <button key={t.id} className={`super-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
               {t.icon} {t.label}

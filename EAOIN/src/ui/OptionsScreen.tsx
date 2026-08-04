@@ -20,12 +20,14 @@ export interface OptionsScreenProps {
   onOpenSuperSettings?: () => void;
 }
 
-type Section = 'video' | 'audio' | 'gameplay' | 'accessibility';
+type Section = 'video' | 'audio' | 'gameplay' | 'controls' | 'world' | 'accessibility';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   { id: 'video', label: 'Video', icon: '🖥' },
   { id: 'audio', label: 'Audio', icon: '🔊' },
   { id: 'gameplay', label: 'Gameplay', icon: '🎮' },
+  { id: 'controls', label: 'Controls', icon: '🎮' },
+  { id: 'world', label: 'World', icon: '🌍' },
   { id: 'accessibility', label: 'Accessibility', icon: '♿' },
 ];
 
@@ -271,6 +273,54 @@ export default function OptionsScreen({ settings, onChange, onBack, onOpenSuperS
                   {onOpenSuperSettings
                     ? <button className="confirm-btn wide" style={{ margin: 0 }} onClick={onOpenSuperSettings}>⚙️ Open Full Game Settings</button>
                     : <Toggle checked={false} onChange={() => {}} label="Full Game Settings (unavailable here)" />}
+                </Row>
+              </>
+            )}
+
+            {section === 'controls' && (
+              <>
+                <Row label="Camera speed" hint={settings.cameraSpeed.toFixed(2)}>
+                  <input type="range" min={0.2} max={3} step={0.05} value={settings.cameraSpeed} onChange={(e) => patch({ cameraSpeed: Number(e.target.value) })} aria-label="Camera speed" />
+                </Row>
+                <Row label="Controller support" hint="Gamepad/controller movement &amp; look.">
+                  <Toggle checked={settings.controllerSupport} onChange={(v) => patch({ controllerSupport: v })} label="Controller support" />
+                </Row>
+                <Row label="Touch controls" hint="On-screen mobile buttons.">
+                  <Toggle checked={settings.touchControls} onChange={(v) => patch({ touchControls: v })} label="Touch controls" />
+                </Row>
+                <Row label="Flight speed" hint={settings.cameraSpeed.toFixed(2)}>
+                  <input type="range" min={1} max={8} step={0.1} value={settings.cameraSpeed} onChange={(e) => patch({ cameraSpeed: Number(e.target.value) })} aria-label="Flight speed" />
+                </Row>
+              </>
+            )}
+
+            {section === 'world' && (
+              <>
+                <Row label="Day/night speed" hint={`${settings.daySpeed.toFixed(2)}x`}>
+                  <input type="range" min={0.25} max={8} step={0.25} value={settings.daySpeed} onChange={(e) => patch({ daySpeed: Number(e.target.value) })} aria-label="Day/night speed" />
+                </Row>
+                <Row label="Mob difficulty">
+                  <select className="ui-input" value={settings.mobDifficulty} onChange={(e) => patch({ mobDifficulty: e.target.value as GameSettings['mobDifficulty'] })}>
+                    <option value="peaceful">Peaceful</option>
+                    <option value="easy">Easy</option>
+                    <option value="normal">Normal</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </Row>
+                <Row label="Keep inventory on death">
+                  <Toggle checked={settings.keepInventory} onChange={(v) => patch({ keepInventory: v })} label="Keep inventory" />
+                </Row>
+                <Row label="World border" hint="An invisible edge around the world.">
+                  <Toggle checked={settings.worldBorder} onChange={(v) => patch({ worldBorder: v })} label="World border" />
+                </Row>
+                <Row label="World border radius" hint={`${settings.worldBorderRadius} blocks`}>
+                  <input type="range" min={32} max={2000} step={8} value={settings.worldBorderRadius} onChange={(e) => patch({ worldBorderRadius: Number(e.target.value) })} aria-label="World border radius" />
+                </Row>
+                <Row label="View bobbing">
+                  <Toggle checked={settings.viewBobbing} onChange={(v) => patch({ viewBobbing: v })} label="View bobbing" />
+                </Row>
+                <Row label="Crosshair">
+                  <Toggle checked={settings.crosshair} onChange={(v) => patch({ crosshair: v })} label="Crosshair" />
                 </Row>
               </>
             )}

@@ -3076,7 +3076,20 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   font-weight: 800; font-size: 16px; letter-spacing: 0.04em;
 }
 .super-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
-.super-tabs { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.super-tabs {
+  display: flex; gap: 6px; padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #4a7ad0 rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.super-tabs::-webkit-scrollbar { height: 8px; }
+.super-tabs::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); border-radius: 4px; }
+.super-tabs::-webkit-scrollbar-thumb { background: #4a7ad0; border-radius: 4px; }
+.super-tabs::-webkit-scrollbar-thumb:hover { background: #6f9fff; }
+.super-tab { flex: 0 0 auto; }
 .super-tab { padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #bcd0e8; cursor: pointer; font-size: 12px; }
 .super-tab.active { background: linear-gradient(180deg,#2a6fd0,#1a4a9a); color: #fff; border-color: #6f9fff; }
 .super-body { padding: 8px 16px 16px; overflow-y: auto; }
