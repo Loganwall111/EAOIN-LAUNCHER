@@ -3076,21 +3076,31 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   font-weight: 800; font-size: 16px; letter-spacing: 0.04em;
 }
 .super-close { background: none; border: none; color: #fff; font-size: 18px; cursor: pointer; }
+.super-tabbar {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  padding: 10px 6px; border-bottom: 1px solid rgba(255,255,255,0.1);
+}
 .super-tabs {
-  display: flex; gap: 6px; padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex; gap: 6px; padding: 0 4px;
   overflow-x: auto; overflow-y: hidden;
   scrollbar-width: thin;
   scrollbar-color: #4a7ad0 rgba(255,255,255,0.06);
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
+  scroll-behavior: smooth;
 }
 .super-tabs::-webkit-scrollbar { height: 8px; }
 .super-tabs::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); border-radius: 4px; }
 .super-tabs::-webkit-scrollbar-thumb { background: #4a7ad0; border-radius: 4px; }
 .super-tabs::-webkit-scrollbar-thumb:hover { background: #6f9fff; }
-.super-tab { flex: 0 0 auto; }
-.super-tab { padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #bcd0e8; cursor: pointer; font-size: 12px; }
+.super-tab-arrow {
+  flex: 0 0 auto; width: 26px; height: 30px; cursor: pointer;
+  border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08); color: #fff; font-size: 18px; line-height: 1;
+}
+.super-tab-arrow:hover { background: rgba(255,255,255,0.2); }
+.super-tab { flex: 0 0 auto; padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #bcd0e8; cursor: pointer; font-size: 12px; }
 .super-tab.active { background: linear-gradient(180deg,#2a6fd0,#1a4a9a); color: #fff; border-color: #6f9fff; }
 .super-body { padding: 8px 16px 16px; overflow-y: auto; }
 .super-btn { padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #234a8a; color: #fff; cursor: pointer; font-weight: 700; }
@@ -3633,3 +3643,14 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 }
 .pause-ws-row .ui-input { width: auto; padding: 4px 6px; font-size: 12px; }
 .pause-ws-row input[type="checkbox"] { accent-color: #5dd6ff; }
+
+/* Options — Info & Help section. */
+.opt-info { display: grid; gap: 12px; }
+.opt-info-card {
+  padding: 12px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+}
+.opt-info-title { font-weight: 800; font-size: 13px; color: #7ef7a0; margin-bottom: 6px; }
+.opt-info-list { list-style: none; padding: 0; margin: 0; font-size: 12px; color: #d6e4f4; line-height: 1.8; }
+.opt-info-list b { color: #ffd166; }
+.opt-info-text { font-size: 12px; color: #bcd0e8; line-height: 1.6; margin: 0; }

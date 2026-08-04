@@ -78,6 +78,10 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
   // Scroll the active tab into view so the (now scrollable) tab bar never cuts
   // a tab off mid-way when you switch to it.
   const tabsRef = useRef<HTMLDivElement>(null);
+  const scrollTabs = (dir: number) => {
+    const el = tabsRef.current;
+    if (el) el.scrollBy({ left: dir * 260, behavior: 'smooth' });
+  };
   useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
@@ -95,12 +99,16 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
           <button className="super-close" onClick={onClose}>✕</button>
         </div>
 
-        <div className="super-tabs" ref={tabsRef}>
-          {TABS.map((t) => (
-            <button key={t.id} className={`super-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-              {t.icon} {t.label}
-            </button>
-          ))}
+        <div className="super-tabbar">
+          <button className="super-tab-arrow" onClick={() => scrollTabs(-1)} aria-label="Scroll tabs left">‹</button>
+          <div className="super-tabs" ref={tabsRef}>
+            {TABS.map((t) => (
+              <button key={t.id} className={`super-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
+          <button className="super-tab-arrow" onClick={() => scrollTabs(1)} aria-label="Scroll tabs right">›</button>
         </div>
 
         <div className="super-body">

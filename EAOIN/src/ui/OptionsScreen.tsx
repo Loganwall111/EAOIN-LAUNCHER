@@ -20,7 +20,7 @@ export interface OptionsScreenProps {
   onOpenSuperSettings?: () => void;
 }
 
-type Section = 'video' | 'audio' | 'gameplay' | 'controls' | 'world' | 'accessibility';
+type Section = 'video' | 'audio' | 'gameplay' | 'controls' | 'world' | 'accessibility' | 'info';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   { id: 'video', label: 'Video', icon: '🖥' },
@@ -29,6 +29,7 @@ const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   { id: 'controls', label: 'Controls', icon: '🎮' },
   { id: 'world', label: 'World', icon: '🌍' },
   { id: 'accessibility', label: 'Accessibility', icon: '♿' },
+  { id: 'info', label: 'Info & Help', icon: 'ℹ️' },
 ];
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -334,6 +335,39 @@ export default function OptionsScreen({ settings, onChange, onBack, onOpenSuperS
                   <Toggle checked={settings.reducedMotion} onChange={(v) => patch({ reducedMotion: v })} label="Reduced motion" />
                 </Row>
               </>
+            )}
+
+            {section === 'info' && (
+              <div className="opt-info">
+                <div className="opt-info-card">
+                  <div className="opt-info-title">🎮 Quick Controls</div>
+                  <ul className="opt-info-list">
+                    <li><b>WASD</b> — Move</li>
+                    <li><b>Mouse</b> — Look</li>
+                    <li><b>Space</b> — Jump / Fly up</li>
+                    <li><b>F</b> — Toggle fly</li>
+                    <li><b>E / I</b> — Inventory</li>
+                    <li><b>T</b> — Chat &amp; commands</li>
+                    <li><b>/</b> — Command console</li>
+                    <li><b>F8</b> — Dimensions menu</li>
+                    <li><b>Esc</b> — Pause / World settings</li>
+                  </ul>
+                </div>
+                <div className="opt-info-card">
+                  <div className="opt-info-title">ℹ️ About</div>
+                  <p className="opt-info-text">
+                    EAOIN — Everything And On Infinite. A fully configurable voxel sandbox.
+                    Every system can be tweaked from <b>Options → Full Game Settings</b>.
+                  </p>
+                </div>
+                <div className="opt-info-card">
+                  <div className="opt-info-title">🛠 Community</div>
+                  <p className="opt-info-text">
+                    Join the Discord, share your worlds and preset configurations, and help
+                    shape what comes next.
+                  </p>
+                </div>
+              </div>
             )}
 
             {/* Developer Settings entrance, pinned to the bottom of Options. */}
