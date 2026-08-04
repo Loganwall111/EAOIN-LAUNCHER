@@ -91,6 +91,12 @@ const FRAG = `
   uniform float u_warp;        // radial warp streaks 0..1
   uniform float u_ringBands;   // extra photon-ring bands 0..1
 
+  // ---- Journey worlds: which scene + palette to render ----
+  uniform int u_worldKind;     // which world generator to draw (0..15)
+  uniform float u_worldHue;    // world palette hue 0..1
+  uniform float u_worldParam;  // per-world variation parameter
+  uniform float u_worldScale;  // world scale multiplier
+
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
   const int MAX_STEPS = 260;
@@ -236,13 +242,144 @@ const FRAG = `
     return body;
   }
 
-  // Unified scene map for journey stages.
+  // Jellyfish ocean: a glowing cluster of drifting bells + tentacles over a floor.
+  float mapJellyfish(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y + 3.2 + noise(p.xz*0.4 + u_worldParam)*0.4;
+    for (int i = 0; i < 5; i++) {
+      vec3 c = vec3(0.0, 0.0, float(i)*4.0 - 8.0);
+      c.y = 1.0 + 0.6*sin(u_time*0.8 + float(i) + u_worldParam);
+      d = min(d, sdSphere(p - c, 0.8));
+      d = min(d, sdSegment(p, c, c + vec3(0.0,-3.0,0.0), 0.05));
+    }
+    return d;
+  }
+
+  // Psychedelic tunnel: warping, breathing blobs that change colour.
+  float mapPsychedelic(vec3 p, out int mat){
+    mat = 1;
+    vec3 g = p*0.8;
+    vec3 cell = floor(g);
+    vec3 l = fract(g) - 0.5;
+    float blob = sdSphere(l, 0.3 + 0.15*sin(u_time*2.0 + dot(cell, vec3(1.0,2.0,3.0)) + u_worldParam));
+    return blob/0.8;
+  }
+
+  // Blood stream: dense red cells drifting through plasma.
+  float mapBlood(vec3 p, out int mat){
+    mat = 1;
+    vec3 g = p*0.9;
+    vec3 cell = floor(g);
+    vec3 l = fract(g) - 0.5;
+    return min(sdSphere(l, 0.42), 0.3)/0.9;
+  }
+
+  // Neuron forest: somas connected by dendrite segments.
+  float mapNeurons(vec3 p, out int mat){
+    mat = 1;
+    vec3 g = p*0.7;
+    vec3 cell = floor(g);
+    vec3 l = fract(g) - 0.5;
+    float d = sdSphere(l, 0.3);
+    float rnd = hash(cell.xy + vec2(cell.z*3.7, cell.z*3.7));
+    if (rnd > 0.5) {
+      d = min(d, sdSegment(g, cell, cell + vec3(1,0,0), 0.03));
+    }
+    return d/0.7;
+  }
+
+  // Earth mountains: rolling hills under a mountain range.
+  float mapMountains(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y - 1.5;
+    for (int i = 0; i < 6; i++) {
+      float hx = hash1(float(i)*2.1);
+      float hz = hash1(float(i)*7.3);
+      vec3 c = vec3((hx-0.5)*12.0, 0.0, (hz-0.5)*12.0);
+      d = min(d, sdSphere(p - c, 2.0 + hx*2.5));
+    }
+    return d;
+  }
+
+  // Sky city: towers rising from a ground grid.
+  float mapCity(vec3 p, out int mat){
+    mat = 1;
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    float h = 0.5 + hash(g.xy + vec2(g.z*3.7, g.z*3.7))*1.5;
+    float b = sdBox(l - vec3(0.0, h*0.5-0.5, 0.0), vec3(0.35, h*0.5, 0.35));
+    return min(b, p.y + 0.5)/0.5;
+  }
+
+  // Crystal cave: glowing shards in a cavern.
+  float mapCrystal(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y + 2.0;
+    vec3 g = floor(p*0.7);
+    vec3 l = fract(p*0.7)-0.5;
+    float shard = sdSphere(l, 0.4 + 0.1*sin(u_time + u_worldParam))*0.6;
+    return min(d, shard)/0.7;
+  }
+
+  // Lava tunnels: a bubbling lava floor with a rising magma sphere.
+  float mapLava(vec3 p, out int mat){
+    mat = 1;
+    float floor = p.y + 2.0 + noise(p.xz*0.3 + u_worldParam)*0.4;
+    float bubble = sdSphere(p - vec3(0.0, 1.2, 0.0), 0.9);
+    return min(floor, bubble);
+  }
+
+  // Ice cavern: icy floor studded with columns.
+  float mapIce(vec3 p, out int mat){
+    mat = 1;
+    float floor = p.y + 2.5;
+    vec3 g = floor(p*0.4);
+    vec3 l = fract(p*0.4)-0.5;
+    float col = sdBox(l - vec3(0.0, 1.0, 0.0), vec3(0.3, 1.5, 0.3));
+    return min(floor, col)/0.4;
+  }
+
+  // Mushroom grove: glowing mushroom caps on stems.
+  float mapMushroom(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y + 2.0;
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    vec3 base = g + vec3(0.0,0.6,0.0);
+    float stem = sdSegment(p*0.5, g, base, 0.12);
+    float cap = sdSphere(p*0.5 - base, 0.4);
+    return min(d, min(stem, cap))/0.5;
+  }
+
+  // Candy land: lollipops and sweets on a frosting floor.
+  float mapCandy(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y + 2.0;
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    float lolli = sdSphere(l - vec3(0.0,0.6,0.0), 0.35);
+    float stick = sdSegment(p*0.5, g, g + vec3(0.0,1.2,0.0), 0.05);
+    return min(d, min(lolli, stick))/0.5;
+  }
+
+  // Unified scene map — picks the generator for the current journey world.
   float mapWorld(vec3 p, out int mat){
-    if (u_stage == 1) return mapNeural(p, mat);
-    if (u_stage == 2) return mapAsteroids(p, mat);
-    if (u_stage == 3) return mapPlanet(p, mat);
-    if (u_stage == 4) return mapHouse(p, mat);
-    return mapMonitor(p, mat);
+    if (u_worldKind == 0) return mapNeural(p, mat);
+    if (u_worldKind == 1) return mapAsteroids(p, mat);
+    if (u_worldKind == 2) return mapPlanet(p, mat);
+    if (u_worldKind == 3) return mapHouse(p, mat);
+    if (u_worldKind == 4) return mapMonitor(p, mat);
+    if (u_worldKind == 5) return mapJellyfish(p, mat);
+    if (u_worldKind == 6) return mapPsychedelic(p, mat);
+    if (u_worldKind == 7) return mapBlood(p, mat);
+    if (u_worldKind == 8) return mapNeurons(p, mat);
+    if (u_worldKind == 9) return mapMountains(p, mat);
+    if (u_worldKind == 10) return mapCity(p, mat);
+    if (u_worldKind == 11) return mapCrystal(p, mat);
+    if (u_worldKind == 12) return mapLava(p, mat);
+    if (u_worldKind == 13) return mapIce(p, mat);
+    if (u_worldKind == 14) return mapMushroom(p, mat);
+    return mapCandy(p, mat);
   }
 
   // ------------------------------------------------------------------
@@ -431,6 +568,19 @@ const FRAG = `
   }
 
   vec3 colourMat(int mat, vec3 p, vec3 n, vec3 ro){
+    // Newer worlds use the world palette, hue-rotated per journey world.
+    if (u_worldKind == 5) return hueShift(vec3(0.3,0.85,0.9), u_worldHue*6.28318);
+    if (u_worldKind == 6) return hueShift(vec3(0.95,0.3,0.9), u_worldHue*6.28318);
+    if (u_worldKind == 7) return hueShift(vec3(0.9,0.2,0.25), u_worldHue*6.28318);
+    if (u_worldKind == 8) return hueShift(vec3(0.5,0.7,1.0), u_worldHue*6.28318);
+    if (u_worldKind == 9) return hueShift(vec3(0.4,0.6,0.3), u_worldHue*6.28318);
+    if (u_worldKind == 10) return hueShift(vec3(0.3,0.35,0.55), u_worldHue*6.28318);
+    if (u_worldKind == 11) return hueShift(vec3(0.4,0.9,1.0), u_worldHue*6.28318);
+    if (u_worldKind == 12) return hueShift(vec3(1.0,0.4,0.1), u_worldHue*6.28318);
+    if (u_worldKind == 13) return hueShift(vec3(0.6,0.9,1.0), u_worldHue*6.28318);
+    if (u_worldKind == 14) return hueShift(vec3(0.9,0.5,0.3), u_worldHue*6.28318);
+    if (u_worldKind == 15) return hueShift(vec3(1.0,0.6,0.8), u_worldHue*6.28318);
+    // Original worlds keep their material-based colours.
     if (mat == 1) return vec3(0.3,0.8,1.0);       // cyan node
     if (mat == 2) return vec3(1.0,0.35,0.7);      // pink node
     if (mat == 3) return vec3(0.4,0.9,1.0)*0.5;   // synapse
@@ -469,17 +619,19 @@ const FRAG = `
       float diff = max(dot(n, lightDir), 0.0);
       float amb = 0.3 + 0.3*n.y;
       col = base*(amb + diff*1.0);
-      // glow on nodes/synapse/window/screen
-      if (mat == 1 || mat == 2) col += vec3(0.3,0.8,1.0)*0.7;
-      if (mat == 3) col += vec3(0.4,0.9,1.0);
-      if (mat == 7) col += vec3(1.0,0.85,0.4)*0.9;
-      if (mat == 9) {
+      // glow on nodes/synapse/window/screen (only for the matching world)
+      if (u_worldKind == 0) {
+        if (mat == 1 || mat == 2) col += vec3(0.3,0.8,1.0)*0.7;
+        if (mat == 3) col += vec3(0.4,0.9,1.0);
+      }
+      if (u_worldKind == 3 && mat == 7) col += vec3(1.0,0.85,0.4)*0.9;
+      if (u_worldKind == 4 && mat == 9) {
         // screen glow + scanlines + "EAOIN" flicker
         float scan = 0.5 + 0.5*sin(p.x*60.0 - u_time*3.0);
         col = vec3(0.1,0.6,0.4)*scan + vec3(0.05,0.3,0.2);
       }
       // Minecraft planet: add animated drifting clouds + a soft atmosphere.
-      if (mat == 5) {
+      if (u_worldKind == 2 && mat == 5) {
         vec3 q = normalize(p) * 3.4;
         float cloud = noise(vec2(q.x*2.0 + u_time*0.12, q.z*2.0 - u_time*0.08));
         cloud = smoothstep(0.45, 0.8, cloud);
@@ -489,7 +641,7 @@ const FRAG = `
         col += vec3(0.3,0.55,1.0) * atm * 0.6;
       }
       // Asteroid sparkle: warm rim glow.
-      if (mat == 4) {
+      if (u_worldKind == 1 && mat == 4) {
         float rim = pow(clamp(1.0 - dot(n, normalize(ro - p)), 0.0, 1.0), 2.0);
         col += vec3(1.0,0.7,0.4) * rim * 0.5;
       }
@@ -644,13 +796,74 @@ const SINGULARITY_NOTE = [
 ];
 
 /** Deep-journey stages: zoom through the hole and past each layer. */
-const JOURNEY_STAGES = [
-  { id: 'neural', title: 'Neural Network', desc: 'Connections of brains pulse as you fall through the singularity.', zoom: 0.35 },
-  { id: 'asteroids', title: 'Asteroid Field', desc: 'Dust and rock scream past the lens.', zoom: 0.5 },
-  { id: 'planet', title: 'The Square Planet', desc: 'A Minecraft world, blocky and alive, hangs below.', zoom: 0.68 },
-  { id: 'house', title: 'The House', desc: 'At the very beginning of the world — a single house.', zoom: 0.82 },
-  { id: 'monitor', title: 'The Monitor', desc: 'A password prompt glows. Enter the key to continue.', zoom: 0.96 },
-] as const;
+/** A journey world — a distinct free-roam place rendered by the shader. */
+export interface WorldDef {
+  id: string;
+  title: string;
+  emoji: string;
+  kind: number;   // shader generator index (u_worldKind)
+  hue: number;    // palette hue 0..1
+  param: number;  // per-world variation
+  dist: number;   // comfortable framing distance
+}
+
+/** Every generator, and the distinct places it can become via hue/param variants. */
+const WORLD_BASES: { kind: number; name: string; emoji: string; dist: number }[] = [
+  { kind: 0, name: 'Neural Network', emoji: '🧠', dist: 9 },
+  { kind: 1, name: 'Asteroid Field', emoji: '☄️', dist: 13 },
+  { kind: 2, name: 'The Square Planet', emoji: '🟩', dist: 8 },
+  { kind: 5, name: 'Jellyfish Ocean', emoji: '🪼', dist: 6 },
+  { kind: 6, name: 'Psychedelic Tunnel', emoji: '🌈', dist: 6 },
+  { kind: 7, name: 'Blood Stream', emoji: '🩸', dist: 6 },
+  { kind: 8, name: 'Neuron Forest', emoji: '🧬', dist: 7 },
+  { kind: 9, name: 'Earth Mountains', emoji: '🏔️', dist: 8 },
+  { kind: 10, name: 'Sky City', emoji: '🌆', dist: 8 },
+  { kind: 11, name: 'Crystal Cave', emoji: '💎', dist: 6 },
+  { kind: 12, name: 'Lava Tunnels', emoji: '🌋', dist: 6 },
+  { kind: 13, name: 'Ice Cavern', emoji: '🧊', dist: 6 },
+  { kind: 14, name: 'Mushroom Grove', emoji: '🍄', dist: 6 },
+  { kind: 15, name: 'Candy Land', emoji: '🍭', dist: 6 },
+];
+
+/** Palette sub-variants — each base becomes several distinct worlds. */
+const WORLD_VARIANTS: { suffix: string; hue: number; param: number }[] = [
+  { suffix: '', hue: 0, param: 0 },
+  { suffix: ' Aurora', hue: 0.06, param: 1 },
+  { suffix: ' Neon', hue: 0.62, param: 2 },
+  { suffix: ' Ember', hue: 0.04, param: 3 },
+  { suffix: ' Azure', hue: 0.56, param: 4 },
+];
+
+function buildWorlds(): WorldDef[] {
+  const out: WorldDef[] = [];
+  for (const b of WORLD_BASES) {
+    for (const v of WORLD_VARIANTS) {
+      const slug = b.name.toLowerCase().replace(/[^a-z]/g, '');
+      const vslug = v.suffix.toLowerCase().replace(/[^a-z]/g, '');
+      out.push({
+        id: `w_${slug}${vslug}`,
+        title: b.name + v.suffix,
+        emoji: b.emoji,
+        kind: b.kind,
+        hue: v.hue,
+        param: v.param,
+        dist: b.dist,
+      });
+    }
+  }
+  // The final two worlds are where the passcode lives.
+  out.push({ id: 'house', title: 'The House', emoji: '🏠', kind: 3, hue: 0, param: 0, dist: 6 });
+  out.push({ id: 'monitor', title: 'The Monitor', emoji: '🖥️', kind: 4, hue: 0, param: 0, dist: 5 });
+  return out;
+}
+
+/** 70 generated places + The House + The Monitor = 72 journey worlds. */
+export const JOURNEY_WORLDS: WorldDef[] = buildWorlds();
+
+/** World stages start here so they never collide with the void stage (6). */
+export const WORLD_START = 100;
+/** The final stage — where the passcode appears. */
+export const MONITOR_STAGE = WORLD_START + JOURNEY_WORLDS.length - 1;
 
 interface Camera {
   x: number;
@@ -660,8 +873,8 @@ interface Camera {
   pitch: number;
 }
 
-/** The order of areas you travel through: black hole → void → neural → … → monitor. */
-const STAGE_ORDER = [0, 6, 1, 2, 3, 4, 5] as const;
+/** The order you travel: black hole → void → 72 worlds → … → the monitor. */
+const STAGE_ORDER = [0, 6, ...JOURNEY_WORLDS.map((_, i) => WORLD_START + i)] as const;
 
 /**
  * How deep you must be before flying toward the centre (while looking STRAIGHT
@@ -708,14 +921,19 @@ export function portalTransition(dist: number, lookDot: number): number {
  * you can turn around and see the universe back out.
  */
 export function viewDistForStage(stage: number): number {
-  switch (stage) {
-    case 1: return 9;   // neural lattice
-    case 2: return 13;  // asteroid field
-    case 3: return 8;   // Minecraft planet (planet is big — pull back)
-    case 4: return 6;   // house
-    case 5: return 5;   // monitor
-    default: return 4;  // black hole external
+  if (stage === 0) return 4;      // black hole external
+  if (stage === 6) return 5;      // void interior
+  if (stage >= WORLD_START) {
+    const w = JOURNEY_WORLDS[stage - WORLD_START];
+    return w ? w.dist : 4;
   }
+  return 4;
+}
+
+/** The WorldDef for a given stage (or null if not a journey world). */
+export function worldForStage(stage: number): WorldDef | null {
+  if (stage < WORLD_START) return null;
+  return JOURNEY_WORLDS[stage - WORLD_START] ?? null;
 }
 
 function spawnForStage(stage: number): Camera {
@@ -1355,6 +1573,10 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       particles: gl.getUniformLocation(prog, 'u_particles'),
       warp: gl.getUniformLocation(prog, 'u_warp'),
       ringBands: gl.getUniformLocation(prog, 'u_ringBands'),
+      worldKind: gl.getUniformLocation(prog, 'u_worldKind'),
+      worldHue: gl.getUniformLocation(prog, 'u_worldHue'),
+      worldParam: gl.getUniformLocation(prog, 'u_worldParam'),
+      worldScale: gl.getUniformLocation(prog, 'u_worldScale'),
     };
 
     // Render at a higher resolution than CSS size (devicePixelRatio × resScale)
@@ -1489,6 +1711,19 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.particles, o.particles);
       gl.uniform1f(U.warp, o.warp);
       gl.uniform1f(U.ringBands, o.ringBands);
+      // Journey world scene: which generator, hue, param and scale to render.
+      const world = worldForStage(stageRef.current);
+      if (world) {
+        gl.uniform1i(U.worldKind, world.kind);
+        gl.uniform1f(U.worldHue, world.hue);
+        gl.uniform1f(U.worldParam, world.param);
+        gl.uniform1f(U.worldScale, 1);
+      } else {
+        gl.uniform1i(U.worldKind, 0);
+        gl.uniform1f(U.worldHue, 0);
+        gl.uniform1f(U.worldParam, 0);
+        gl.uniform1f(U.worldScale, 1);
+      }
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -1663,9 +1898,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     setJourney(stage !== 0);
   };
 
+  const world = worldForStage(stageIdx);
   const currentStage = stageIdx === 6
-    ? { id: 'void', title: 'The Void', desc: 'Inside the hole. Look around — back out you see the universe; the way deeper glows ahead.' }
-    : JOURNEY_STAGES[Math.max(0, Math.min(stageIdx - 1, JOURNEY_STAGES.length - 1))];
+    ? { id: 'void', title: 'The Void', emoji: '🕳️', desc: 'Inside the hole. Look around — back out you see the universe; the way deeper glows ahead.' }
+    : world
+      ? { id: world.id, title: world.title, emoji: world.emoji, desc: 'A place inside the singularity. Roam it freely — dive STRAIGHT into the centre to fall to the next phase.' }
+      : { id: 'hole', title: 'The Black Hole', emoji: '🕳️', desc: '' };
+  const phase = stageIdx === 6 ? 1 : stageIdx >= WORLD_START ? stageIdx - WORLD_START + 1 : 0;
 
   const submitPassword = () => {
     const answer = password.trim().toLowerCase();
@@ -1725,7 +1964,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
 
       <div className="singularity-hint">
         {isJourney
-          ? `Inside: ${currentStage.title} — fly freely • turn back to look out through the hole • dive STRAIGHT into the centre to go deeper`
+          ? `Inside: ${currentStage.title} — roam freely • dive STRAIGHT into the centre to fall to the next phase (${phase}/${JOURNEY_WORLDS.length})`
           : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • dive DEEP into the centre and look straight into it to fall through'}
       </div>
 
@@ -1901,13 +2140,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       {/* Journey depth HUD (no buttons — purely physical zoom) */}
       {isJourney && (
         <div className="singularity-stage">
-          <div className="singularity-stage-title">{currentStage.title}</div>
+          <div className="singularity-stage-title">{currentStage.emoji} {currentStage.title} <span className="singularity-phase">Phase {phase}/{JOURNEY_WORLDS.length}</span></div>
           <div className="singularity-stage-desc">{currentStage.desc}</div>
-          <div className="singularity-stage-track">
-            {JOURNEY_STAGES.map((s, i) => <span key={s.id} className={i < stageIdx ? 'on' : ''} title={s.title} />)}
-          </div>
+          <div className="singularity-stage-progress"><div className="singularity-stage-progress-fill" style={{ width: `${Math.min(100, (phase / JOURNEY_WORLDS.length) * 100)}%` }} /></div>
 
-          {stageIdx >= 5 && (
+          {stageIdx === MONITOR_STAGE && (
             <div className="singularity-monitor" onClick={(e) => e.stopPropagation()}>
               <div className="singularity-monitor-head">🖥 EAOIN TERMINAL — ENTER PASSWORD</div>
               <p className="singularity-monitor-hint">The key. The four letters worn into the world. Enter it to reach the other side.</p>

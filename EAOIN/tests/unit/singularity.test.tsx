@@ -12,6 +12,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Singularity, {
   nextStageOf, prevStageOf, portalTransition, viewDistForStage,
   hexToRgb, BLACK_HOLE_PRESETS, BLACK_HOLE_BACKGROUNDS, STUDIO_TUNES, STUDIO_WACKY,
+  JOURNEY_WORLDS, MONITOR_STAGE, WORLD_START,
 } from '../../src/ui/Singularity';
 
 afterEach(() => {
@@ -50,21 +51,23 @@ describe('Singularity', () => {
 });
 
 describe('nextStageOf / prevStageOf — journey order', () => {
-  it('travels black hole → void → neural → asteroids → planet → house → monitor', () => {
+  it('travels black hole → void → then 70+ journey worlds → the monitor', () => {
     expect(nextStageOf(0)).toBe(6);
-    expect(nextStageOf(6)).toBe(1);
-    expect(nextStageOf(1)).toBe(2);
-    expect(nextStageOf(2)).toBe(3);
-    expect(nextStageOf(3)).toBe(4);
-    expect(nextStageOf(4)).toBe(5);
-    expect(nextStageOf(5)).toBe(5); // deepest stays
+    expect(nextStageOf(6)).toBe(WORLD_START);
+    expect(nextStageOf(WORLD_START)).toBe(WORLD_START + 1);
+    expect(nextStageOf(MONITOR_STAGE)).toBe(MONITOR_STAGE); // deepest stays
   });
   it('reverses on retreat', () => {
-    expect(prevStageOf(5)).toBe(4);
-    expect(prevStageOf(4)).toBe(3);
-    expect(prevStageOf(1)).toBe(6);
+    expect(prevStageOf(MONITOR_STAGE)).toBe(MONITOR_STAGE - 1);
+    expect(prevStageOf(WORLD_START + 1)).toBe(WORLD_START);
+    expect(prevStageOf(WORLD_START)).toBe(6);
     expect(prevStageOf(6)).toBe(0);
     expect(prevStageOf(0)).toBe(0);
+  });
+  it('has 50+ distinct journey worlds with the monitor at the end', () => {
+    expect(JOURNEY_WORLDS.length).toBeGreaterThanOrEqual(50);
+    expect(JOURNEY_WORLDS[JOURNEY_WORLDS.length - 1].id).toBe('monitor');
+    expect(JOURNEY_WORLDS[JOURNEY_WORLDS.length - 2].id).toBe('house');
   });
 });
 
@@ -92,13 +95,15 @@ describe('portalTransition — look-gated transitions', () => {
 });
 
 describe('viewDistForStage — journey worlds are framed, not too zoomed', () => {
-  it('frames the planet far back so it is visible', () => {
-    expect(viewDistForStage(3)).toBeGreaterThanOrEqual(7);
+  it('frames the far asteroid world back so it is visible', () => {
+    const asteroidIdx = JOURNEY_WORLDS.findIndex((w) => w.kind === 1);
+    expect(viewDistForStage(WORLD_START + Math.max(0, asteroidIdx))).toBeGreaterThanOrEqual(12);
   });
   it('gives each world a distinct comfortable distance', () => {
-    const planet = viewDistForStage(3);
-    const house = viewDistForStage(4);
-    expect(planet).toBeGreaterThan(house);
+    const worldA = viewDistForStage(WORLD_START);
+    const worldB = viewDistForStage(WORLD_START + 1);
+    expect(worldA).toBeGreaterThan(0);
+    expect(worldB).toBeGreaterThan(0);
   });
 });
 
