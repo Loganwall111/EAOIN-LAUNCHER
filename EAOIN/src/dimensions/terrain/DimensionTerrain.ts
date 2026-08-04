@@ -120,7 +120,7 @@ function styleFor(archetype: DimensionArchetype): DimensionTerrainStyle {
   switch (archetype) {
     case 'hills': return { seaLevel: 64, amplitude: 14, body: B.STONE, surface: B.GRASS, subsurface: B.DIRT, fillBlock: B.WATER, fill: true, decor: B.OAK_LOG };
     case 'nether': return { seaLevel: 40, amplitude: 16, body: B.NETHERRACK, surface: B.NETHERRACK, subsurface: B.SOUL_SOIL, fillBlock: B.LAVA, fill: true, decor: B.BASALT };
-    case 'end': return { seaLevel: 40, amplitude: 26, body: B.OBSIDIAN, surface: B.PURPUR, subsurface: B.BLACKSTONE, fillBlock: B.AIR, fill: false, decor: B.CRYSTAL };
+    case 'end': return { seaLevel: 40, amplitude: 26, body: B.MOON_ROCK, surface: B.MOON_ROCK, subsurface: B.SANDSTONE, fillBlock: B.AIR, fill: false, decor: B.CRYSTAL };
     case 'space': return { seaLevel: 44, amplitude: 10, body: B.MOON_ROCK, surface: B.MOON_ROCK, subsurface: B.DEEPSLATE, fillBlock: B.AIR, fill: false, decor: B.COMET_ICE };
     case 'frozen': return { seaLevel: 62, amplitude: 12, body: B.STONE, surface: B.SNOW, subsurface: B.ICE, fillBlock: B.WATER, fill: true, decor: B.ICE };
     case 'volcanic': return { seaLevel: 42, amplitude: 18, body: B.BASALT, surface: B.BLACKSTONE, subsurface: B.OBSIDIAN, fillBlock: B.LAVA, fill: true, decor: B.MAGMA };
@@ -180,23 +180,24 @@ export class DimensionTerrainGenerator {
           }
           case 'end': {
             // 2.0 — End overhaul: rings of thick floating islands around a
-            // central dragon island, with an infinite galaxy of outer rings.
+            // BIG central dragon island, with an infinite galaxy of outer rings.
             const dist = Math.hypot(wx, wz);
-            const ring = Math.floor(dist / 60);            // which ring band
-            const ringPos = (dist % 60) / 60;               // 0..1 inside the band
+            const ring = Math.floor(dist / 80);            // which ring band
+            const ringPos = (dist % 80) / 80;              // 0..1 inside the band
             const n = this.noise.fbm2D(wx, wz, 3, 2.0, 0.5, 7 + ring);
-            // Central island (dist < 24) is a solid dragon platform.
-            if (dist < 24) {
+            // Central island (dist < 40) is a big solid dragon platform with the
+            // obsidian pillars and the exit portal (returning to the overworld).
+            if (dist < 40) {
               surface = Math.floor(s.seaLevel + (n - 0.5) * s.amplitude * 1.6 + 4);
             } else {
-              // Ring islands: dense near the ring centre, with a void gap between
-              // each ring band so the rings read as separate galactic arms.
-              const inGap = ringPos < 0.12 || ringPos > 0.88;
+              // Rings of THICK floating islands, with a clear void gap between
+              // each ring band so they read as separate arms (like the Aether).
+              const inGap = ringPos < 0.14 || ringPos > 0.86;
               if (inGap) surface = -1;
               else {
-                const dense = this.noise.fbm2D(wx * 1.4, wz * 1.4, 3, 2.0, 0.5, 41 + ring);
-                surface = dense > 0.5
-                  ? Math.floor(s.seaLevel + (dense - 0.5) * 26)
+                const dense = this.noise.fbm2D(wx * 1.3, wz * 1.3, 3, 2.0, 0.5, 41 + ring);
+                surface = dense > 0.45
+                  ? Math.floor(s.seaLevel + (dense - 0.5) * 30)
                   : -1;
               }
             }
@@ -262,7 +263,7 @@ export class DimensionTerrainGenerator {
           }
           // 2.0 — End dragon island: obsidian pillars topped with end crystals on
           // the central platform, so the Ender Dragon has its classic arena.
-          if (this.archetype === 'end' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12 && Math.hypot(wx, wz) < 22) {
+          if (this.archetype === 'end' && surfaceClamped > 2 && surfaceClamped < CHUNK_HEIGHT - 12 && Math.hypot(wx, wz) < 36) {
             const pillar = this.endPillarAt(wx, wz);
             if (pillar) {
               const pillarH = pillar.h;
@@ -272,6 +273,8 @@ export class DimensionTerrainGenerator {
               if (surfaceClamped + pillarH + 1 < CHUNK_HEIGHT) chunk.setBlock(lx, surfaceClamped + pillarH + 1, lz, B.CRYSTAL);
             }
           }
+          // Chorus fruit grows across the big central End island.
+          if (this.archetype === 'end') this.placeChorus(chunk, lx, surfaceClamped, lz, wx, wz);
           continue;
         }
 
@@ -367,7 +370,7 @@ export class DimensionTerrainGenerator {
    */
   private endPillarAt(wx: number, wz: number): { h: number } | null {
     const dist = Math.hypot(wx, wz);
-    if (dist < 4 || dist > 20) return null;
+    if (dist < 6 || dist > 34) return null;
     // Deterministic ring of 8 pillar sites.
     const slots = 8;
     const angle = Math.atan2(wz, wx);
@@ -379,6 +382,22 @@ export class DimensionTerrainGenerator {
     if (Math.abs(wx - px) > 0.6 || Math.abs(wz - pz) > 0.6) return null;
     const h = 3 + Math.floor(this.noise.hash(slot, 5, 0) * 6); // 3..8 tall
     return { h };
+  }
+
+  /** Place a chorus-fruit plant on the End main island: a green stem of plant
+   *  blocks topped with a chorus flower, spread across the central island. */
+  private placeChorus(chunk: Chunk, lx: number, surfaceY: number, lz: number, wx: number, wz: number): void {
+    if (surfaceY < 2 || surfaceY > CHUNK_HEIGHT - 14) return;
+    // Only on the big central island, and sparse (deterministic).
+    if (Math.hypot(wx, wz) > 36) return;
+    const rnd = this.noise.hash(wx, 7, wz);
+    if (rnd > 0.12) return;
+    const stemH = 2 + Math.floor(this.noise.hash(wx, 8, wz) * 4); // 2..5 tall
+    for (let y = 1; y <= stemH; y++) {
+      this.setSafe(chunk, lx, surfaceY + y, lz, B.KELP);   // chorus stem
+    }
+    // Chorus flower at the very top (uses crystal as a glowing bloom).
+    this.setSafe(chunk, lx, surfaceY + stemH + 1, lz, B.CRYSTAL);
   }
 
   /** Nether forest trees: crimson/warped stems with a few blocks of canopy. */
