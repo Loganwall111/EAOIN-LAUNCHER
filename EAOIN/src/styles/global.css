@@ -3424,8 +3424,64 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
   border-radius: 12px; background: rgba(8,10,20,0.88); border: 1px solid rgba(168,121,255,0.35);
   color: #e6e6ff;
 }
-.singularity-slider { display: grid; gap: 4px; font-size: 12px; }
-.singularity-slider input[type="range"] { width: 100%; accent-color: #a879ff; }
+/* Black Hole Studio — compact, docked panels (left = tune bars, right = presets) */
+.singularity-panel {
+  position: absolute; top: 78px; z-index: 6;
+  width: 250px; max-width: 86vw;
+  display: flex; flex-direction: column;
+  border-radius: 14px; background: rgba(8,10,20,0.9); border: 1px solid rgba(168,121,255,0.4);
+  color: #e6e6ff; box-shadow: 0 8px 30px rgba(0,0,0,0.5); backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.singularity-panel.left { left: 14px; }
+.singularity-panel.right { right: 14px; }
+.singularity-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; font-weight: 800; font-size: 13px; color: #c4a8ff;
+  border-bottom: 1px solid rgba(168,121,255,0.25); background: rgba(20,16,36,0.6);
+}
+.singularity-panel-x {
+  width: 26px; height: 26px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25); color: #fff;
+  font-size: 13px; line-height: 1; display: grid; place-items: center;
+}
+.singularity-panel-x:hover { background: rgba(255,90,90,0.35); border-color: #ff6b6b; }
+.singularity-panel-body {
+  overflow-y: auto; max-height: calc(100vh - 150px); padding: 10px 12px 12px;
+  display: grid; gap: 7px;
+}
+.singularity-panel-body::-webkit-scrollbar { width: 6px; }
+.singularity-panel-body::-webkit-scrollbar-thumb { background: rgba(168,121,255,0.4); border-radius: 4px; }
+.singularity-slider { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; font-size: 11.5px; align-items: center; }
+.singularity-slider span { color: rgba(220,230,250,0.92); }
+.singularity-slider b { font-size: 11px; color: #c4a8ff; min-width: 34px; text-align: right; }
+.singularity-slider input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: #a879ff; height: 3px; }
+/* Floating reopen buttons that appear when a panel is X'd out */
+.singularity-float {
+  position: absolute; top: 78px; z-index: 7; width: 44px; height: 44px; border-radius: 12px;
+  background: rgba(8,10,20,0.85); border: 1px solid rgba(168,121,255,0.5); color: #c4a8ff;
+  font-size: 20px; cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+}
+.singularity-float:hover { background: rgba(168,121,255,0.25); }
+.singularity-float.left { left: 14px; }
+.singularity-float.right { right: 14px; }
+.singularity-studio-sec { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #7dffb4; margin: 4px 0 0; }
+.singularity-preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.singularity-preset {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px; cursor: pointer;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: #e6e6ff;
+  border-radius: 9px; font-size: 11.5px; font-weight: 600;
+}
+.singularity-preset:hover { background: rgba(168,121,255,0.2); }
+.singularity-preset.active { background: rgba(168,121,255,0.3); border-color: #a879ff; box-shadow: 0 0 12px rgba(168,121,255,0.35); }
+.singularity-preset-emoji { font-size: 16px; }
+.singularity-color { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: rgba(220,230,250,0.92); }
+.singularity-color input[type="color"] { width: 44px; height: 26px; border: 1px solid rgba(168,121,255,0.4); border-radius: 6px; background: transparent; padding: 0; cursor: pointer; }
+.singularity-toggle-row { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; color: rgba(220,230,250,0.92); }
+.singularity-toggle-row label { display: flex; align-items: center; gap: 5px; }
+.singularity-toggle-row input[type="checkbox"] { accent-color: #a879ff; }
+.singularity-studio-note { font-size: 10.5px; color: rgba(200,215,238,0.65); margin: 0; }
 
 /* --- Cosmic Rift (hidden "?" screen) --- */
 .cosmic-rift { position: fixed; inset: 0; z-index: 960; overflow: hidden; background: #000; color: #fff; font-family: var(--ui-font, sans-serif); }

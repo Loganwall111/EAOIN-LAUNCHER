@@ -11,6 +11,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Singularity, {
   nextStageOf, prevStageOf, portalTransition, viewDistForStage,
+  hexToRgb, BLACK_HOLE_PRESETS, STUDIO_TUNES,
 } from '../../src/ui/Singularity';
 
 afterEach(() => {
@@ -88,5 +89,36 @@ describe('viewDistForStage — journey worlds are framed, not too zoomed', () =>
     const planet = viewDistForStage(3);
     const house = viewDistForStage(4);
     expect(planet).toBeGreaterThan(house);
+  });
+});
+
+describe('hexToRgb — studio colour helper', () => {
+  it('parses a hex colour into 0..1 rgb', () => {
+    expect(hexToRgb('#ff0000')).toEqual([1, 0, 0]);
+    expect(hexToRgb('#00ff00')).toEqual([0, 1, 0]);
+    expect(hexToRgb('#ffffff')).toEqual([1, 1, 1]);
+    expect(hexToRgb('#000000')).toEqual([0, 0, 0]);
+  });
+  it('handles shorthand and mixed hex', () => {
+    expect(hexToRgb('#369')).toEqual([0.2, 0.4, 0.6]);
+  });
+});
+
+describe('BLACK_HOLE_PRESETS — the Black Hole Studio', () => {
+  it('offers a set of preset looks, each with a disk colour', () => {
+    expect(BLACK_HOLE_PRESETS.length).toBeGreaterThanOrEqual(4);
+    for (const p of BLACK_HOLE_PRESETS) {
+      expect(p.id).toBeTruthy();
+      expect(p.opts.diskCol).toMatch(/^#/);
+    }
+  });
+});
+
+describe('STUDIO_TUNES — the left-side tuning bars', () => {
+  it('exposes many tunable numeric sliders', () => {
+    expect(STUDIO_TUNES.length).toBeGreaterThanOrEqual(8);
+    expect(STUDIO_TUNES.every((c) => c.kind === 'slider')).toBe(true);
+    expect(STUDIO_TUNES.some((c) => c.label === 'Disk thickness')).toBe(true);
+    expect(STUDIO_TUNES.some((c) => c.label === 'Gravity strength')).toBe(true);
   });
 });

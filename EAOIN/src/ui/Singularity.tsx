@@ -41,10 +41,28 @@ const FRAG = `
   uniform float u_aspect;
   uniform int u_stage;       // 0=hole, 1=neural, 2=asteroids, 3=planet, 4=house, 5=monitor
 
+  // ---- Fully customizable black-hole look (Black Hole Studio) ----
+  uniform float u_diskInner;
+  uniform float u_diskOuter;
+  uniform vec3 u_diskCol;      // primary accretion-disk colour
+  uniform vec3 u_diskCol2;     // secondary / inner-disk colour
+  uniform float u_swirlSpeed;
+  uniform float u_swirlAmt;
+  uniform float u_glow;        // photon-ring / halo strength
+  uniform vec3 u_glowCol;
+  uniform float u_bloom;       // bright bloom lift
+  uniform float u_starDensity;
+  uniform vec3 u_starCol;
+  uniform float u_nebulaAmt;
+  uniform vec3 u_nebulaCol;
+  uniform float u_showDisk;    // 0/1 toggles
+  uniform float u_showGlow;
+  uniform float u_showStars;
+  uniform float u_showNebula;
+  uniform float u_fovScale;
+
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
-  const float DISK_INNER = 2.6;    // inner edge of the disk (in RS)
-  const float DISK_OUTER = 6.0;    // outer edge of the disk
   const int MAX_STEPS = 260;
   const float MAX_DIST = 90.0;
 
@@ -60,10 +78,10 @@ const FRAG = `
   // A starfield sampled in the ray's final (escaped) direction.
   vec3 starfield(vec3 dir){
     vec2 p = vec2(dir.z, dir.x) * 60.0 + dir.y * 30.0;
-    float star = step(0.984, hash(floor(p)));
-    vec3 col = vec3(0.7,0.85,1.0) * star * 0.9;
+    float star = step(1.0 - u_starDensity, hash(floor(p)));
+    vec3 col = u_starCol * star * 0.9 * u_showStars;
     float neb = noise(dir.xy * 3.0 + vec2(dir.z, dir.z));
-    col += vec3(0.25,0.06,0.4) * neb * 0.25;
+    col += u_nebulaCol * neb * u_nebulaAmt * u_showNebula;
     col += vec3(0.02,0.04,0.09);
     return col;
   }
@@ -273,7 +291,7 @@ const FRAG = `
     vec3 fwd = normalize(u_camTarget - u_camPos);
     vec3 right = normalize(cross(fwd, vec3(0.0,1.0,0.0)));
     vec3 up = cross(right, fwd);
-    float fov = 1.35; // ~1/tan(fov/2); bigger = wider
+    float fov = 1.35 * u_fovScale; // ~1/tan(fov/2); bigger = wider
     vec3 dir = normalize(ndc.x*right + ndc.y*up + fwd*fov);
 
     // ---- Void interior (stage 6): inside the black hole ----
@@ -312,18 +330,18 @@ const FRAG = `
       // Accretion disk with extra glow.
       float diskRad = length(pos.xz);
       float y = pos.y;
-      if (abs(y) < u_diskThickness && diskRad > DISK_INNER && diskRad < DISK_OUTER) {
-        float innerT = 1.0 - (diskRad - DISK_INNER)/(DISK_OUTER - DISK_INNER);
-        float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*0.6);
+      if (abs(y) < u_diskThickness && diskRad > u_diskInner && diskRad < u_diskOuter) {
+        float innerT = 1.0 - (diskRad - u_diskInner)/max(u_diskOuter - u_diskInner, 1e-4);
+        float swirl = 0.5 + 0.5*noise(vec2(atan(pos.z,pos.x)*4.0, diskRad*1.2) + u_time*u_swirlSpeed);
         float edge = smoothstep(0.0, 1.0, innerT);
-        vec3 diskCol = vec3(1.0,0.62,0.28)*edge + vec3(0.6,0.2,0.05);
+        vec3 diskCol = u_diskCol*edge + u_diskCol2*u_swirlAmt;
         float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
-        col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7;
+        col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk;
       }
 
       // Photon-ring / bloom halo around the horizon for extra glow.
       float rglow = max(r - h, 0.0);
-      col += vec3(1.0,0.85,0.6) * exp(-rglow*8.0) * 0.35;
+      col += u_glowCol * exp(-rglow*8.0) * u_glow * u_showGlow;
 
       pos += ray * stepLen;
       t += stepLen;
@@ -342,7 +360,7 @@ const FRAG = `
     }
 
     // Glow bloom / lift so the hole reads bright and luminous.
-    col += col*col*0.4;
+    col += col*col*u_bloom;
     col *= 0.6 + 0.4 * smoothstep(1.3, 0.15, length(ndc));
 
     gl_FragColor = vec4(col, 1.0);
@@ -435,6 +453,102 @@ function spawnForStage(stage: number): Camera {
   return { x: 0, y: d * 0.25, z: -d, yaw: 0, pitch: 0.2 };
 }
 
+/** Every knobbly bit of the black hole you can tune in the Studio. */
+export interface BlackHoleOpts {
+  diskThickness: number;
+  diskInner: number;
+  diskOuter: number;
+  gravity: number;
+  swirlSpeed: number;
+  swirlAmt: number;
+  glow: number;
+  bloom: number;
+  starDensity: number;
+  nebulaAmt: number;
+  fov: number;
+  camSpeed: number;
+  diskCol: string;
+  diskCol2: string;
+  glowCol: string;
+  starCol: string;
+  nebulaCol: string;
+  showDisk: boolean;
+  showGlow: boolean;
+  showStars: boolean;
+  showNebula: boolean;
+  resScale: number; // render scale × devicePixelRatio (higher = sharper)
+}
+
+const DEFAULT_OPTS: BlackHoleOpts = {
+  diskThickness: 0.35,
+  diskInner: 2.6,
+  diskOuter: 6.0,
+  gravity: 1.0,
+  swirlSpeed: 0.6,
+  swirlAmt: 1.0,
+  glow: 0.35,
+  bloom: 0.4,
+  starDensity: 0.98,
+  nebulaAmt: 0.25,
+  fov: 1.0,
+  camSpeed: 2.6,
+  diskCol: '#ff9d4d',
+  diskCol2: '#993d1f',
+  glowCol: '#ffd9a0',
+  starCol: '#b3d9ff',
+  nebulaCol: '#3a1066',
+  showDisk: true,
+  showGlow: true,
+  showStars: true,
+  showNebula: true,
+  resScale: 1.5,
+};
+
+/** Preset looks for the black hole — one click applies a full mood. */
+export const BLACK_HOLE_PRESETS: { id: string; label: string; emoji: string; opts: Partial<BlackHoleOpts> }[] = [
+  { id: 'classic', label: 'Classic', emoji: '🕳', opts: { diskCol: '#ff9d4d', diskCol2: '#993d1f', glowCol: '#ffd9a0', starCol: '#b3d9ff', nebulaCol: '#3a1066', gravity: 1.0, diskThickness: 0.35, glow: 0.35, bloom: 0.4, swirlAmt: 1.0 } },
+  { id: 'interstellar', label: 'Interstellar', emoji: '🌌', opts: { diskCol: '#ff9d4d', diskCol2: '#c0392b', glowCol: '#ffe7b0', starCol: '#ffffff', nebulaCol: '#141a38', gravity: 1.0, diskThickness: 0.2, glow: 0.5, bloom: 0.5, swirlSpeed: 0.7, swirlAmt: 1.0 } },
+  { id: 'gargantua', label: 'Gargantua', emoji: '🔥', opts: { diskCol: '#ffb86b', diskCol2: '#7a2a1a', glowCol: '#ffe7b0', starCol: '#cfd8ff', nebulaCol: '#101c40', gravity: 1.25, diskThickness: 0.16, glow: 0.6, bloom: 0.5, swirlSpeed: 0.5 } },
+  { id: 'nebula', label: 'Nebula', emoji: '🪐', opts: { diskCol: '#7f6bff', diskCol2: '#ff4d9a', glowCol: '#d9a8ff', starCol: '#e6e6ff', nebulaCol: '#3a1a5a', gravity: 1.0, diskThickness: 0.3, glow: 0.7, bloom: 0.7, nebulaAmt: 0.5, swirlAmt: 1.2 } },
+  { id: 'void', label: 'Void', emoji: '⚫', opts: { diskCol: '#4dffc4', diskCol2: '#0a3d33', glowCol: '#9fffd8', starCol: '#ffffff', nebulaCol: '#05121a', gravity: 1.0, diskThickness: 0.12, glow: 0.4, bloom: 0.3, starDensity: 0.5, nebulaAmt: 0.15 } },
+  { id: 'blood', label: 'Blood', emoji: '🔴', opts: { diskCol: '#ff4d4d', diskCol2: '#5a0000', glowCol: '#ffb0a0', starCol: '#ffe0e0', nebulaCol: '#2a0505', gravity: 0.9, diskThickness: 0.28, glow: 0.5, bloom: 0.5 } },
+  { id: 'emerald', label: 'Emerald', emoji: '💚', opts: { diskCol: '#4dffb0', diskCol2: '#005a2e', glowCol: '#b0ffdd', starCol: '#e0fff0', nebulaCol: '#05201a', gravity: 1.0, diskThickness: 0.3, glow: 0.5, bloom: 0.5 } },
+  { id: 'sunrise', label: 'Sunrise', emoji: '🌅', opts: { diskCol: '#ffd14d', diskCol2: '#ff5a3c', glowCol: '#fff3c0', starCol: '#ffffff', nebulaCol: '#3a2026', gravity: 0.95, diskThickness: 0.25, glow: 0.55, bloom: 0.55 } },
+];
+
+/** A single slider/toggle/colour control entry rendered inside the Studio panels. */
+export interface StudioControl {
+  key: keyof BlackHoleOpts;
+  label: string;
+  kind: 'slider' | 'color' | 'toggle';
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/** The "tons of bars" on the left — every knob the black hole can feel. */
+export const STUDIO_TUNES: StudioControl[] = [
+  { key: 'diskThickness', label: 'Disk thickness', kind: 'slider', min: 0.04, max: 0.9, step: 0.01 },
+  { key: 'diskInner', label: 'Disk inner radius', kind: 'slider', min: 0.5, max: 4.5, step: 0.1 },
+  { key: 'diskOuter', label: 'Disk outer radius', kind: 'slider', min: 3, max: 9, step: 0.1 },
+  { key: 'gravity', label: 'Gravity strength', kind: 'slider', min: 0.2, max: 2.4, step: 0.05 },
+  { key: 'swirlSpeed', label: 'Swirl speed', kind: 'slider', min: 0, max: 3, step: 0.05 },
+  { key: 'swirlAmt', label: 'Swirl amount', kind: 'slider', min: 0, max: 2.5, step: 0.05 },
+  { key: 'glow', label: 'Photon glow', kind: 'slider', min: 0, max: 1.5, step: 0.01 },
+  { key: 'bloom', label: 'Bloom', kind: 'slider', min: 0, max: 1.5, step: 0.01 },
+  { key: 'starDensity', label: 'Star density', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'nebulaAmt', label: 'Nebula glow', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'fov', label: 'Field of view', kind: 'slider', min: 0.5, max: 2, step: 0.05 },
+  { key: 'camSpeed', label: 'Flight speed', kind: 'slider', min: 1, max: 8, step: 0.1 },
+];
+
+/** Parse '#rrggbb' into [r,g,b] in 0..1. */
+export function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
 export default function Singularity({ onBack, onExit }: { onBack?: () => void; onExit?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -444,12 +558,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const [secretEnding, setSecretEnding] = useState(false);
   const [fragments, setFragments] = useState(() => getARG().getState().collected);
   const [argMsg, setArgMsg] = useState<string | null>(null);
-  const [diskThickness, setDiskThickness] = useState(0.35);
-  const [gravity, setGravity] = useState(1.0);
-  const diskThicknessRef = useRef(diskThickness);
-  const gravityRef = useRef(gravity);
-  diskThicknessRef.current = diskThickness;
-  gravityRef.current = gravity;
+  const [opts, setOpts] = useState<BlackHoleOpts>(DEFAULT_OPTS);
+  const optsRef = useRef(DEFAULT_OPTS);
+  optsRef.current = opts;
+  const [tuneOpen, setTuneOpen] = useState(true);      // left studio panel
+  const [presetOpen, setPresetOpen] = useState(true);  // right studio panel
 
   const camRef = useRef<Camera>({ x: 0, y: 0, z: -4, yaw: 0, pitch: 0.2 });
   const stageRef = useRef(0);
@@ -458,6 +571,12 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const keysRef = useRef<Set<string>>(new Set());
   /** Accumulates scroll input so the render loop can apply it. */
   const scrollAccumRef = useRef(0);
+
+  const patchOpts = (patch: Partial<BlackHoleOpts>) => setOpts((o) => ({ ...o, ...patch }));
+  const applyPreset = (id: string) => {
+    const p = BLACK_HOLE_PRESETS.find((x) => x.id === id);
+    if (p) setOpts((o) => ({ ...o, ...p.opts }));
+  };
 
   const collectFragment = (dimension: string) => {
     const frag = getARG().collect(dimension);
@@ -562,11 +681,33 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gravity: gl.getUniformLocation(prog, 'u_gravity'),
       aspect: gl.getUniformLocation(prog, 'u_aspect'),
       stage: gl.getUniformLocation(prog, 'u_stage'),
+      diskInner: gl.getUniformLocation(prog, 'u_diskInner'),
+      diskOuter: gl.getUniformLocation(prog, 'u_diskOuter'),
+      diskCol: gl.getUniformLocation(prog, 'u_diskCol'),
+      diskCol2: gl.getUniformLocation(prog, 'u_diskCol2'),
+      swirlSpeed: gl.getUniformLocation(prog, 'u_swirlSpeed'),
+      swirlAmt: gl.getUniformLocation(prog, 'u_swirlAmt'),
+      glow: gl.getUniformLocation(prog, 'u_glow'),
+      glowCol: gl.getUniformLocation(prog, 'u_glowCol'),
+      bloom: gl.getUniformLocation(prog, 'u_bloom'),
+      starDensity: gl.getUniformLocation(prog, 'u_starDensity'),
+      starCol: gl.getUniformLocation(prog, 'u_starCol'),
+      nebulaAmt: gl.getUniformLocation(prog, 'u_nebulaAmt'),
+      nebulaCol: gl.getUniformLocation(prog, 'u_nebulaCol'),
+      showDisk: gl.getUniformLocation(prog, 'u_showDisk'),
+      showGlow: gl.getUniformLocation(prog, 'u_showGlow'),
+      showStars: gl.getUniformLocation(prog, 'u_showStars'),
+      showNebula: gl.getUniformLocation(prog, 'u_showNebula'),
+      fovScale: gl.getUniformLocation(prog, 'u_fovScale'),
     };
 
+    // Render at a higher resolution than CSS size (devicePixelRatio × resScale)
+    // so the ray-march is sharp instead of pixelated. Cheap to keep per-frame.
     const resize = () => {
-      gl.canvas.width = canvas.clientWidth;
-      gl.canvas.height = canvas.clientHeight;
+      const scale = optsRef.current.resScale;
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      gl.canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr * scale));
+      gl.canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr * scale));
       gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     };
     resize();
@@ -590,8 +731,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       const right = { x: cy, y: 0, z: -sy };                    // right
       const up = { x: -sy * sp, y: cp, z: -cy * sp };           // world-up-adjusted
 
-      // Movement (units/sec).
-      const speed = 2.6;
+      // Movement (units/sec) — speed is user-tunable.
+      const speed = optsRef.current.camSpeed;
       const k = keysRef.current;
       const f = (k.has('w') ? 1 : 0) - (k.has('s') ? 1 : 0);
       const r = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0);
@@ -599,9 +740,10 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       c.x += (fwd.x * f + right.x * r) * speed * dt;
       c.y += (fwd.y * f + up.y * v) * speed * dt;
       c.z += (fwd.z * f + right.z * r + up.z * v) * speed * dt;
-      // Scroll flies forward/back.
+      // Scroll flies forward/back. Scrolling UP (deltaY < 0) flies TOWARD the
+      // hole (zoom in), scrolling DOWN flies away — not inverted.
       if (Math.abs(scrollAccumRef.current) > 0.0001) {
-        const s = scrollAccumRef.current * 3;
+        const s = -scrollAccumRef.current * 3;
         c.x += fwd.x * s; c.y += fwd.y * s; c.z += fwd.z * s;
         scrollAccumRef.current = 0;
       }
@@ -624,15 +766,47 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       // Camera eye + free-look target (pos + forward), so you can look around.
       const eye = new Float32Array([c.x, c.y, c.z]);
       const target = new Float32Array([c.x + fwd.x, c.y + fwd.y, c.z + fwd.z]);
+      const o = optsRef.current;
+      // Keep the drawing buffer at the user's chosen sharpness (DPI × scale).
+      const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+      const wantW = Math.max(1, Math.floor(canvas.clientWidth * dpr * o.resScale));
+      const wantH = Math.max(1, Math.floor(canvas.clientHeight * dpr * o.resScale));
+      if (gl.canvas.width !== wantW || gl.canvas.height !== wantH) {
+        gl.canvas.width = wantW; gl.canvas.height = wantH;
+        gl.viewport(0, 0, wantW, wantH);
+      }
+      const [dr, dg, db] = hexToRgb(o.diskCol);
+      const [d2r, d2g, d2b] = hexToRgb(o.diskCol2);
+      const [gr, gg, gb] = hexToRgb(o.glowCol);
+      const [sr, sg, sb] = hexToRgb(o.starCol);
+      const [nr, ng, nb] = hexToRgb(o.nebulaCol);
       gl.useProgram(prog);
       gl.uniform2f(U.res, gl.canvas.width, gl.canvas.height);
       gl.uniform1f(U.time, t);
       gl.uniform3f(U.camPos, eye[0], eye[1], eye[2]);
       gl.uniform3f(U.camTarget, target[0], target[1], target[2]);
-      gl.uniform1f(U.diskThickness, diskThicknessRef.current);
-      gl.uniform1f(U.gravity, gravityRef.current);
+      gl.uniform1f(U.diskThickness, o.diskThickness);
+      gl.uniform1f(U.gravity, o.gravity);
       gl.uniform1f(U.aspect, gl.canvas.width / Math.max(1, gl.canvas.height));
       gl.uniform1i(U.stage, stageRef.current);
+      gl.uniform1f(U.diskInner, o.diskInner);
+      gl.uniform1f(U.diskOuter, o.diskOuter);
+      gl.uniform3f(U.diskCol, dr, dg, db);
+      gl.uniform3f(U.diskCol2, d2r, d2g, d2b);
+      gl.uniform1f(U.swirlSpeed, o.swirlSpeed);
+      gl.uniform1f(U.swirlAmt, o.swirlAmt);
+      gl.uniform1f(U.glow, o.glow);
+      gl.uniform3f(U.glowCol, gr, gg, gb);
+      gl.uniform1f(U.bloom, o.bloom);
+      gl.uniform1f(U.starDensity, o.starDensity);
+      gl.uniform3f(U.starCol, sr, sg, sb);
+      gl.uniform1f(U.nebulaAmt, o.nebulaAmt);
+      gl.uniform3f(U.nebulaCol, nr, ng, nb);
+      gl.uniform1f(U.showDisk, o.showDisk ? 1 : 0);
+      gl.uniform1f(U.showGlow, o.showGlow ? 1 : 0);
+      gl.uniform1f(U.showStars, o.showStars ? 1 : 0);
+      gl.uniform1f(U.showNebula, o.showNebula ? 1 : 0);
+      gl.uniform1f(U.fovScale, o.fov);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -693,19 +867,87 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
           : 'WASD/arrows move • Space/Shift up/down • scroll flies • drag to look • fly into the centre while looking at it to fall through'}
       </div>
 
-      {/* Camera-control sliders */}
-      <div className="singularity-controls">
-        <label className="singularity-slider">
-          <span>💿 Disk thickness</span>
-          <input type="range" min={0.08} max={0.8} step={0.02} value={diskThickness}
-            onChange={(e) => setDiskThickness(Number(e.target.value))} />
-        </label>
-        <label className="singularity-slider">
-          <span>🌌 Gravity strength</span>
-          <input type="range" min={0.3} max={2.2} step={0.05} value={gravity}
-            onChange={(e) => setGravity(Number(e.target.value))} />
-        </label>
-      </div>
+      {/* LEFT STUDIO — tons of tiny tunable bars (X to hide for a clean view) */}
+      {tuneOpen && (
+        <div className="singularity-panel left">
+          <div className="singularity-panel-head">
+            <span>🎚 Black Hole Tune</span>
+            <button className="singularity-panel-x" onClick={() => setTuneOpen(false)} aria-label="Close tune panel">✕</button>
+          </div>
+          <div className="singularity-panel-body">
+            {STUDIO_TUNES.map((ctrl) => (
+              <label className="singularity-slider" key={ctrl.key}>
+                <span>{ctrl.label}</span>
+                <input type="range" min={ctrl.min} max={ctrl.max} step={ctrl.step}
+                  value={opts[ctrl.key] as number}
+                  onChange={(e) => patchOpts({ [ctrl.key]: Number(e.target.value) } as Partial<BlackHoleOpts>)} />
+                <b>{(opts[ctrl.key] as number).toFixed(2)}</b>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {!tuneOpen && (
+        <button className="singularity-float left" onClick={() => setTuneOpen(true)} aria-label="Open tune panel">🎚</button>
+      )}
+
+      {/* RIGHT STUDIO — presets, colours, toggles & quality (X to hide) */}
+      {presetOpen && (
+        <div className="singularity-panel right">
+          <div className="singularity-panel-head">
+            <span>🎛 Black Hole Studio</span>
+            <button className="singularity-panel-x" onClick={() => setPresetOpen(false)} aria-label="Close studio panel">✕</button>
+          </div>
+          <div className="singularity-panel-body">
+            <div className="singularity-studio-sec">Presets</div>
+            <div className="singularity-preset-grid">
+              {BLACK_HOLE_PRESETS.map((p) => (
+                <button key={p.id}
+                  className={`singularity-preset ${opts.diskCol === p.opts.diskCol ? 'active' : ''}`}
+                  onClick={() => applyPreset(p.id)}>
+                  <span className="singularity-preset-emoji">{p.emoji}</span>
+                  <span>{p.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="singularity-studio-sec">Colours</div>
+            {[
+              { key: 'diskCol', label: 'Disk colour' },
+              { key: 'diskCol2', label: 'Inner disk' },
+              { key: 'glowCol', label: 'Photon glow' },
+              { key: 'starCol', label: 'Stars' },
+              { key: 'nebulaCol', label: 'Nebula' },
+            ].map((c) => (
+              <label className="singularity-color" key={c.key}>
+                <span>{c.label}</span>
+                <input type="color" value={opts[c.key as 'diskCol']}
+                  onChange={(e) => patchOpts({ [c.key]: e.target.value } as Partial<BlackHoleOpts>)} />
+              </label>
+            ))}
+
+            <div className="singularity-studio-sec">Show</div>
+            <div className="singularity-toggle-row">
+              <label><input type="checkbox" checked={opts.showDisk} onChange={(e) => patchOpts({ showDisk: e.target.checked })} /> Disk</label>
+              <label><input type="checkbox" checked={opts.showGlow} onChange={(e) => patchOpts({ showGlow: e.target.checked })} /> Glow</label>
+              <label><input type="checkbox" checked={opts.showStars} onChange={(e) => patchOpts({ showStars: e.target.checked })} /> Stars</label>
+              <label><input type="checkbox" checked={opts.showNebula} onChange={(e) => patchOpts({ showNebula: e.target.checked })} /> Nebula</label>
+            </div>
+
+            <div className="singularity-studio-sec">Quality</div>
+            <label className="singularity-slider">
+              <span>Sharpness (non-pixelated)</span>
+              <input type="range" min={0.5} max={3} step={0.25} value={opts.resScale}
+                onChange={(e) => patchOpts({ resScale: Number(e.target.value) })} />
+              <b>{opts.resScale.toFixed(2)}×</b>
+            </label>
+            <p className="singularity-studio-note">Higher = sharper but heavier on the GPU.</p>
+          </div>
+        </div>
+      )}
+      {!presetOpen && (
+        <button className="singularity-float right" onClick={() => setPresetOpen(true)} aria-label="Open studio panel">🎛</button>
+      )}
 
       {/* Journey depth HUD (no buttons — purely physical zoom) */}
       {isJourney && (
