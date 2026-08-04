@@ -17,6 +17,7 @@ interface Props {
   onNoClip: () => void;
   onSpawnMob: () => void;
   onTeleportSpawn: () => void;
+  onSummonPet: () => void;
   onClose: () => void;
 }
 
@@ -37,7 +38,7 @@ const LABELS: Record<string, string> = {
   hotbarScale: 'Hotbar scale', chatSize: 'Chat size', autoSaveInterval: 'Auto-save interval',
 };
 
-export default function GodConsole({ settings, onChange, onFly, onNoClip, onSpawnMob, onTeleportSpawn, onClose }: Props) {
+export default function GodConsole({ settings, onChange, onFly, onNoClip, onSpawnMob, onTeleportSpawn, onSummonPet, onClose }: Props) {
   const merged = useMemo(() => ({ ...defaultSuperSettings(), ...settings }) as SuperSettings, [settings]);
   const [query, setQuery] = useState('');
 
@@ -78,6 +79,7 @@ export default function GodConsole({ settings, onChange, onFly, onNoClip, onSpaw
           <button className="super-btn" onClick={onNoClip}>👻 No-Clip</button>
           <button className="super-btn" onClick={onSpawnMob}>🐑 Spawn Mob</button>
           <button className="super-btn" onClick={onTeleportSpawn}>📍 Teleport to Spawn</button>
+          <button className="super-btn" onClick={onSummonPet}>🐺 Summon Pet</button>
         </div>
 
         <div className="god-console-list">

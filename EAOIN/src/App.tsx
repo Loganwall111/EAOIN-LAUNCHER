@@ -768,6 +768,7 @@ export default function App() {
           onNoClip={() => godAction('noclip')}
           onSpawnMob={() => godAction('spawn')}
           onTeleportSpawn={() => godAction('teleport-spawn')}
+          onSummonPet={() => godAction('pet')}
           onClose={() => setGodConsoleOpen(false)}
         />
       )}

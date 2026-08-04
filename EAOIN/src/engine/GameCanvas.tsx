@@ -2787,6 +2787,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         if (action === 'fly') { toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
         if (action === 'noclip') { devNoClipRef.current = !devNoClipRef.current; showActionMessage(`No-clip ${devNoClipRef.current ? 'ON' : 'OFF'}`); return; }
         if (action === 'spawn') { creatureManager.spawnNear(camera.position, 'sheep'); showActionMessage('🐑 Summoned a sheep'); return; }
+        if (action === 'pet') { creatureManager.spawnNear(camera.position, 'wolf'); showActionMessage('🐺 A wolf joins you as a pet companion'); return; }
         if (action === 'teleport-spawn') {
           let sy = terrain.getHeightAt(spawn.x, spawn.z) + 1 + PLAYER_EYE_HEIGHT;
           camera.position.set(spawn.x, sy, spawn.z);
