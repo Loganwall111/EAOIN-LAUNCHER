@@ -234,6 +234,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const worldTimeRef = useRef<WorldTimeState>({ timeOfDay: 12, frozen: false });
   /** Live developer-panel tuning, mirrored on change by the store subscription. */
   const devTuningRef = useRef<DeveloperWorldTuning>(developerTuningStore.get());
+  /** God Console no-clip toggle (ghost mode through terrain). */
+  const devNoClipRef = useRef(false);
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
   const loadingProgressRef = useRef(onLoadingProgress);
@@ -2777,6 +2779,23 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       };
       window.addEventListener('eaoin-ability', handleAbilityEvent);
 
+      // Creative God Console: one-shot actions (fly, no-clip, spawn mob,
+      // teleport to spawn) fired from the searchable settings bar.
+      const handleGodConsole = (event: Event): void => {
+        const action = (event as CustomEvent<{ action: string }>).detail?.action;
+        if (!action) return;
+        if (action === 'fly') { toggleFlightMode(); audio.play('ui', settingsRef.current); return; }
+        if (action === 'noclip') { devNoClipRef.current = !devNoClipRef.current; showActionMessage(`No-clip ${devNoClipRef.current ? 'ON' : 'OFF'}`); return; }
+        if (action === 'spawn') { creatureManager.spawnNear(camera.position, 'sheep'); showActionMessage('🐑 Summoned a sheep'); return; }
+        if (action === 'teleport-spawn') {
+          let sy = terrain.getHeightAt(spawn.x, spawn.z) + 1 + PLAYER_EYE_HEIGHT;
+          camera.position.set(spawn.x, sy, spawn.z);
+          streamCenter = toChunkCoordinate(spawn.x, spawn.z);
+          showActionMessage('📍 Teleported to world spawn');
+        }
+      };
+      window.addEventListener('eaoin-godconsole', handleGodConsole);
+
       // Touch controls: the on-screen overlay reports joystick movement and
       // discrete actions over the window so the in-scene handlers can use them.
       const handleTouchMove = (event: Event): void => {
@@ -2912,6 +2931,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         canvas.removeEventListener('touchmove', handleCanvasTouchMove);
         canvas.removeEventListener('touchend', handleCanvasTouchEnd);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
+        window.removeEventListener('eaoin-godconsole', handleGodConsole);
         window.removeEventListener('eaoin-touch-move', handleTouchMove);
         window.removeEventListener('eaoin-touch-action', handleTouchAction);
         window.removeEventListener('eaoin-awakening-tilt', handleAwakeningTilt);

@@ -18,6 +18,7 @@ import type { ServerEntry } from './networking/ServerBrowser';
 import ModsScreen from './ui/ModsScreen';
 import ModEditorScreen from './ui/ModEditorScreen';
 import SuperSettingsPanel from './ui/SuperSettingsPanel';
+import GodConsole from './ui/GodConsole';
 import { SuperSettings, loadSuperSettings, saveSuperSettings } from './settings/SuperSettings';
 import OptionsScreen from './ui/OptionsScreen';
 import { ModPackRegistry } from './modding/ModPackRegistry';
@@ -67,6 +68,7 @@ export default function App() {
   /** Super Settings (Part 4) — the deep configurable layer. */
   const [superSettings, setSuperSettings] = useState<SuperSettings>(() => loadSuperSettings());
   const [superSettingsOpen, setSuperSettingsOpen] = useState(false);
+  const [godConsoleOpen, setGodConsoleOpen] = useState(false);
   useEffect(() => { saveSuperSettings(superSettings); }, [superSettings]);
   const [craftingMessage, setCraftingMessage] = useState('Crafting ready');
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
@@ -285,6 +287,22 @@ export default function App() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  // Creative God Console — open with the ` (backtick) key while in a world.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '`' && e.key !== '~') return;
+      if (!gameStarted) return;
+      e.preventDefault();
+      setGodConsoleOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [gameStarted]);
+
+  const godAction = useCallback((action: string) => {
+    window.dispatchEvent(new CustomEvent('eaoin-godconsole', { detail: { action } }));
+  }, []);
 
   // Handlers for sign-in flow
   const handleSignedIn = useCallback((user: SignedInUser) => {
@@ -706,6 +724,17 @@ export default function App() {
           onOpenModEditor={() => { setSuperSettingsOpen(false); setAppPhase('modeditor'); }}
           onOpenWorldEditor={() => { setSuperSettingsOpen(false); setAppPhase('editor'); }}
           onClose={() => setSuperSettingsOpen(false)}
+        />
+      )}
+      {godConsoleOpen && gameStarted && !worldLoading && (
+        <GodConsole
+          settings={superSettings}
+          onChange={setSuperSettings}
+          onFly={() => godAction('fly')}
+          onNoClip={() => godAction('noclip')}
+          onSpawnMob={() => godAction('spawn')}
+          onTeleportSpawn={() => godAction('teleport-spawn')}
+          onClose={() => setGodConsoleOpen(false)}
         />
       )}
       {worldLoading && (

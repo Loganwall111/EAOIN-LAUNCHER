@@ -3654,3 +3654,22 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .opt-info-list { list-style: none; padding: 0; margin: 0; font-size: 12px; color: #d6e4f4; line-height: 1.8; }
 .opt-info-list b { color: #ffd166; }
 .opt-info-text { font-size: 12px; color: #bcd0e8; line-height: 1.6; margin: 0; }
+
+/* Creative God Console — searchable control-everything bar. */
+.god-console { position: fixed; inset: 0; z-index: 990; display: grid; place-items: center; }
+.god-console-panel {
+  width: min(560px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  background: linear-gradient(180deg,#0e141f,#060a12);
+  border: 2px solid #7a4ad0; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.75); color: #e8f0fc;
+}
+.god-console-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: linear-gradient(180deg,#4a2a8a,#2a1a5a); font-weight: 800; }
+.god-console-search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.god-console-search .ui-input { flex: 1; }
+.god-console-count { font-size: 11px; color: #bcd0e8; white-space: nowrap; }
+.god-console-actions { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.god-console-list { overflow-y: auto; padding: 8px 12px; display: grid; gap: 4px; }
+.god-console-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,0.04); }
+.god-console-label { font-size: 12px; color: #d6e4f4; }
+.god-console-row input[type="range"] { width: 130px; accent-color: #a879ff; }
+.god-console-empty { padding: 16px; text-align: center; color: #8892b0; }
