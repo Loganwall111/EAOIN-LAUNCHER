@@ -2796,6 +2796,16 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       };
       window.addEventListener('eaoin-godconsole', handleGodConsole);
 
+      // Boss Rush: summon a boss by id from the UI.
+      const handleBossRush = (event: Event): void => {
+        const bossId = (event as CustomEvent<{ bossId?: string }>).detail?.bossId;
+        if (!bossId || !bossSummonRef.current) return;
+        const note = bossSummonRef.current(bossId);
+        showActionMessage(note);
+        audio.play('creature_down', settingsRef.current);
+      };
+      window.addEventListener('eaoin-boss-rush', handleBossRush);
+
       // Touch controls: the on-screen overlay reports joystick movement and
       // discrete actions over the window so the in-scene handlers can use them.
       const handleTouchMove = (event: Event): void => {
@@ -2932,6 +2942,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         canvas.removeEventListener('touchend', handleCanvasTouchEnd);
         window.removeEventListener('eaoin-ability', handleAbilityEvent);
         window.removeEventListener('eaoin-godconsole', handleGodConsole);
+        window.removeEventListener('eaoin-boss-rush', handleBossRush);
         window.removeEventListener('eaoin-touch-move', handleTouchMove);
         window.removeEventListener('eaoin-touch-action', handleTouchAction);
         window.removeEventListener('eaoin-awakening-tilt', handleAwakeningTilt);

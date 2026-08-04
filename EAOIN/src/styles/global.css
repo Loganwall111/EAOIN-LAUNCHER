@@ -3700,3 +3700,27 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .photo-chip.active { background: #2a6fd0; color: #fff; border-color: #6f9fff; }
 .photo-controls input[type="range"] { accent-color: #4a9ad0; }
 .photo-actions { margin-top: 4px; }
+
+/* Boss Rush. */
+.boss-rush { position: fixed; inset: 0; z-index: 900; background: #0a0a14; color: #e8f0fc; display: flex; flex-direction: column; }
+.boss-rush-head { display: flex; align-items: center; gap: 16px; padding: 18px 26px; }
+.boss-rush-tiers { display: flex; gap: 6px; padding: 0 26px 10px; flex-wrap: wrap; }
+.boss-tier { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #bcd0e8; cursor: pointer; font-size: 12px; text-transform: capitalize; }
+.boss-tier.active { background: #4a2a8a; color: #fff; border-color: #7a4ad0; }
+.boss-rush-body { flex: 1; display: flex; gap: 20px; padding: 0 26px 24px; overflow: hidden; }
+.boss-rush-list { width: min(320px, 40vw); overflow-y: auto; display: grid; gap: 6px; align-content: start; padding-right: 6px; }
+.boss-card { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #d6e4f4; cursor: pointer; text-align: left; }
+.boss-card.selected { background: rgba(74,42,138,0.4); border-color: #7a4ad0; }
+.boss-emoji { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 22px; }
+.boss-emoji.big { width: 90px; height: 90px; font-size: 48px; }
+.boss-card small { display: block; font-size: 11px; color: #8892b0; text-transform: capitalize; }
+.boss-rush-preview { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); overflow-y: auto; }
+.boss-rush-portrait { width: 120px; height: 120px; border-radius: 16px; display: grid; place-items: center; }
+.boss-rush-preview h2 { margin: 0; }
+.boss-rush-tier { color: #7a4ad0; font-weight: 800; letter-spacing: 1px; }
+.boss-rush-desc, .boss-rush-lore { margin: 0; text-align: center; color: #bcd0e8; font-size: 13px; }
+.boss-rush-lore { color: #8892b0; font-style: italic; }
+.boss-rush-stats { display: flex; gap: 12px; }
+.boss-rush-stats span { padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); font-size: 12px; }
+.boss-rush-abilities { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.boss-ability { padding: 4px 8px; border-radius: 6px; background: rgba(122,74,208,0.2); color: #d6c4f4; font-size: 11px; }

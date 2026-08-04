@@ -10,6 +10,7 @@ import HorizonOS from './ui/HorizonOS';
 import TutorialWorld from './ui/TutorialWorld';
 import GameHubScreen from './ui/GameHubScreen';
 import PortalGallery from './ui/PortalGallery';
+import BossRush from './ui/BossRush';
 import AlphaLauncher from './ui/AlphaLauncher';
 import CosmicRift from './ui/CosmicRift';
 import Singularity from './ui/Singularity';
@@ -89,7 +90,7 @@ export default function App() {
   const [systemsVisible, setSystemsVisible] = useState(false);
 
   /* ---- App flow: launcher boot → launcher → cinematic boot → title → game ---- */
-  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'alphaluncher' | 'singularity' | 'cosmicrift';
+  type AppPhase = 'launcherboot' | 'launcher' | 'signin' | 'boot' | 'title' | 'creator' | 'worlds' | 'multiplayer' | 'horizonos' | 'serverlobby' | 'mods' | 'modeditor' | 'options' | 'marketplace' | 'editor' | 'guide' | 'tutorial' | 'gamehub' | 'portalgallery' | 'bossrush' | 'alphaluncher' | 'singularity' | 'cosmicrift';
   // The app now opens on the launcher (version/build selector), then the
   // cinematic boot, then the title screen. Sign-in is reached from the menu.
   //
@@ -415,6 +416,7 @@ export default function App() {
             onMultiplayer={() => setAppPhase('multiplayer')}
             onGameHub={() => setAppPhase('gamehub')}
             onPortalGallery={() => setAppPhase('portalgallery')}
+            onBossRush={() => setAppPhase('bossrush')}
             onAlphaLauncher={() => setAppPhase('alphaluncher')}
             onSingularity={() => setAppPhase('singularity')}
             onOpenCosmicRift={() => setAppPhase('cosmicrift')}
@@ -483,6 +485,13 @@ export default function App() {
               window.setTimeout(() => window.dispatchEvent(new CustomEvent('eaoin-travel-dimension', { detail: { dimensionId: dimension } })), 3000);
             }}
           />
+        </div>
+      );
+    }
+    if (appPhase === 'bossrush') {
+      return (
+        <div className={shellClass}>
+          <BossRush onBack={() => setAppPhase('title')} />
         </div>
       );
     }
