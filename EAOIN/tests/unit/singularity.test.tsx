@@ -69,19 +69,19 @@ describe('nextStageOf / prevStageOf — journey order', () => {
 });
 
 describe('portalTransition — look-gated transitions', () => {
-  it('advances only when deep inside AND looking straight into the centre', () => {
+  it('advances only when VERY deep inside AND looking straight into the centre', () => {
     // far away: never advances no matter how you look
     expect(portalTransition(5, 0.9)).toBe(0);
-    // deep + looking straight into the centre → advance
-    expect(portalTransition(0.4, 0.95)).toBe(1);
+    // very deep + looking straight into the centre → advance
+    expect(portalTransition(0.25, 0.95)).toBe(1);
     // deep but only looking partly in (not straight) → stay
-    expect(portalTransition(0.4, 0.6)).toBe(0);
+    expect(portalTransition(0.25, 0.6)).toBe(0);
     // near centre, looking away → retreat
-    expect(portalTransition(0.4, -0.8)).toBe(-1);
+    expect(portalTransition(0.25, -0.8)).toBe(-1);
     // near centre but looking sideways → stay
-    expect(portalTransition(0.4, 0)).toBe(0);
-    // not deep enough (just outside the small advance radius) → stay
-    expect(portalTransition(1.2, 0.95)).toBe(0);
+    expect(portalTransition(0.25, 0)).toBe(0);
+    // deep-ish but NOT deep enough (outside the tight advance radius) → stay
+    expect(portalTransition(0.45, 0.95)).toBe(0);
   });
   it('retreats only when very close and looking away', () => {
     // within back radius and looking away
@@ -150,6 +150,14 @@ describe('STUDIO_WACKY — wacky/fluid toggles & sliders', () => {
     expect(keys.has('invert')).toBe(true);
     expect(keys.has('mono')).toBe(true);
     expect(STUDIO_WACKY.some((c) => c.kind === 'toggle')).toBe(true);
+    // invert look/zoom toggles + new VFX controls
+    expect(keys.has('zoomInvert')).toBe(true);
+    expect(keys.has('lookInvert')).toBe(true);
+    expect(keys.has('spiral')).toBe(true);
+    expect(keys.has('flare')).toBe(true);
+    expect(keys.has('particles')).toBe(true);
+    expect(keys.has('warp')).toBe(true);
+    expect(keys.has('ringBands')).toBe(true);
   });
 });
 

@@ -84,6 +84,12 @@ const FRAG = `
   uniform float u_diskBright;  // accretion-disk brightness
   uniform float u_ringW;       // photon-ring width
   uniform float u_lens;        // gravitational lensing strength
+  // ---- Extra VFX (Part 4) ----
+  uniform float u_spiral;      // photon spiral filaments 0..1
+  uniform float u_flare;       // lens-flare brightness 0..1
+  uniform float u_particles;   // drifting dust particles 0..1
+  uniform float u_warp;        // radial warp streaks 0..1
+  uniform float u_ringBands;   // extra photon-ring bands 0..1
 
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
@@ -560,12 +566,40 @@ const FRAG = `
           vec3 diskCol = u_diskCol*edge + u_diskCol2*u_swirlAmt;
           float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
           col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk * u_diskBright;
+          // Photon spiral filaments — bright light threads wrapped around the disk.
+          if (u_spiral > 0.001) {
+            float ang = atan(pos.z, pos.x);
+            float thread = noise(vec2(ang*8.0 - diskRad*2.0 - u_time*1.5*u_swirlSpeed, diskRad*0.8));
+            thread = smoothstep(0.62, 0.9, thread);
+            col += u_diskCol * thread * u_spiral * thickFade * edge * 1.6;
+          }
         }
 
         // Photon-ring / bloom halo around the horizon for extra glow.
-        // u_ringW tunes how wide the ring halo spreads.
+        // u_ringW tunes how wide the ring halo spreads; u_ringBands adds layers.
         float rglow = max(r - h, 0.0);
-        col += u_glowCol * exp(-rglow * (8.0 * u_ringW)) * u_glow * u_showGlow;
+        float ringBase = exp(-rglow * (8.0 * u_ringW));
+        col += u_glowCol * ringBase * u_glow * u_showGlow;
+        if (u_ringBands > 0.001) {
+          float band = 0.5 + 0.5*cos(rglow * 3.0 - u_time*2.0);
+          col += u_glowCol * ringBase * band * u_ringBands * u_glow * 1.4;
+        }
+
+        // Warp streaks — radial light trails accelerating into the hole.
+        if (u_warp > 0.001) {
+          float ang = atan(pos.y, diskRad);
+          float streak = noise(vec2(ang*40.0 - u_time*8.0*u_warp, diskRad*1.5));
+          float rterm = exp(-rglow*3.0);
+          col += u_starCol * smoothstep(0.8, 0.98, streak) * rterm * u_warp * 1.8;
+        }
+
+        // Drifting dust particles orbiting the hole.
+        if (u_particles > 0.001) {
+          float ang = atan(pos.z, pos.x) + u_time*0.5;
+          vec2 op = vec2(diskRad*1.7, pos.y*3.0);
+          float dust = step(0.985, noise(op + vec2(ang*3.0, 0.0)));
+          col += vec3(1.0,0.9,0.7) * dust * u_particles * 0.8;
+        }
 
         pos += ray * stepLen;
         t += stepLen;
@@ -581,6 +615,14 @@ const FRAG = `
 
       if (escaped || t >= MAX_DIST) {
         col += renderBackground(ray, u_time);
+      }
+      // Lens flare — a starburst halo straight out from the hole.
+      if (u_flare > 0.001) {
+        vec3 d2 = normalize(ray);
+        float diskDot = abs(d2.y);
+        float spike = pow(max(0.0, 1.0 - abs(atan(d2.x, d2.z))*0.8), 6.0)
+                    + pow(max(0.0, 1.0 - abs(d2.y)*2.0), 3.0);
+        col += u_glowCol * spike * u_flare * 0.8 * smoothstep(1.0, 0.3, diskDot);
       }
       // Glow bloom / lift so the hole reads bright and luminous.
       col += col*col*u_bloom;
@@ -627,7 +669,7 @@ const STAGE_ORDER = [0, 6, 1, 2, 3, 4, 5] as const;
  * black hole doesn't snap you to the void/next world — you have to fly really
  * deep and look directly into the centre to fall through.
  */
-export const PORTAL_IN_RADIUS = 0.55;
+export const PORTAL_IN_RADIUS = 0.35;
 /** Radius at which flying to the centre and looking away retreats a stage. */
 export const PORTAL_BACK_RADIUS = 0.6;
 /** How directly you must be looking at the centre to go deeper (near-straight). */
@@ -677,7 +719,7 @@ export function viewDistForStage(stage: number): number {
 }
 
 function spawnForStage(stage: number): Camera {
-  if (stage === 6) return { x: 0, y: 0, z: -9, yaw: 0, pitch: 0 }; // void — far out, look back at the hole
+  if (stage === 6) return { x: 0, y: 0, z: -5, yaw: 0, pitch: 0 }; // void — deep inside; turn around to see out
   const d = viewDistForStage(stage);
   return { x: 0, y: d * 0.25, z: -d, yaw: 0, pitch: 0.2 };
 }
@@ -727,6 +769,15 @@ export interface BlackHoleOpts {
   diskBright: number;  // accretion-disk brightness
   ringW: number;       // photon-ring width
   lens: number;        // gravitational lensing strength
+  // Input direction fixes (configurable)
+  zoomInvert: boolean; // false = scroll up zooms in
+  lookInvert: boolean; // false = drag right looks right
+  // Extra VFX (Part 4)
+  spiral: number;      // photon spiral filaments 0..1
+  flare: number;       // lens-flare brightness 0..1
+  particles: number;   // drifting dust particles 0..1
+  warp: number;        // radial warp streaks 0..1
+  ringBands: number;   // extra photon-ring bands 0..1
 }
 
 const DEFAULT_OPTS: BlackHoleOpts = {
@@ -771,6 +822,13 @@ const DEFAULT_OPTS: BlackHoleOpts = {
   diskBright: 1,
   ringW: 1,
   lens: 1,
+  zoomInvert: false,
+  lookInvert: false,
+  spiral: 0,
+  flare: 0,
+  particles: 0,
+  warp: 0,
+  ringBands: 0,
 };
 
 /** Preset looks for the black hole — one click applies a full mood. */
@@ -957,6 +1015,13 @@ export const STUDIO_WACKY: StudioControl[] = [
   { key: 'invert', label: 'Invert', kind: 'toggle' },
   { key: 'mono', label: 'Monochrome', kind: 'toggle' },
   { key: 'mirror', label: 'Mirror', kind: 'toggle' },
+  { key: 'zoomInvert', label: 'Invert zoom', kind: 'toggle' },
+  { key: 'lookInvert', label: 'Invert look', kind: 'toggle' },
+  { key: 'spiral', label: 'Photon spirals', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'flare', label: 'Lens flare', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'particles', label: 'Dust particles', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'warp', label: 'Warp streaks', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'ringBands', label: 'Ring bands', kind: 'slider', min: 0, max: 1, step: 0.01 },
 ];
 
 /** Parse '#rrggbb' into [r,g,b] in 0..1. */
@@ -1152,7 +1217,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         return;
       }
       const c = camRef.current;
-      c.yaw -= dx * 0.006;
+      c.yaw += dx * 0.006 * (optsRef.current.lookInvert ? -1 : 1);
       c.pitch = Math.max(-1.35, Math.min(1.35, c.pitch + dy * 0.006));
     };
     const onPointerUp = (e: PointerEvent) => {
@@ -1175,7 +1240,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      scrollAccumRef.current += e.deltaY * 0.02;
+      // Slow accumulation so one notch moves the camera just a little — you can
+      // zoom into the hole and stop at each area instead of flying to the end.
+      // zoomInvert (false by default) means scroll UP = zoom IN.
+      const sign = optsRef.current.zoomInvert ? 1 : -1;
+      scrollAccumRef.current += e.deltaY * 0.006 * sign;
     };
     const keyOf = (k: string) => k.toLowerCase();
     const onKeyDown = (e: KeyboardEvent) => keysRef.current.add(keyOf(e.key));
@@ -1281,6 +1350,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       diskBright: gl.getUniformLocation(prog, 'u_diskBright'),
       ringW: gl.getUniformLocation(prog, 'u_ringW'),
       lens: gl.getUniformLocation(prog, 'u_lens'),
+      spiral: gl.getUniformLocation(prog, 'u_spiral'),
+      flare: gl.getUniformLocation(prog, 'u_flare'),
+      particles: gl.getUniformLocation(prog, 'u_particles'),
+      warp: gl.getUniformLocation(prog, 'u_warp'),
+      ringBands: gl.getUniformLocation(prog, 'u_ringBands'),
     };
 
     // Render at a higher resolution than CSS size (devicePixelRatio × resScale)
@@ -1322,10 +1396,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       c.x += (fwd.x * f + right.x * r) * speed * dt;
       c.y += (fwd.y * f + up.y * v) * speed * dt;
       c.z += (fwd.z * f + right.z * r + up.z * v) * speed * dt;
-      // Scroll flies forward/back. Scrolling UP (deltaY < 0) flies TOWARD the
-      // hole (zoom in), scrolling DOWN flies away — not inverted.
+      // Scroll flies forward/back. The wheel handler already bakes in the
+      // direction, so we just move along the forward axis by the accumulated
+      // amount (slow, so zooming into the hole stops at each area).
       if (Math.abs(scrollAccumRef.current) > 0.0001) {
-        const s = -scrollAccumRef.current * 3;
+        const s = scrollAccumRef.current * 2.0;
         c.x += fwd.x * s; c.y += fwd.y * s; c.z += fwd.z * s;
         scrollAccumRef.current = 0;
       }
@@ -1409,6 +1484,11 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.diskBright, o.diskBright);
       gl.uniform1f(U.ringW, o.ringW);
       gl.uniform1f(U.lens, o.lens);
+      gl.uniform1f(U.spiral, o.spiral);
+      gl.uniform1f(U.flare, o.flare);
+      gl.uniform1f(U.particles, o.particles);
+      gl.uniform1f(U.warp, o.warp);
+      gl.uniform1f(U.ringBands, o.ringBands);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
