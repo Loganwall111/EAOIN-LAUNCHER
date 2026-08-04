@@ -152,6 +152,101 @@ export interface SuperSettings {
   dataPacks: boolean;
   shaderPacks: boolean;
   autoModUpdate: boolean;
+
+  /* ---- worldgen & biomes ---- */
+  terrainHeight: number;      // 0..2 amplitude
+  biomeSize: number;          // 0..2
+  cavesEnabled: boolean;
+  caveSize: number;           // 0..2
+  treesEnabled: boolean;
+  treeDensity: number;        // 0..1
+  oreDensity: number;         // 0..1
+  rareOres: boolean;
+  villagesEnabled: boolean;
+  strongholdsEnabled: boolean;
+  floatingIslands: boolean;
+  oceanSize: number;          // 0..2
+  lavaLakes: boolean;
+  waterLakes: boolean;
+  erosion: number;            // 0..1
+
+  /* ---- mobs & entities ---- */
+  mobCap: number;             // 0..200
+  mobSpawnRate: number;       // 0..2
+  mobTaming: boolean;
+  mobBreeding: boolean;
+  mobGriefing: boolean;
+  creeperExplosions: boolean;
+  endermanGriefing: boolean;
+  zombieHordes: boolean;
+  animalDensity: number;      // 0..1
+  villagerTrading: boolean;
+  bossMobs: boolean;
+  passiveMobsSpawn: boolean;
+  flyingMobs: boolean;
+  waterMobs: boolean;
+
+  /* ---- physics ---- */
+  waterPhysics: boolean;
+  lavaPhysics: boolean;
+  sandFalling: boolean;
+  gravelFalling: boolean;
+  fluidFlowSpeed: number;     // 0..2
+  knockback: number;          // 0..3
+  fallDamage: boolean;
+  drownDamage: boolean;
+  fireDamage: boolean;
+  voidDamage: boolean;
+  explosionPhysics: boolean;
+  collisionPrecision: number; // 0..1
+  swimSpeed: number;          // 0..3
+
+  /* ---- farming & plants ---- */
+  cropGrowthSpeed: number;    // 0..3
+  plantDensity: number;       // 0..1
+  saplingsGrow: boolean;
+  bonemeal: boolean;
+  farmingEnabled: boolean;
+  hungerDecay: number;        // 0..3
+  foodHeal: boolean;
+
+  /* ---- difficulty ---- */
+  difficulty: 'peaceful' | 'easy' | 'normal' | 'hard';
+  mobDamage: number;          // 0..3
+  mobHealth: number;          // 0..3
+  regeneration: boolean;
+  naturalRegen: boolean;
+  regenSpeed: number;         // 0..3
+  deathLoot: boolean;
+  keepInventoryOnDeath: boolean;
+  showDeathMessage: boolean;
+  respawnRadius: number;      // 0..20
+
+  /* ---- weather & seasons ---- */
+  seasons: boolean;
+  rainEnabled: boolean;
+  snowEnabled: boolean;
+  thunderEnabled: boolean;
+  seasonalLeafColor: boolean;
+  dayNightCycle: boolean;
+
+  /* ---- misc / fun & quality of life ---- */
+  coordinates: boolean;
+  fovSlider: number;          // 0..2
+  fovBobbing: boolean;
+  autoSaveInterval: number;   // seconds
+  showTips: boolean;
+  tooltips: boolean;
+  itemDrops: boolean;
+  experienceOrbs: boolean;
+  deathTint: boolean;
+  damageFlash: boolean;
+  hitmarkers: boolean;
+  redstone: boolean;
+  hopperSpeed: number;        // 0..3
+  commandBlocksInGame: boolean;
+  creativeFlight: boolean;
+  spectatorMode: boolean;
 }
 
 export function defaultSuperSettings(): SuperSettings {
@@ -262,6 +357,87 @@ export function defaultSuperSettings(): SuperSettings {
     dataPacks: true,
     shaderPacks: true,
     autoModUpdate: true,
+    terrainHeight: 1,
+    biomeSize: 1,
+    cavesEnabled: true,
+    caveSize: 1,
+    treesEnabled: true,
+    treeDensity: 0.5,
+    oreDensity: 0.5,
+    rareOres: true,
+    villagesEnabled: true,
+    strongholdsEnabled: true,
+    floatingIslands: false,
+    oceanSize: 1,
+    lavaLakes: true,
+    waterLakes: true,
+    erosion: 0.5,
+    mobCap: 60,
+    mobSpawnRate: 1,
+    mobTaming: true,
+    mobBreeding: true,
+    mobGriefing: true,
+    creeperExplosions: true,
+    endermanGriefing: true,
+    zombieHordes: true,
+    animalDensity: 1,
+    villagerTrading: true,
+    bossMobs: true,
+    passiveMobsSpawn: true,
+    flyingMobs: true,
+    waterMobs: true,
+    waterPhysics: true,
+    lavaPhysics: true,
+    sandFalling: true,
+    gravelFalling: true,
+    fluidFlowSpeed: 1,
+    knockback: 1,
+    fallDamage: true,
+    drownDamage: true,
+    fireDamage: true,
+    voidDamage: true,
+    explosionPhysics: true,
+    collisionPrecision: 1,
+    swimSpeed: 1,
+    cropGrowthSpeed: 1,
+    plantDensity: 0.5,
+    saplingsGrow: true,
+    bonemeal: true,
+    farmingEnabled: true,
+    hungerDecay: 1,
+    foodHeal: true,
+    difficulty: 'normal',
+    mobDamage: 1,
+    mobHealth: 1,
+    regeneration: true,
+    naturalRegen: true,
+    regenSpeed: 1,
+    deathLoot: true,
+    keepInventoryOnDeath: false,
+    showDeathMessage: true,
+    respawnRadius: 5,
+    seasons: false,
+    rainEnabled: true,
+    snowEnabled: true,
+    thunderEnabled: true,
+    seasonalLeafColor: true,
+    dayNightCycle: true,
+    coordinates: false,
+    fovSlider: 1,
+    fovBobbing: true,
+    autoSaveInterval: 120,
+    showTips: true,
+    tooltips: true,
+    itemDrops: true,
+    experienceOrbs: true,
+    deathTint: true,
+    damageFlash: true,
+    hitmarkers: true,
+    redstone: true,
+    hopperSpeed: 1,
+    commandBlocksInGame: true,
+    creativeFlight: true,
+    spectatorMode: false,
   };
 }
 

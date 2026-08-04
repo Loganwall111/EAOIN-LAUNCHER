@@ -11,11 +11,12 @@ import { useState } from 'react';
 import { SuperSettings, defaultSuperSettings } from '../settings/SuperSettings';
 import { getGodMode } from '../arg/GodMode';
 
-type Tab = 'sky' | 'world' | 'lighting' | 'textures' | 'fx' | 'audio' | 'gameplay' | 'creative' | 'perf' | 'ui' | 'controls' | 'multiplayer' | 'modding' | 'misc' | 'camera' | 'rt' | 'god' | 'debug' | 'mods';
+type Tab = 'sky' | 'world' | 'worldgen' | 'lighting' | 'textures' | 'fx' | 'audio' | 'gameplay' | 'creative' | 'perf' | 'ui' | 'controls' | 'multiplayer' | 'modding' | 'mobs' | 'physics' | 'farming' | 'difficulty' | 'weather' | 'qol' | 'misc' | 'camera' | 'rt' | 'god' | 'debug' | 'mods';
 
 const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'sky', label: 'Sky', icon: '🌌' },
   { id: 'world', label: 'World', icon: '🌍' },
+  { id: 'worldgen', label: 'World Gen & Biomes', icon: '⛰️' },
   { id: 'lighting', label: 'Lighting', icon: '💡' },
   { id: 'textures', label: 'Textures & Blocks', icon: '🧱' },
   { id: 'fx', label: 'Particles & FX', icon: '✨' },
@@ -27,6 +28,12 @@ const TABS: Array<{ id: Tab; label: string; icon: string }> = [
   { id: 'controls', label: 'Controls', icon: '🎮' },
   { id: 'multiplayer', label: 'Multiplayer', icon: '🌐' },
   { id: 'modding', label: 'Modding', icon: '🧩' },
+  { id: 'mobs', label: 'Mobs & Entities', icon: '🐺' },
+  { id: 'physics', label: 'Physics', icon: '⚖️' },
+  { id: 'farming', label: 'Farming & Plants', icon: '🌾' },
+  { id: 'difficulty', label: 'Difficulty', icon: '⚔️' },
+  { id: 'weather', label: 'Weather & Seasons', icon: '🌦️' },
+  { id: 'qol', label: 'Quality of Life', icon: '💫' },
   { id: 'misc', label: 'Misc / Rules', icon: '🧩' },
   { id: 'camera', label: 'Camera', icon: '📷' },
   { id: 'rt', label: 'Ray Tracing', icon: '🔆' },
@@ -415,6 +422,289 @@ export default function SuperSettingsPanel({ settings, onChange, onCapture, onOp
               </Row>
               <Row label="Daylight cycle" hint="The sun and moon move.">
                 <Toggle on={merged.doDaylightCycle} onClick={() => patch({ doDaylightCycle: !merged.doDaylightCycle })} label="Daylight cycle" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'worldgen' && (
+            <>
+              <Row label="Terrain height" hint={`${merged.terrainHeight.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.terrainHeight} onChange={(e) => patch({ terrainHeight: Number(e.target.value) })} />
+              </Row>
+              <Row label="Biome size" hint={`${merged.biomeSize.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.biomeSize} onChange={(e) => patch({ biomeSize: Number(e.target.value) })} />
+              </Row>
+              <Row label="Caves" hint="Generate underground caverns.">
+                <Toggle on={merged.cavesEnabled} onClick={() => patch({ cavesEnabled: !merged.cavesEnabled })} label="Caves" />
+              </Row>
+              <Row label="Cave size" hint={`${merged.caveSize.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.caveSize} onChange={(e) => patch({ caveSize: Number(e.target.value) })} />
+              </Row>
+              <Row label="Trees" hint="Generate trees in forests.">
+                <Toggle on={merged.treesEnabled} onClick={() => patch({ treesEnabled: !merged.treesEnabled })} label="Trees" />
+              </Row>
+              <Row label="Tree density" hint={`${Math.round(merged.treeDensity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.treeDensity} onChange={(e) => patch({ treeDensity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Ore density" hint={`${Math.round(merged.oreDensity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.oreDensity} onChange={(e) => patch({ oreDensity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Rare ores" hint="Diamonds, emeralds, ancient debris.">
+                <Toggle on={merged.rareOres} onClick={() => patch({ rareOres: !merged.rareOres })} label="Rare ores" />
+              </Row>
+              <Row label="Villages" hint="Generate villages and settlements.">
+                <Toggle on={merged.villagesEnabled} onClick={() => patch({ villagesEnabled: !merged.villagesEnabled })} label="Villages" />
+              </Row>
+              <Row label="Strongholds" hint="Generate strongholds underground.">
+                <Toggle on={merged.strongholdsEnabled} onClick={() => patch({ strongholdsEnabled: !merged.strongholdsEnabled })} label="Strongholds" />
+              </Row>
+              <Row label="Floating islands" hint="Scatter floating islands in the sky.">
+                <Toggle on={merged.floatingIslands} onClick={() => patch({ floatingIslands: !merged.floatingIslands })} label="Floating islands" />
+              </Row>
+              <Row label="Ocean size" hint={`${merged.oceanSize.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.oceanSize} onChange={(e) => patch({ oceanSize: Number(e.target.value) })} />
+              </Row>
+              <Row label="Lava lakes" hint="Lava pools in the underground.">
+                <Toggle on={merged.lavaLakes} onClick={() => patch({ lavaLakes: !merged.lavaLakes })} label="Lava lakes" />
+              </Row>
+              <Row label="Water lakes" hint="Surface water pools.">
+                <Toggle on={merged.waterLakes} onClick={() => patch({ waterLakes: !merged.waterLakes })} label="Water lakes" />
+              </Row>
+              <Row label="Erosion" hint={`${Math.round(merged.erosion * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.erosion} onChange={(e) => patch({ erosion: Number(e.target.value) })} />
+              </Row>
+            </>
+          )}
+
+          {tab === 'mobs' && (
+            <>
+              <Row label="Mob cap" hint={`${merged.mobCap} mobs`}>
+                <input type="range" min={0} max={200} step={5} value={merged.mobCap} onChange={(e) => patch({ mobCap: Number(e.target.value) })} />
+              </Row>
+              <Row label="Mob spawn rate" hint={`${merged.mobSpawnRate.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.mobSpawnRate} onChange={(e) => patch({ mobSpawnRate: Number(e.target.value) })} />
+              </Row>
+              <Row label="Mob taming" hint="Tame dogs, cats and more.">
+                <Toggle on={merged.mobTaming} onClick={() => patch({ mobTaming: !merged.mobTaming })} label="Mob taming" />
+              </Row>
+              <Row label="Mob breeding">
+                <Toggle on={merged.mobBreeding} onClick={() => patch({ mobBreeding: !merged.mobBreeding })} label="Mob breeding" />
+              </Row>
+              <Row label="Mob griefing" hint="Mobs can alter the world.">
+                <Toggle on={merged.mobGriefing} onClick={() => patch({ mobGriefing: !merged.mobGriefing })} label="Mob griefing" />
+              </Row>
+              <Row label="Creeper explosions">
+                <Toggle on={merged.creeperExplosions} onClick={() => patch({ creeperExplosions: !merged.creeperExplosions })} label="Creeper explosions" />
+              </Row>
+              <Row label="Enderman griefing">
+                <Toggle on={merged.endermanGriefing} onClick={() => patch({ endermanGriefing: !merged.endermanGriefing })} label="Enderman griefing" />
+              </Row>
+              <Row label="Zombie hordes">
+                <Toggle on={merged.zombieHordes} onClick={() => patch({ zombieHordes: !merged.zombieHordes })} label="Zombie hordes" />
+              </Row>
+              <Row label="Animal density" hint={`${Math.round(merged.animalDensity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.animalDensity} onChange={(e) => patch({ animalDensity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Villager trading">
+                <Toggle on={merged.villagerTrading} onClick={() => patch({ villagerTrading: !merged.villagerTrading })} label="Villager trading" />
+              </Row>
+              <Row label="Boss mobs" hint="Enable boss encounters.">
+                <Toggle on={merged.bossMobs} onClick={() => patch({ bossMobs: !merged.bossMobs })} label="Boss mobs" />
+              </Row>
+              <Row label="Passive mobs spawn">
+                <Toggle on={merged.passiveMobsSpawn} onClick={() => patch({ passiveMobsSpawn: !merged.passiveMobsSpawn })} label="Passive mobs spawn" />
+              </Row>
+              <Row label="Flying mobs">
+                <Toggle on={merged.flyingMobs} onClick={() => patch({ flyingMobs: !merged.flyingMobs })} label="Flying mobs" />
+              </Row>
+              <Row label="Water mobs">
+                <Toggle on={merged.waterMobs} onClick={() => patch({ waterMobs: !merged.waterMobs })} label="Water mobs" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'physics' && (
+            <>
+              <Row label="Water physics">
+                <Toggle on={merged.waterPhysics} onClick={() => patch({ waterPhysics: !merged.waterPhysics })} label="Water physics" />
+              </Row>
+              <Row label="Lava physics">
+                <Toggle on={merged.lavaPhysics} onClick={() => patch({ lavaPhysics: !merged.lavaPhysics })} label="Lava physics" />
+              </Row>
+              <Row label="Falling sand" hint="Sand and gravel obey gravity.">
+                <Toggle on={merged.sandFalling} onClick={() => patch({ sandFalling: !merged.sandFalling })} label="Falling sand" />
+              </Row>
+              <Row label="Falling gravel">
+                <Toggle on={merged.gravelFalling} onClick={() => patch({ gravelFalling: !merged.gravelFalling })} label="Falling gravel" />
+              </Row>
+              <Row label="Fluid flow speed" hint={`${merged.fluidFlowSpeed.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.fluidFlowSpeed} onChange={(e) => patch({ fluidFlowSpeed: Number(e.target.value) })} />
+              </Row>
+              <Row label="Knockback" hint={`${merged.knockback.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.knockback} onChange={(e) => patch({ knockback: Number(e.target.value) })} />
+              </Row>
+              <Row label="Fall damage">
+                <Toggle on={merged.fallDamage} onClick={() => patch({ fallDamage: !merged.fallDamage })} label="Fall damage" />
+              </Row>
+              <Row label="Drown damage">
+                <Toggle on={merged.drownDamage} onClick={() => patch({ drownDamage: !merged.drownDamage })} label="Drown damage" />
+              </Row>
+              <Row label="Fire damage">
+                <Toggle on={merged.fireDamage} onClick={() => patch({ fireDamage: !merged.fireDamage })} label="Fire damage" />
+              </Row>
+              <Row label="Void damage">
+                <Toggle on={merged.voidDamage} onClick={() => patch({ voidDamage: !merged.voidDamage })} label="Void damage" />
+              </Row>
+              <Row label="Explosion physics">
+                <Toggle on={merged.explosionPhysics} onClick={() => patch({ explosionPhysics: !merged.explosionPhysics })} label="Explosion physics" />
+              </Row>
+              <Row label="Collision precision" hint={`${Math.round(merged.collisionPrecision * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.collisionPrecision} onChange={(e) => patch({ collisionPrecision: Number(e.target.value) })} />
+              </Row>
+              <Row label="Swim speed" hint={`${merged.swimSpeed.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.swimSpeed} onChange={(e) => patch({ swimSpeed: Number(e.target.value) })} />
+              </Row>
+            </>
+          )}
+
+          {tab === 'farming' && (
+            <>
+              <Row label="Crop growth speed" hint={`${merged.cropGrowthSpeed.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.cropGrowthSpeed} onChange={(e) => patch({ cropGrowthSpeed: Number(e.target.value) })} />
+              </Row>
+              <Row label="Plant density" hint={`${Math.round(merged.plantDensity * 100)}%`}>
+                <input type="range" min={0} max={1} step={0.05} value={merged.plantDensity} onChange={(e) => patch({ plantDensity: Number(e.target.value) })} />
+              </Row>
+              <Row label="Saplings grow" hint="Saplings turn into trees.">
+                <Toggle on={merged.saplingsGrow} onClick={() => patch({ saplingsGrow: !merged.saplingsGrow })} label="Saplings grow" />
+              </Row>
+              <Row label="Bonemeal" hint="Bonemeal accelerates growth.">
+                <Toggle on={merged.bonemeal} onClick={() => patch({ bonemeal: !merged.bonemeal })} label="Bonemeal" />
+              </Row>
+              <Row label="Farming" hint="Tilling, crops and harvests.">
+                <Toggle on={merged.farmingEnabled} onClick={() => patch({ farmingEnabled: !merged.farmingEnabled })} label="Farming" />
+              </Row>
+              <Row label="Hunger decay" hint={`${merged.hungerDecay.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.hungerDecay} onChange={(e) => patch({ hungerDecay: Number(e.target.value) })} />
+              </Row>
+              <Row label="Food heals">
+                <Toggle on={merged.foodHeal} onClick={() => patch({ foodHeal: !merged.foodHeal })} label="Food heals" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'difficulty' && (
+            <>
+              <Row label="Difficulty">
+                <select className="ui-input" value={merged.difficulty} onChange={(e) => patch({ difficulty: e.target.value as SuperSettings['difficulty'] })}>
+                  <option value="peaceful">Peaceful</option>
+                  <option value="easy">Easy</option>
+                  <option value="normal">Normal</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </Row>
+              <Row label="Mob damage" hint={`${merged.mobDamage.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.mobDamage} onChange={(e) => patch({ mobDamage: Number(e.target.value) })} />
+              </Row>
+              <Row label="Mob health" hint={`${merged.mobHealth.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.mobHealth} onChange={(e) => patch({ mobHealth: Number(e.target.value) })} />
+              </Row>
+              <Row label="Regeneration" hint="Health regenerates over time.">
+                <Toggle on={merged.regeneration} onClick={() => patch({ regeneration: !merged.regeneration })} label="Regeneration" />
+              </Row>
+              <Row label="Natural regen">
+                <Toggle on={merged.naturalRegen} onClick={() => patch({ naturalRegen: !merged.naturalRegen })} label="Natural regen" />
+              </Row>
+              <Row label="Regen speed" hint={`${merged.regenSpeed.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.regenSpeed} onChange={(e) => patch({ regenSpeed: Number(e.target.value) })} />
+              </Row>
+              <Row label="Death loot" hint="Drops items on death.">
+                <Toggle on={merged.deathLoot} onClick={() => patch({ deathLoot: !merged.deathLoot })} label="Death loot" />
+              </Row>
+              <Row label="Keep inventory on death">
+                <Toggle on={merged.keepInventoryOnDeath} onClick={() => patch({ keepInventoryOnDeath: !merged.keepInventoryOnDeath })} label="Keep inventory on death" />
+              </Row>
+              <Row label="Show death message">
+                <Toggle on={merged.showDeathMessage} onClick={() => patch({ showDeathMessage: !merged.showDeathMessage })} label="Show death message" />
+              </Row>
+              <Row label="Respawn radius" hint={`${merged.respawnRadius} blocks`}>
+                <input type="range" min={0} max={20} step={1} value={merged.respawnRadius} onChange={(e) => patch({ respawnRadius: Number(e.target.value) })} />
+              </Row>
+            </>
+          )}
+
+          {tab === 'weather' && (
+            <>
+              <Row label="Seasons" hint="Seasons change leaf colours and weather.">
+                <Toggle on={merged.seasons} onClick={() => patch({ seasons: !merged.seasons })} label="Seasons" />
+              </Row>
+              <Row label="Rain">
+                <Toggle on={merged.rainEnabled} onClick={() => patch({ rainEnabled: !merged.rainEnabled })} label="Rain" />
+              </Row>
+              <Row label="Snow">
+                <Toggle on={merged.snowEnabled} onClick={() => patch({ snowEnabled: !merged.snowEnabled })} label="Snow" />
+              </Row>
+              <Row label="Thunder">
+                <Toggle on={merged.thunderEnabled} onClick={() => patch({ thunderEnabled: !merged.thunderEnabled })} label="Thunder" />
+              </Row>
+              <Row label="Seasonal leaf colour">
+                <Toggle on={merged.seasonalLeafColor} onClick={() => patch({ seasonalLeafColor: !merged.seasonalLeafColor })} label="Seasonal leaf colour" />
+              </Row>
+              <Row label="Day/night cycle">
+                <Toggle on={merged.dayNightCycle} onClick={() => patch({ dayNightCycle: !merged.dayNightCycle })} label="Day/night cycle" />
+              </Row>
+            </>
+          )}
+
+          {tab === 'qol' && (
+            <>
+              <Row label="Show coordinates" hint="Display XYZ in the HUD.">
+                <Toggle on={merged.coordinates} onClick={() => patch({ coordinates: !merged.coordinates })} label="Show coordinates" />
+              </Row>
+              <Row label="Field of view" hint={`${merged.fovSlider.toFixed(2)}x`}>
+                <input type="range" min={0} max={2} step={0.05} value={merged.fovSlider} onChange={(e) => patch({ fovSlider: Number(e.target.value) })} />
+              </Row>
+              <Row label="FOV bobbing">
+                <Toggle on={merged.fovBobbing} onClick={() => patch({ fovBobbing: !merged.fovBobbing })} label="FOV bobbing" />
+              </Row>
+              <Row label="Auto-save interval" hint={`every ${merged.autoSaveInterval}s`}>
+                <input type="range" min={30} max={600} step={10} value={merged.autoSaveInterval} onChange={(e) => patch({ autoSaveInterval: Number(e.target.value) })} />
+              </Row>
+              <Row label="Show tips">
+                <Toggle on={merged.showTips} onClick={() => patch({ showTips: !merged.showTips })} label="Show tips" />
+              </Row>
+              <Row label="Tooltips">
+                <Toggle on={merged.tooltips} onClick={() => patch({ tooltips: !merged.tooltips })} label="Tooltips" />
+              </Row>
+              <Row label="Item drops">
+                <Toggle on={merged.itemDrops} onClick={() => patch({ itemDrops: !merged.itemDrops })} label="Item drops" />
+              </Row>
+              <Row label="Experience orbs">
+                <Toggle on={merged.experienceOrbs} onClick={() => patch({ experienceOrbs: !merged.experienceOrbs })} label="Experience orbs" />
+              </Row>
+              <Row label="Death tint" hint="Red flash when you take damage / die.">
+                <Toggle on={merged.deathTint} onClick={() => patch({ deathTint: !merged.deathTint })} label="Death tint" />
+              </Row>
+              <Row label="Damage flash">
+                <Toggle on={merged.damageFlash} onClick={() => patch({ damageFlash: !merged.damageFlash })} label="Damage flash" />
+              </Row>
+              <Row label="Hitmarkers">
+                <Toggle on={merged.hitmarkers} onClick={() => patch({ hitmarkers: !merged.hitmarkers })} label="Hitmarkers" />
+              </Row>
+              <Row label="Redstone" hint="Enable redstone circuitry.">
+                <Toggle on={merged.redstone} onClick={() => patch({ redstone: !merged.redstone })} label="Redstone" />
+              </Row>
+              <Row label="Hopper speed" hint={`${merged.hopperSpeed.toFixed(2)}x`}>
+                <input type="range" min={0} max={3} step={0.05} value={merged.hopperSpeed} onChange={(e) => patch({ hopperSpeed: Number(e.target.value) })} />
+              </Row>
+              <Row label="Command blocks in-game">
+                <Toggle on={merged.commandBlocksInGame} onClick={() => patch({ commandBlocksInGame: !merged.commandBlocksInGame })} label="Command blocks in-game" />
+              </Row>
+              <Row label="Creative flight">
+                <Toggle on={merged.creativeFlight} onClick={() => patch({ creativeFlight: !merged.creativeFlight })} label="Creative flight" />
+              </Row>
+              <Row label="Spectator mode">
+                <Toggle on={merged.spectatorMode} onClick={() => patch({ spectatorMode: !merged.spectatorMode })} label="Spectator mode" />
               </Row>
             </>
           )}
