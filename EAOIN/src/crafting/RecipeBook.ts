@@ -24,7 +24,10 @@ export type RecipeID =
   | 'rocket_core'
   | 'moon_rock'
   | 'omni_creator'
-  | 'god_mode_block';
+  | 'god_mode_block'
+  | 'windmill'
+  | 'conveyor'
+  | 'elevator';
 
 export interface RecipeCost {
   blockId: BlockID;
@@ -216,6 +219,37 @@ export const RECIPES: Recipe[] = [
       { blockId: 308, amount: 1 }, // Memory Shard
     ],
     output: { type: 'block', blockId: 340, amount: 1 },
+  },
+  {
+    id: 'windmill',
+    name: 'Windmill',
+    description: 'A working windmill — power for your buildable machines.',
+    costs: [
+      { blockId: 6, amount: 8 },    // Oak Log
+      { blockId: 229, amount: 2 },  // Machine Block
+    ],
+    output: { type: 'block', blockId: 342, amount: 1 },
+  },
+  {
+    id: 'conveyor',
+    name: 'Conveyor',
+    description: 'A conveyor belt that carries you (or items) forward.',
+    costs: [
+      { blockId: 229, amount: 4 },  // Machine Block
+      { blockId: 10, amount: 1 },   // Gold Ore
+    ],
+    output: { type: 'block', blockId: 343, amount: 2 },
+  },
+  {
+    id: 'elevator',
+    name: 'Elevator',
+    description: 'A buildable elevator that launches you up when you stand on it.',
+    costs: [
+      { blockId: 19, amount: 1 },   // Time Machine
+      { blockId: 229, amount: 2 },  // Machine Block
+      { blockId: 3, amount: 4 },    // Stone
+    ],
+    output: { type: 'block', blockId: 344, amount: 1 },
   },
 ];
 

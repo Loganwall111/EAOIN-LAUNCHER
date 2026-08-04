@@ -2153,9 +2153,20 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           const px = Math.floor(camera.position.x);
           const pz = Math.floor(camera.position.z);
           let supportTop = -1;
+          let supportBlockId = 0;
           for (let by = Math.floor(feetY + 0.5); by >= 0; by -= 1) {
             const id = terrain.getBlockAt(px, by, pz);
-            if (id !== 0 && id !== 5) { supportTop = by + 1; break; }
+            if (id !== 0 && id !== 5) { supportTop = by + 1; supportBlockId = id; break; }
+          }
+          // Buildable machines: Elevator (344) launches you up, Conveyor (343)
+          // pushes you forward. Only while grounded on them.
+          if (grounded && supportBlockId === 344) {
+            velocityY = 22; grounded = false; wasFalling = false;
+            showActionMessage('⬆️ Elevator!');
+            audio.play('ui', settingsRef.current);
+          } else if (grounded && supportBlockId === 343) {
+            const fwd = camera.getForwardRay(1).direction;
+            camera.position.addInPlace(new Vector3(fwd.x, 0, fwd.z).normalize().scale(deltaSeconds * 9));
           }
           // Only engage when there really is a solid block beneath the feet.
           if (supportTop >= 0 && feetY <= supportTop) {

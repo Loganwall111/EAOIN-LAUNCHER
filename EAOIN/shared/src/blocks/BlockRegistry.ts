@@ -429,6 +429,9 @@ export const BLOCKS: Record<BlockID, BlockDef> = {
   339: { id: 339, name: 'The Encryptor', shortName: 'EN', category: 'functional', solid: true, transparent: false, hardness: 50.0, lightLevel: 13, emissive: true, stackSize: 1, color: '#a879ff', accentColor: '#4dff9e' },
   340: { id: 340, name: 'God Mode Block', shortName: 'GM', category: 'creative', solid: true, transparent: false, hardness: -1.0, lightLevel: 15, emissive: true, stackSize: 1, color: '#ffd166', accentColor: '#ffffff' },
   341: { id: 341, name: 'Wormhole Frame', shortName: 'WH', category: 'functional', solid: true, transparent: true, hardness: 20.0, lightLevel: 12, emissive: true, stackSize: 64, color: '#2a5aff', accentColor: '#9adcff' },
+  342: { id: 342, name: 'Windmill', shortName: 'WM', category: 'functional', solid: true, transparent: false, hardness: 3.0, lightLevel: 1, emissive: false, stackSize: 64, color: '#c8a878', accentColor: '#8a6a3a' },
+  343: { id: 343, name: 'Conveyor', shortName: 'CV', category: 'functional', solid: true, transparent: false, hardness: 2.5, lightLevel: 0, emissive: false, stackSize: 64, color: '#4a4a52', accentColor: '#8a8a92' },
+  344: { id: 344, name: 'Elevator', shortName: 'EV', category: 'functional', solid: true, transparent: false, hardness: 3.0, lightLevel: 3, emissive: true, stackSize: 64, color: '#4a9ad0', accentColor: '#9adcff' },
 };
 
 /* ---------- All registered block IDs (so iteration is stable) ---------- */
