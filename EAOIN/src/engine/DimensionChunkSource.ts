@@ -88,12 +88,24 @@ export class DimensionChunkSource {
     const lx = worldX - cx * CHUNK_SIZE;
     const lz = worldZ - cz * CHUNK_SIZE;
     const chunk = this.generateChunk(cx, cz);
+    const isSolid = (id: number) => id !== 0 && id !== 5 && id !== 227 && id !== 226;
+    let firstSolid = -1;
+    let foundGap = false;
     for (let y = CHUNK_HEIGHT - 1; y >= 1; y--) {
       const id = chunk.getBlock(lx, y, lz);
-      // Skip air and fluids (water/lava/toxic) to land on solid ground.
-      if (id !== 0 && id !== 5 && id !== 227 && id !== 226) return y;
+      if (!isSolid(id)) {
+        foundGap = true; // an air/fluid gap below whatever we're standing on
+      } else {
+        if (firstSolid < 0) firstSolid = y;
+        // The true floor is the first solid block BELOW an air gap. This skips
+        // the nether's bedrock roof and any leaf/tree canopy so you spawn on
+        // the cave floor / forest floor instead of on top of the roof or a tree.
+        if (foundGap) return y;
+      }
     }
-    return -1;
+    // No gap above any solid (e.g. a solid ceiling to the top) — fall back to
+    // the topmost solid block rather than returning nothing.
+    return firstSolid;
   }
 
   /** Alias used by the creature spawner (CreatureTerrainSource interface). */

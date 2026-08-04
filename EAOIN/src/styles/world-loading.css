@@ -11,6 +11,19 @@
   background: #02030a;
 }
 
+/* Shader-based gravitational-lensing warp (replaces the old Babylon tube). */
+.warp-screen-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* The loading bar can be grabbed and dragged anywhere on screen. */
+.wl-bar-draggable { cursor: grab; touch-action: none; }
+.wl-bar-draggable:active { cursor: grabbing; }
+
 /* White flash as the warp completes and the wake-up begins. */
 .wl-flash {
   position: absolute;

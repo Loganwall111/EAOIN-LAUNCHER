@@ -72,19 +72,22 @@ describe('nextStageOf / prevStageOf — journey order', () => {
 });
 
 describe('portalTransition — look-gated transitions', () => {
-  it('advances only when VERY deep inside AND looking straight into the centre', () => {
+  it('advances when inside the centre looking into it, retreats only closer + away', () => {
     // far away: never advances no matter how you look
     expect(portalTransition(5, 0.9)).toBe(0);
-    // very deep + looking straight into the centre → advance
-    expect(portalTransition(0.25, 0.95)).toBe(1);
+    // deep + looking into the centre → advance
+    expect(portalTransition(0.4, 0.8)).toBe(1);
     // deep but only looking partly in (not straight) → stay
-    expect(portalTransition(0.25, 0.6)).toBe(0);
-    // near centre, looking away → retreat
-    expect(portalTransition(0.25, -0.8)).toBe(-1);
+    expect(portalTransition(0.4, 0.5)).toBe(0);
+    // very close + looking away → retreat
+    expect(portalTransition(0.3, -0.8)).toBe(-1);
     // near centre but looking sideways → stay
-    expect(portalTransition(0.25, 0)).toBe(0);
-    // deep-ish but NOT deep enough (outside the tight advance radius) → stay
-    expect(portalTransition(0.45, 0.95)).toBe(0);
+    expect(portalTransition(0.3, 0)).toBe(0);
+    // within advance radius but not deep enough for retreat → stay when sideways
+    expect(portalTransition(0.5, 0.1)).toBe(0);
+    // advance radius is bigger than retreat radius, so looking away inside 0.5 but
+    // outside 0.45 does NOT retreat
+    expect(portalTransition(0.48, -0.8)).toBe(0);
   });
   it('retreats only when very close and looking away', () => {
     // within back radius and looking away

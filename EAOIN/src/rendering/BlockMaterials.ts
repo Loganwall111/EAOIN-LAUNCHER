@@ -214,10 +214,12 @@ function createBlockTexture(
   pack: TexturePackId,
   opaque: boolean
 ): Texture {
-  // 2.0 Update Part 2 — grass gets its OWN PNG retexture. When the PNG is
-  // present it is loaded as the grass texture (still the game's style, just a
-  // dedicated asset). Any load failure falls back to the procedural texels.
-  if (id === 1) {
+  // 2.0 Update Part 2 — grass gets its OWN PNG retexture, but ONLY on the side
+  // faces. The top face stays a full green crown and the bottom stays dirt, so
+  // grass reads as green-on-top / brown-sides-and-bottom (a single PNG on every
+  // face made it look like a flat glitched cube). Any load failure falls back
+  // to the procedural texels.
+  if (id === 1 && variant === VARIANT_SIDE) {
     const pngTexture = new Texture('./textures/grass.png', scene, false, true, Texture.NEAREST_SAMPLINGMODE);
     pngTexture.name = `tex_grass_png_${variant}`;
     pngTexture.wrapU = Texture.WRAP_ADDRESSMODE;

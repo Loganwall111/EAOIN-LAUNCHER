@@ -882,13 +882,15 @@ const STAGE_ORDER = [0, 6, ...JOURNEY_WORLDS.map((_, i) => WORLD_START + i)] as 
  * black hole doesn't snap you to the void/next world — you have to fly really
  * deep and look directly into the centre to fall through.
  */
-export const PORTAL_IN_RADIUS = 0.35;
+export const PORTAL_IN_RADIUS = 0.55;
 /** Radius at which flying to the centre and looking away retreats a stage. */
-export const PORTAL_BACK_RADIUS = 0.6;
+export const PORTAL_BACK_RADIUS = 0.45;
 /** How directly you must be looking at the centre to go deeper (near-straight). */
-export const LOOK_IN = 0.7;
+export const LOOK_IN = 0.6;
 /** How directly you must be looking away to go back. */
 export const LOOK_OUT = -0.5;
+/** Minimum seconds between transitions so you can't bounce in and out. */
+export const PORTAL_COOLDOWN = 0.9;
 
 /** Advance to the next area in the journey order. */
 export function nextStageOf(stage: number): number {
@@ -1310,6 +1312,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const keysRef = useRef<Set<string>>(new Set());
   /** Accumulates scroll input so the render loop can apply it. */
   const scrollAccumRef = useRef(0);
+  /** Timestamp of the last portal transition — prevents instant bounce-back. */
+  const lastTransitionRef = useRef(0);
   /** Screen-space pan offset — dragging in "move" mode slides the hole around. */
   const panRef = useRef({ x: 0, y: 0 });
 
@@ -1627,14 +1631,18 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         scrollAccumRef.current = 0;
       }
 
-      // Portal transition: only when near the centre AND looking into/away.
+      // Portal transition: only when near the centre AND looking into/away,
+      // and never immediately after a transition (cooldown prevents bouncing
+      // back out as soon as you arrive).
       const dist = Math.hypot(c.x, c.y, c.z);
       let lookDot = 0;
       if (dist > 1e-4) lookDot = (fwd.x * -c.x + fwd.y * -c.y + fwd.z * -c.z) / dist;
+      const nowMs = performance.now();
       const dir = portalTransition(dist, lookDot);
-      if (dir !== 0) {
+      if (dir !== 0 && nowMs - lastTransitionRef.current > PORTAL_COOLDOWN * 1000) {
         const next = dir === 1 ? nextStageOf(stage) : prevStageOf(stage);
         if (next !== stage) {
+          lastTransitionRef.current = nowMs;
           const s = spawnForStage(next);
           c.x = s.x; c.y = s.y; c.z = s.z; c.yaw = s.yaw; c.pitch = s.pitch;
           stageRef.current = next;

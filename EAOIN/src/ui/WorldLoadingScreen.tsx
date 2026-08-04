@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getWorldType, WorldTypeID } from '../world/WorldTypes';
-import WarpTunnel3D from './WarpTunnel3D';
+import WarpScreen from './WarpScreen';
 
 interface LoadingProgressSnapshot {
   percent: number;
@@ -64,7 +64,37 @@ export default function WorldLoadingScreen({
   const [tipIndex] = useState(() => Math.floor(Math.random() * TIPS.length));
   const [timedOut, setTimedOut] = useState(false);
   const doneRef = useRef(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barStyle, setBarStyle] = useState<React.CSSProperties>({});
   const type = useMemo(() => getWorldType(worldType), [worldType]);
+
+  // Make the loading bar movable: grab it and drag it anywhere while loading.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const drag = { active: false, dx: 0, dy: 0 };
+    const onDown = (e: PointerEvent) => {
+      drag.active = true;
+      drag.dx = e.clientX - bar.getBoundingClientRect().left;
+      drag.dy = e.clientY - bar.getBoundingClientRect().top;
+      e.preventDefault();
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!drag.active) return;
+      const left = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - drag.dx));
+      const top = Math.max(0, Math.min(window.innerHeight - 60, e.clientY - drag.dy));
+      setBarStyle({ left, top, width: 'min(520px, 92vw)', transform: 'none', bottom: 'auto' });
+    };
+    const onUp = () => { drag.active = false; };
+    bar.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      bar.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
 
   // Read the completion callback through a ref. While the world is starting up
   // the parent (App) re-renders frequently — every HUD telemetry tick hands us
@@ -116,10 +146,10 @@ export default function WorldLoadingScreen({
 
   return (
     <div className="world-loading" role="status" aria-live="polite">
-      {/* Real 3D warp tunnel: neon tube corridor + hyperdrive starfield +
-          neuron fibres + fresnel Cosmic Entity, driven by the loading %.
-          This fully replaces the old flat CSS particle 'snowstorm'. */}
-      <WarpTunnel3D progress={percent} ready={ready} />
+      {/* Shader warp: full-screen gravitational-lensing warp (the same style as
+          the Singularity black hole) driven by the loading %. This replaces the
+          old Babylon neon-tube wormhole with a pure shader effect. */}
+      <WarpScreen progress={percent} ready={ready} />
 
       {/* Centered overlay stays minimal so the warp is the star. */}
       <div className="wl-content">
@@ -157,8 +187,9 @@ export default function WorldLoadingScreen({
         </div>
       </div>
 
-      {/* Purple loading bar pinned to the very bottom of the screen. */}
-      <div className="wl-bar-block">
+      {/* Purple loading bar — draggable, so you can move it out of the way
+          while the warp shader plays. */}
+      <div ref={barRef} className="wl-bar-block wl-bar-draggable" style={barStyle}>
         <div className="wl-bar-row">
           <span className="wl-stage-small">{chunkDetail ?? 'Loading terrain'}</span>
           <span className="wl-pct">{Math.round(percent)}%</span>

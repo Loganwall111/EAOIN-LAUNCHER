@@ -92,6 +92,59 @@
 .beat-look .wake-vignette { opacity: 0.55; }
 .beat-hands .wake-vignette { opacity: 0.22; }
 
+/* --------------------- warping / VHS dream effect ----------------------- */
+
+.wake-vhs {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 2px, transparent 4px),
+    radial-gradient(ellipse at 50% 55%, rgba(120,90,255,0.12), transparent 70%);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  animation: wake-vhs-roll 0.5s linear infinite;
+  transition: opacity 1800ms ease-out;
+}
+@keyframes wake-vhs-roll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+.beat-ground .wake-vhs { opacity: 0.5; }
+.beat-push .wake-vhs { opacity: 0.28; }
+.beat-look .wake-vhs { opacity: 0.12; }
+.beat-hands .wake-vhs { opacity: 0; }
+
+/* ------------- glowing halo of stars hovering around the figure ---------- */
+
+.wake-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  transition: opacity 1800ms ease-out;
+}
+.wake-stars span {
+  position: absolute;
+  left: var(--ws-x, 50%);
+  top: var(--ws-y, 50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #cfe3ff;
+  box-shadow: 0 0 8px 2px rgba(150,190,255,0.9);
+  animation: wake-star-drift var(--ws-d, 1.2s) ease-in-out infinite alternate;
+  opacity: 0;
+}
+.wake-stars span:nth-child(even) { background: #ffe9c9; box-shadow: 0 0 8px 2px rgba(255,210,150,0.85); }
+@keyframes wake-star-drift {
+  0% { transform: translate3d(-12px, -6px, 0) scale(0.7); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translate3d(14px, 8px, 0) scale(1.2); opacity: 0.9; }
+}
+.beat-ground .wake-stars { opacity: 0.6; }
+.beat-push .wake-stars { opacity: 0.32; }
+.beat-look .wake-stars { opacity: 0.12; }
+.beat-hands .wake-stars { opacity: 0; }
+
 /* ------------------------------ the hands ------------------------------- */
 
 .wake-hands {

@@ -705,7 +705,7 @@
   font: 900 clamp(64px, 14vw, 184px)/0.78 var(--ui-font, sans-serif);
   letter-spacing: -0.075em;
   color: #b9bfc6;
-  background: linear-gradient(180deg, #ffffff 0%, #d9e0e6 24%, #9ca8b3 54%, #56616d 55%, #89939d 72%, #3c4651 100%);
+  background: linear-gradient(180deg, #f2f4f6 0%, #c7cfd6 22%, #98a3af 50%, #66717d 54%, #8d97a1 70%, #404a55 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

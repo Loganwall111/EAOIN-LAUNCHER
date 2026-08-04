@@ -135,6 +135,15 @@ export default function SpawnAwakening({
       <div className="wake-blur" />
       <div className="wake-vignette" />
 
+      {/* Warping/VHS dream effect + a glowing halo of hovering stars, which
+          fades as your eyes settle on the real world. */}
+      <div className="wake-vhs" aria-hidden="true" />
+      <div className="wake-stars" aria-hidden="true">
+        {Array.from({ length: 14 }, (_, i) => (
+          <span key={i} style={{ ['--ws-i' as string]: i, ['--ws-x' as string]: `${(i * 47) % 100}%`, ['--ws-y' as string]: `${(i * 31) % 100}%`, ['--ws-d' as string]: `${(i % 5) + 0.6}s` }} />
+        ))}
+      </div>
+
       {/* First-person hands, planted on the ground then raised into view.
           (The old third-person body figure with its tilting face was removed —
           the actual camera now tilts up as the player rises.) */}
