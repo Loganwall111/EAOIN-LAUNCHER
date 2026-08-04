@@ -211,6 +211,25 @@ export class RealityRiftSystem {
     return out;
   }
 
+  /**
+   * Stepping through a rift. When the player moves into the heart of a rift
+   * they pass into it and are spat back out onto safe ground. Returns the
+   * safe landing position (the big End island, NOT the black hole), or null
+   * if the player isn't inside a rift.
+   *
+   * `landing` must be the world position to land on when the rift spits you out.
+   */
+  stepThrough(playerPos: Vector3, landing: Vector3): Vector3 | null {
+    for (const r of this.rifts) {
+      const to = r.mesh.position.subtract(playerPos);
+      const dist = to.length();
+      if (dist < r.def.size * 0.9) {
+        return landing.clone().add(new Vector3(0, 2, 0));
+      }
+    }
+    return null;
+  }
+
   dispose(): void {
     for (const r of this.rifts) r.dispose();
     this.rifts = [];

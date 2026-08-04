@@ -1717,6 +1717,22 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           tempRiftPull.set(riftPull.x * deltaSeconds, riftPull.y * deltaSeconds, riftPull.z * deltaSeconds);
           camera.position.addInPlace(tempRiftPull);
         }
+        // Stepping THROUGH a rift teleports you onto the safe End island floor
+        // (never the black hole). In other dimensions it lands you at spawn.
+        {
+          const inEnd = chunkSource.getDimension() === 'end';
+          const landing = inEnd
+            ? new Vector3(0, terrain.getHeightAt(0, 0), 0)
+            : new Vector3(0, terrain.getHeightAt(0, 0), 0);
+          const target = realityRifts.stepThrough(camera.position, landing);
+          if (target) {
+            camera.position.set(target.x, target.y + 2, target.z);
+            streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+            forceTerrainCoverage = true;
+            showActionMessage('🌀 You step through the rift — the End spits you back onto solid ground.');
+            audio.play('ui', settingsRef.current);
+          }
+        }
         // Celestial black-hole suction: at night the black hole in the sky pulls
         // the player toward it, so flying near it feels like falling in.
         const bhPull = atmosphere.celestial.pullFromBlackHole(camera.position);
