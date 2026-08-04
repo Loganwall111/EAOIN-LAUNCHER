@@ -319,6 +319,9 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   useEffect(() => { inventoryRef.current = inventory; }, [inventory]);
   useEffect(() => { survivalStatsRef.current = survivalStats; }, [survivalStats]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+  /** Live Full-Game-Settings read by the render loop so toggles apply instantly. */
+  const superSettingsRef = useRef(superSettings);
+  useEffect(() => { superSettingsRef.current = superSettings; }, [superSettings]);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
   useEffect(() => { worldTimeRef.current = worldTime; }, [worldTime]);
@@ -1259,9 +1262,11 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             pipeline.samples = fx.samples;
           }
           creatureManager.setPopulationCap(Math.round(26 * fx.creatureScale));
-          atmosphere.setCloudDensityScale(fx.cloudScale);
+          // Full Game Settings override cloud density when customised.
+          const ssFx = superSettingsRef.current;
+          atmosphere.setCloudDensityScale(ssFx?.cloudDensity !== undefined && ssFx.cloudDensity !== 0.5 ? ssFx.cloudDensity : fx.cloudScale);
           // Particles are pooled inside the atmosphere system.
-          const particlesEnabled = shouldEnableAtmosphereParticles(settingsRef.current, tier);
+          const particlesEnabled = ssFx?.particleDensity === 0 ? false : shouldEnableAtmosphereParticles(settingsRef.current, tier);
           if (particlesEnabled !== lastParticleEnabled) {
             lastParticleEnabled = particlesEnabled;
             atmosphere.setParticlesEnabled(particlesEnabled);
@@ -1453,13 +1458,17 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         // World clock. At the 1× default this advances deltaSeconds * 0.02 world
         // hours — the exact shipping rate; the developer panel's day/night
         // speed slider simply scales it (0.25×–8×) or freezes it entirely.
-        const clockFrozen = timeState.frozen || devTuningRef.current.timeFrozen;
-        if (!clockFrozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * worldClockRatePerSecond(devTuningRef.current, DAY_LENGTH_SECONDS)) % 24 }; worldTimeRef.current = timeState; }
+        // Full Game Settings: daylight-cycle toggle + custom day length.
+        const ss = superSettingsRef.current;
+        const superDayLength = Math.max(120, ss?.dayLength ?? DAY_LENGTH_SECONDS);
+        const clockFrozen = timeState.frozen || devTuningRef.current.timeFrozen || (ss?.doDaylightCycle === false);
+        if (!clockFrozen) { timeState = { ...timeState, timeOfDay: (timeState.timeOfDay + deltaSeconds * worldClockRatePerSecond(devTuningRef.current, superDayLength)) % 24 }; worldTimeRef.current = timeState; }
         else if (worldTimeRef.current !== timeState) timeState = worldTimeRef.current;
         // Wrapping past midnight advances the day counter shown in the HUD.
         if (timeState.timeOfDay < lastTimeOfDay) worldDay += 1;
         lastTimeOfDay = timeState.timeOfDay;
-        const dimGravityY = dimensionRuntime.getState().id === 'overworld' ? -0.52 : dimensionRuntime.getState().id === 'crystal_realm' ? -0.30 : dimensionRuntime.getState().id === 'moon' ? -0.14 : -0.62;
+        const baseGravity = dimensionRuntime.getState().id === 'overworld' ? -0.52 : dimensionRuntime.getState().id === 'crystal_realm' ? -0.30 : dimensionRuntime.getState().id === 'moon' ? -0.14 : -0.62;
+        const dimGravityY = baseGravity * (ss?.gravityScale ?? 1);
         const gravityStrength = GRAVITY_BASE * (Math.abs(dimGravityY) / 0.52);
         const jumpVel = JUMP_VELOCITY_BASE * (dimGravityY < -0.3 ? 1 : 0.9 + Math.abs(dimGravityY) / 0.52 * 0.2);
 
@@ -3062,6 +3071,25 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             <button className="pause-btn" onClick={onToggleSettings}>Settings</button>
             <button className="pause-btn" onClick={onToggleInventory}>Inventory</button>
             <button className="pause-btn" onClick={() => onOpenCharacter?.()}>Character</button>
+            <div className="pause-worldsettings">
+              <div className="pause-ws-title">World Settings</div>
+              <div className="pause-ws-row">
+                <span>Game Mode</span>
+                <select value={gameMode} onChange={(e) => onGameModeChange?.(e.target.value as GameMode)} className="ui-input">
+                  <option value="survival">Survival</option>
+                  <option value="creative">Creative</option>
+                  <option value="story">Story</option>
+                  <option value="experimental">Experimental</option>
+                  <option value="incredible">Incredible</option>
+                </select>
+              </div>
+              <label className="pause-ws-row"><span>Show stats</span><input type="checkbox" checked={settings.showStats} onChange={(e) => onSettingsChange({ ...settings, showStats: e.target.checked })} /></label>
+              <label className="pause-ws-row"><span>Show objectives</span><input type="checkbox" checked={settings.showObjectives} onChange={(e) => onSettingsChange({ ...settings, showObjectives: e.target.checked })} /></label>
+              <label className="pause-ws-row"><span>Command blocks</span><input type="checkbox" checked={settings.commandBlocksEnabled} onChange={(e) => onSettingsChange({ ...settings, commandBlocksEnabled: e.target.checked })} /></label>
+              <label className="pause-ws-row"><span>Keep inventory</span><input type="checkbox" checked={settings.keepInventory} onChange={(e) => onSettingsChange({ ...settings, keepInventory: e.target.checked })} /></label>
+              <label className="pause-ws-row"><span>Particles</span><input type="checkbox" checked={settings.particlesEnabled} onChange={(e) => onSettingsChange({ ...settings, particlesEnabled: e.target.checked })} /></label>
+              <label className="pause-ws-row"><span>Fog</span><input type="checkbox" checked={settings.fogEnabled} onChange={(e) => onSettingsChange({ ...settings, fogEnabled: e.target.checked })} /></label>
+            </div>
             <button className="pause-btn save" onClick={() => { saveWorldEditsRef.current(); onSaveAndQuit?.(); }}>Save &amp; Quit to Menu</button>
           </div>
         )}
