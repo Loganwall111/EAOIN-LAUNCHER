@@ -346,25 +346,29 @@ void main(void){
   pull(player: Vector3, out: Vector3): Vector3 {
     out.set(0, 0, 0);
     if (!this.active || !this.core) return out;
-    const dx = -player.x;
-    const dz = -player.z;
-    const dist = Math.hypot(dx, dz);
+    // Pull toward the hole's ACTUAL 3D position (not the origin plane).
+    const to = this.core.position.subtract(player);
+    const dist = to.length();
     const edge = this.edge;
-    if (dist < 2) return out; // centred on the axis
+    if (dist < 2) return out;
     if (dist > edge) return out;
     // Strength grows as you approach — stronger than before, so you get
     // visibly pulled in and stretched (spaghettified). Scaled with the hole.
     const falloff = Math.max(0, (edge - dist) / edge);
     const strength = falloff * falloff * 6.0 * Math.max(1, this.horizonRadius / 13);
-    out.x = (dx / Math.max(1, dist)) * strength;
-    out.z = (dz / Math.max(1, dist)) * strength;
+    const dir = to.normalize();
+    out.x = dir.x * strength;
+    out.y = dir.y * strength;
+    out.z = dir.z * strength;
     return out;
   }
 
-  /** True when the entity has crossed the event horizon (entered the hole). */
+  /** True when the entity has crossed the event horizon (entered the hole).
+   *  Uses TRUE 3D distance to the hole's core position (not just the horizontal
+   *  x/z plane), so you can actually fly into the hole wherever it hangs. */
   entered(player: Vector3): boolean {
     if (!this.active || !this.core) return false;
-    return Math.hypot(player.x, player.z) < this.horizonRadius;
+    return Vector3.Distance(this.core.position, player) < this.horizonRadius;
   }
 
   /**
