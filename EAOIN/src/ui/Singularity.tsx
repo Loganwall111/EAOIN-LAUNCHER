@@ -76,6 +76,15 @@ const FRAG = `
   uniform float u_twist;      // 0..1 radial screen swirl
   uniform float u_glitch;     // 0..1 glitch bands
 
+  // ---- Backgrounds (the scene the black hole sits in) + more hole tuning ----
+  uniform int u_bgIndex;       // which background generator to draw
+  uniform float u_bgHue;       // palette hue for sub-variants
+  uniform float u_bgSpeed;     // background animation speed
+  uniform float u_size;        // horizon SIZE multiplier — make it massive
+  uniform float u_diskBright;  // accretion-disk brightness
+  uniform float u_ringW;       // photon-ring width
+  uniform float u_lens;        // gravitational lensing strength
+
   const float PI = 3.14159265359;
   const float RS = 1.0;            // Schwarzschild radius (unit)
   const int MAX_STEPS = 260;
@@ -230,6 +239,159 @@ const FRAG = `
     return mapMonitor(p, mat);
   }
 
+  // ------------------------------------------------------------------
+  // Background generators — the stunning scene the black hole sits in.
+  // Each takes the escaped ray direction and draws a backdrop (deep space,
+  // galaxy, nebula, psychedelic, mountains, city, blood cells, brain,
+  // cosmos, grid, fire, ice, lava, rainbow). u_bgHue recolours any of them.
+  // ------------------------------------------------------------------
+  float bgTerrain(vec2 p){
+    float h = 0.0; float a = 0.5; vec2 q = p;
+    for (int i = 0; i < 4; i++) { h += a * fbm(q); q = q*1.7 + vec2(3.1, 1.7); a *= 0.5; }
+    return h;
+  }
+  vec3 bgDeepSpace(vec3 d, float t){
+    vec2 p = vec2(d.z, d.x)*60.0 + d.y*30.0;
+    float star = step(1.0 - u_starDensity, hash(floor(p)));
+    vec3 col = u_starCol * star * 0.9;
+    float neb = fbm(p*0.35 + vec2(t*0.03*u_bgSpeed, t*0.02*u_bgSpeed));
+    col += u_nebulaCol * neb * u_nebulaAmt * 1.2;
+    col += vec3(0.015, 0.03, 0.08);
+    return col;
+  }
+  vec3 bgGalaxy(vec3 d, float t){
+    vec2 p = vec2(d.x, d.y)*40.0;
+    float ang = atan(p.y, p.x);
+    float r = length(p);
+    float arm = 0.5 + 0.5*sin(ang*3.0 - r*0.5 - t*0.1*u_bgSpeed);
+    vec3 col = u_nebulaCol * smoothstep(1.0, 0.2, r) * (0.3 + 0.7*arm);
+    col += u_starCol * step(0.98, hash(floor(p*8.0))) * 0.7;
+    return col + vec3(0.01, 0.01, 0.03);
+  }
+  vec3 bgNebula(vec3 d, float t){
+    vec2 p = d.xy*6.0;
+    float n = fbm(p + vec2(t*0.04*u_bgSpeed, 0.0));
+    float n2 = fbm(p*1.6 - vec2(0.0, t*0.03*u_bgSpeed));
+    vec3 col = mix(u_starCol*0.3, u_nebulaCol, n);
+    col += u_starCol * 0.3 * n2;
+    return col + vec3(0.02, 0.02, 0.05);
+  }
+  vec3 bgPsychedelic(vec3 d, float t){
+    vec2 p = d.xy*3.0;
+    float n = fbm(p*2.0 + t*0.25*u_bgSpeed);
+    float m = fbm(p*3.0 - t*0.3*u_bgSpeed);
+    vec3 a = hueShift(u_nebulaCol, n*6.28318 + t*0.2*u_bgSpeed);
+    vec3 b = hueShift(u_diskCol2, m*6.28318);
+    return a*(0.4+0.6*n) + b*(0.3+0.4*m);
+  }
+  vec3 bgMountains(vec3 d, float t){
+    vec3 sky = mix(vec3(0.08,0.12,0.3), vec3(0.5,0.6,0.95), smoothstep(-0.3,0.6,d.y));
+    if (d.y < 0.0) {
+      vec2 p = vec2(atan(d.z, d.x), d.y*40.0)*3.0;
+      float m = bgTerrain(p + vec2(t*0.02*u_bgSpeed, 0.0));
+      vec3 rock = mix(vec3(0.12,0.2,0.16), vec3(0.9,0.95,1.0), smoothstep(0.55,0.8,m));
+      return rock*smoothstep(-0.6,0.0,d.y) + sky*0.25;
+    }
+    return sky;
+  }
+  vec3 bgCity(vec3 d, float t){
+    vec3 sky = mix(vec3(0.02,0.03,0.12), vec3(0.3,0.15,0.4), smoothstep(-0.4,0.5,d.y));
+    if (d.y > 0.0) return sky + vec3(1.0,0.8,0.5)*pow(max(0.0,d.y),3.0)*0.3;
+    vec2 p = vec2(d.x, d.z);
+    float col = floor(p.x*4.0);
+    float h = (0.2 + 0.5*fbm(vec2(col, 1.0))) * 2.0;
+    float row = 1.0 - smoothstep(0.0, 1.0, -d.y/h);
+    vec3 bcol = mix(vec3(0.05,0.06,0.12), vec3(0.9,0.7,0.3), step(0.5, hash(vec2(col, 3.0)))*0.6);
+    return mix(sky, bcol, row) + vec3(1.0,0.9,0.5)*step(0.9, hash(vec2(col,7.0)))*0.5*row;
+  }
+  vec3 bgBlood(vec3 d, float t){
+    vec3 col = vec3(0.35,0.02,0.03);
+    vec3 p = d*10.0 + vec3(0.0, 0.0, t*0.1*u_bgSpeed);
+    vec3 c = floor(p); vec3 lp = fract(p)-0.5;
+    float cell = smoothstep(0.0, -0.1, sdSphere(lp, 0.35));
+    col = mix(col, vec3(0.85,0.08,0.1), cell);
+    float nuc = smoothstep(0.0, -0.06, sdSphere(lp, 0.12));
+    col = mix(col, vec3(0.5,0.02,0.06), nuc*cell);
+    return col;
+  }
+  vec3 bgBrain(vec3 d, float t){
+    vec3 col = vec3(0.08,0.06,0.12);
+    vec3 p = d*8.0;
+    vec3 c = floor(p); vec3 lp = fract(p)-0.5;
+    float cell = smoothstep(0.0,-0.2, sdSphere(lp,0.28));
+    col = mix(col, vec3(0.9,0.7,1.0), cell*0.5);
+    float rnd = hash(c.xy + vec2(c.z*3.7, c.z*3.7));
+    if (rnd > 0.5) {
+      float seg = sdSegment(p, c, c+vec3(1,0,0), 0.02);
+      col = mix(col, vec3(0.4,0.9,1.0), smoothstep(0.0,-0.05,seg)*0.6);
+    }
+    return col;
+  }
+  vec3 bgCosmos(vec3 d, float t){
+    vec2 p = vec2(d.z,d.x)*20.0;
+    float r = length(p);
+    vec3 col = u_nebulaCol*0.5*(0.4+0.6*fbm(p*0.5 + t*0.02*u_bgSpeed));
+    col += vec3(1.0,0.8,0.6)*exp(-r*0.6)*0.5;
+    col += u_starCol*step(0.985, hash(floor(p*10.0)))*0.8;
+    return col;
+  }
+  vec3 bgGrid(vec3 d, float t){
+    if (d.y > 0.0) return vec3(0.01,0.01,0.02);
+    vec2 p = d.xz / max(abs(d.y), 1e-4) * 3.0;
+    vec2 g = abs(fract(p)-0.5);
+    float line = smoothstep(0.02, 0.0, min(g.x, g.y));
+    vec3 col = mix(vec3(0.02,0.02,0.05), u_diskCol2, line);
+    float pulse = 0.5+0.5*sin(t*2.0*u_bgSpeed);
+    return col*(0.4+0.3*pulse);
+  }
+  vec3 bgFire(vec3 d, float t){
+    float n = fbm(d.xy*4.0 + vec2(0.0, t*0.6*u_bgSpeed));
+    vec3 col = mix(vec3(0.1,0.0,0.0), vec3(1.0,0.5,0.05), n);
+    col += vec3(1.0,0.9,0.4)*pow(n,4.0)*0.8;
+    return col;
+  }
+  vec3 bgIce(vec3 d, float t){
+    vec3 sky = mix(vec3(0.02,0.05,0.15), vec3(0.3,0.7,0.9), smoothstep(-0.3,0.5,d.y));
+    float a = fbm(vec2(d.x, d.y)*3.0 + t*0.1*u_bgSpeed);
+    sky += vec3(0.2,1.0,0.6)*smoothstep(0.5,0.9,a)*0.4;
+    if (d.y < 0.0) {
+      float m = bgTerrain(vec2(atan(d.z, d.x), d.y*40.0)*3.0);
+      return mix(vec3(0.4,0.6,0.8), vec3(0.95,1.0,1.0), smoothstep(0.5,0.8,m));
+    }
+    return sky;
+  }
+  vec3 bgLava(vec3 d, float t){
+    float n = fbm(d.xy*3.0 + t*0.1*u_bgSpeed);
+    vec3 col = mix(vec3(0.05,0.01,0.0), vec3(1.0,0.3,0.02), smoothstep(0.4,0.9,n));
+    col += vec3(1.0,0.8,0.3)*step(0.85,n)*0.6;
+    return col;
+  }
+  vec3 bgRainbow(vec3 d, float t){
+    vec2 p = d.xy*3.0;
+    float n = fbm(p + t*0.2*u_bgSpeed);
+    vec3 col = hueShift(u_nebulaCol*0.6 + vec3(0.1), n*6.28318 + t*0.3*u_bgSpeed);
+    return col*(0.4+0.6*n);
+  }
+  // Pick the active background generator, then recolor by palette hue.
+  vec3 renderBackground(vec3 d, float t){
+    vec3 col;
+    if (u_bgIndex == 0) col = bgDeepSpace(d,t);
+    else if (u_bgIndex == 1) col = bgGalaxy(d,t);
+    else if (u_bgIndex == 2) col = bgNebula(d,t);
+    else if (u_bgIndex == 3) col = bgPsychedelic(d,t);
+    else if (u_bgIndex == 4) col = bgMountains(d,t);
+    else if (u_bgIndex == 5) col = bgCity(d,t);
+    else if (u_bgIndex == 6) col = bgBlood(d,t);
+    else if (u_bgIndex == 7) col = bgBrain(d,t);
+    else if (u_bgIndex == 8) col = bgCosmos(d,t);
+    else if (u_bgIndex == 9) col = bgGrid(d,t);
+    else if (u_bgIndex == 10) col = bgFire(d,t);
+    else if (u_bgIndex == 11) col = bgIce(d,t);
+    else if (u_bgIndex == 12) col = bgLava(d,t);
+    else col = bgRainbow(d,t);
+    return hueShift(col, u_bgHue);
+  }
+
   // Void interior: you are inside the black hole. Looking OUTWARD (radially
   // away from the centre — back the way you came) shows the outside universe
   // through the hole you fell through; looking INWARD shows the deeper void.
@@ -239,7 +401,7 @@ const FRAG = `
     float inLook = clamp(dot(rd, -outDir), 0.0, 1.0);
     vec3 col = vec3(0.004, 0.002, 0.008);
     // Looking back out → see the universe (stars) through the exit.
-    col += starfield(rd) * outLook * 1.2;
+    col += renderBackground(rd, u_time) * outLook * 1.2;
     // The exit accretion ring hangs on the horizon of the outward direction.
     vec3 perp = rd - outDir * dot(rd, outDir);
     float ring = smoothstep(0.12, 0.02, abs(length(perp) - 0.35)) * outLook;
@@ -326,7 +488,7 @@ const FRAG = `
         col += vec3(1.0,0.7,0.4) * rim * 0.5;
       }
     } else {
-      col = starfield(rd);
+      col = renderBackground(rd, u_time);
     }
     // Bloom lift so every world glows.
     col += col*col*0.35;
@@ -375,13 +537,15 @@ const FRAG = `
       for (int i = 0; i < MAX_STEPS; i++) {
         float r = length(pos);
         // Horizon "breathes" — pulses when the breath toggle is on.
-        float h = RS * u_gravity * (1.0 + u_breath * 0.35 * sin(u_time * 2.0));
+        // u_size lets you make the hole absolutely massive.
+        float h = RS * u_size * u_gravity * (1.0 + u_breath * 0.35 * sin(u_time * 2.0));
 
         float stepLen = clamp((r - h) * 0.4, 0.012, 1.4);
         if (r < h * 1.25) stepLen = 0.01;
 
         // Gravitational deflection: bend the ray toward the hole ~ 1/r^2.
-        vec3 gAcc = -h * 0.8 / max(r*r, 1e-4) * (pos / max(r, 1e-4));
+        // u_lens scales how hard space bends around the hole.
+        vec3 gAcc = -h * 0.8 * u_lens / max(r*r, 1e-4) * (pos / max(r, 1e-4));
         ray = normalize(ray + gAcc * stepLen * 0.5);
 
         // Accretion disk with extra glow (fluid turbulence mixes in).
@@ -395,12 +559,13 @@ const FRAG = `
           float edge = smoothstep(0.0, 1.0, innerT);
           vec3 diskCol = u_diskCol*edge + u_diskCol2*u_swirlAmt;
           float thickFade = 1.0 - abs(y)/max(u_diskThickness, 1e-4);
-          col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk;
+          col += diskCol * swirl * thickFade * (0.6 + innerT*0.8) * 0.7 * u_showDisk * u_diskBright;
         }
 
         // Photon-ring / bloom halo around the horizon for extra glow.
+        // u_ringW tunes how wide the ring halo spreads.
         float rglow = max(r - h, 0.0);
-        col += u_glowCol * exp(-rglow*8.0) * u_glow * u_showGlow;
+        col += u_glowCol * exp(-rglow * (8.0 * u_ringW)) * u_glow * u_showGlow;
 
         pos += ray * stepLen;
         t += stepLen;
@@ -415,7 +580,7 @@ const FRAG = `
       }
 
       if (escaped || t >= MAX_DIST) {
-        col += starfield(ray);
+        col += renderBackground(ray, u_time);
       }
       // Glow bloom / lift so the hole reads bright and luminous.
       col += col*col*u_bloom;
@@ -554,6 +719,14 @@ export interface BlackHoleOpts {
   flicker: number;     // random flicker 0..1
   twist: number;       // radial screen swirl 0..1
   glitch: number;      // glitch bands 0..1
+  // Backgrounds + massive-hole tuning (Part 3)
+  bgIndex: number;     // which background the black hole sits in
+  bgHue: number;       // background palette hue (sub-variants)
+  bgSpeed: number;     // background animation speed
+  holeSize: number;    // horizon SIZE multiplier — crank it to go massive
+  diskBright: number;  // accretion-disk brightness
+  ringW: number;       // photon-ring width
+  lens: number;        // gravitational lensing strength
 }
 
 const DEFAULT_OPTS: BlackHoleOpts = {
@@ -591,6 +764,13 @@ const DEFAULT_OPTS: BlackHoleOpts = {
   flicker: 0,
   twist: 0,
   glitch: 0,
+  bgIndex: 0,
+  bgHue: 0,
+  bgSpeed: 1,
+  holeSize: 1,
+  diskBright: 1,
+  ringW: 1,
+  lens: 1,
 };
 
 /** Preset looks for the black hole — one click applies a full mood. */
@@ -690,6 +870,49 @@ function buildPresetLibrary(): BlackHolePreset[] {
 /** The full black-hole library: 8 featured + 144 generated + 12 wacky = 164. */
 export const BLACK_HOLE_PRESETS: BlackHolePreset[] = buildPresetLibrary();
 
+// ---- Backgrounds (the stunning scene the black hole sits in) --------------
+
+export interface BackgroundDef { id: string; label: string; emoji: string; index: number; hue: number; }
+
+/** The base generator each background is drawn from. */
+const BG_GENERATORS: { name: string; emoji: string; index: number; hue: number }[] = [
+  { name: 'Deep Space', emoji: '🌌', index: 0, hue: 0 },
+  { name: 'Galaxy', emoji: '🌀', index: 1, hue: 0 },
+  { name: 'Nebula', emoji: '☁️', index: 2, hue: 0 },
+  { name: 'Psychedelic', emoji: '🌈', index: 3, hue: 0 },
+  { name: 'Mountains', emoji: '🏔️', index: 4, hue: 0 },
+  { name: 'City', emoji: '🌃', index: 5, hue: 0 },
+  { name: 'Blood Cells', emoji: '🩸', index: 6, hue: 0 },
+  { name: 'Brain', emoji: '🧠', index: 7, hue: 0 },
+  { name: 'Cosmos', emoji: '🌠', index: 8, hue: 0 },
+  { name: 'Grid', emoji: '🔲', index: 9, hue: 0 },
+  { name: 'Fire', emoji: '🔥', index: 10, hue: 0 },
+  { name: 'Ice', emoji: '❄️', index: 11, hue: 0 },
+  { name: 'Lava', emoji: '🌋', index: 12, hue: 0 },
+  { name: 'Rainbow', emoji: '🎨', index: 13, hue: 0 },
+];
+
+/** Named hue variants — each base generator becomes several backgrounds. */
+const BG_VARIANTS: { label: string; hue: number }[] = [
+  { label: '', hue: 0 },
+  { label: ' Aurora', hue: 40 },
+  { label: ' Neon', hue: 200 },
+  { label: ' Ember', hue: 55 },
+];
+
+function buildBackgrounds(): BackgroundDef[] {
+  const out: BackgroundDef[] = [];
+  for (const gen of BG_GENERATORS) {
+    for (const v of BG_VARIANTS) {
+      out.push({ id: `bg_${gen.name.toLowerCase().replace(/[^a-z]/g, '')}${v.label.toLowerCase().replace(/[^a-z]/g, '')}`, label: gen.name + v.label, emoji: gen.emoji, index: gen.index, hue: (gen.hue + v.hue) % 360 });
+    }
+  }
+  return out;
+}
+
+/** 56 selectable backgrounds — each is a generator + a hue sub-variant. */
+export const BLACK_HOLE_BACKGROUNDS: BackgroundDef[] = buildBackgrounds();
+
 /** A single slider/toggle/colour control entry rendered inside the Studio panels. */
 export interface StudioControl {
   key: keyof BlackHoleOpts;
@@ -714,6 +937,10 @@ export const STUDIO_TUNES: StudioControl[] = [
   { key: 'nebulaAmt', label: 'Nebula glow', kind: 'slider', min: 0, max: 1, step: 0.01 },
   { key: 'fov', label: 'Field of view', kind: 'slider', min: 0.5, max: 2, step: 0.05 },
   { key: 'camSpeed', label: 'Flight speed', kind: 'slider', min: 1, max: 8, step: 0.1 },
+  { key: 'holeSize', label: 'Hole size (go massive)', kind: 'slider', min: 0.3, max: 4, step: 0.05 },
+  { key: 'diskBright', label: 'Disk brightness', kind: 'slider', min: 0, max: 3, step: 0.05 },
+  { key: 'ringW', label: 'Photon ring width', kind: 'slider', min: 0.3, max: 3, step: 0.05 },
+  { key: 'lens', label: 'Lensing strength', kind: 'slider', min: 0, max: 2.5, step: 0.05 },
 ];
 
 /** Wacky & fluid knobs — colour-changing, fluid sim, luminescence, glitch. */
@@ -787,6 +1014,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   optsRef.current = opts;
   const [tuneOpen, setTuneOpen] = useState(true);      // left studio panel
   const [presetOpen, setPresetOpen] = useState(true);  // right studio panel
+  const [bgGalleryOpen, setBgGalleryOpen] = useState(false); // backgrounds panel
+  const [customizeOpen, setCustomizeOpen] = useState(false); // top Customize bar
   const [dragMode, setDragMode] = useState<'look' | 'move'>('look');
   const dragModeRef = useRef<'look' | 'move'>('look');
   dragModeRef.current = dragMode;
@@ -1045,6 +1274,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       flicker: gl.getUniformLocation(prog, 'u_flicker'),
       twist: gl.getUniformLocation(prog, 'u_twist'),
       glitch: gl.getUniformLocation(prog, 'u_glitch'),
+      bgIndex: gl.getUniformLocation(prog, 'u_bgIndex'),
+      bgHue: gl.getUniformLocation(prog, 'u_bgHue'),
+      bgSpeed: gl.getUniformLocation(prog, 'u_bgSpeed'),
+      size: gl.getUniformLocation(prog, 'u_size'),
+      diskBright: gl.getUniformLocation(prog, 'u_diskBright'),
+      ringW: gl.getUniformLocation(prog, 'u_ringW'),
+      lens: gl.getUniformLocation(prog, 'u_lens'),
     };
 
     // Render at a higher resolution than CSS size (devicePixelRatio × resScale)
@@ -1166,6 +1402,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.flicker, o.flicker);
       gl.uniform1f(U.twist, o.twist);
       gl.uniform1f(U.glitch, o.glitch);
+      gl.uniform1i(U.bgIndex, o.bgIndex);
+      gl.uniform1f(U.bgHue, (o.bgHue * Math.PI) / 180);
+      gl.uniform1f(U.bgSpeed, o.bgSpeed);
+      gl.uniform1f(U.size, o.holeSize);
+      gl.uniform1f(U.diskBright, o.diskBright);
+      gl.uniform1f(U.ringW, o.ringW);
+      gl.uniform1f(U.lens, o.lens);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       raf = requestAnimationFrame(render);
     };
@@ -1293,6 +1536,42 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  // --- Make the studio panels draggable by grabbing their header bar --------
+  useEffect(() => {
+    const ctx = { active: false, el: null as HTMLDivElement | null, sx: 0, sy: 0, ox: 0, oy: 0 };
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('button')) return; // let buttons work (✕, modes, etc.)
+      const head = t.closest('.singularity-panel-head');
+      if (!head) return;
+      const panel = head.closest('.singularity-panel') as HTMLDivElement | null;
+      if (!panel) return;
+      ctx.active = true;
+      ctx.el = panel;
+      ctx.sx = e.clientX; ctx.sy = e.clientY;
+      ctx.ox = panel.offsetLeft; ctx.oy = panel.offsetTop;
+      e.preventDefault();
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!ctx.active || !ctx.el) return;
+      ctx.el.style.left = `${Math.max(0, ctx.ox + e.clientX - ctx.sx)}px`;
+      ctx.el.style.top = `${Math.max(0, ctx.oy + e.clientY - ctx.sy)}px`;
+    };
+    const onUp = () => { ctx.active = false; ctx.el = null; };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, []);
+
+  const selectBackground = (b: BackgroundDef) => {
+    setOpts((o) => ({ ...o, bgIndex: b.index, bgHue: b.hue }));
+  };
+
   // Free-fly journey: stage is driven by flying through the centre portal while
   // looking into it (deeper) or away (back). Moving sideways/up/down explores
   // freely within the current area.
@@ -1333,6 +1612,36 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
         </div>
         <button className="singularity-x" onClick={onExit ?? onBack} aria-label="Exit Singularity">✕</button>
       </div>
+
+      {/* Top CUSTOMIZE bar — a hub with thousands of knobs */}
+      <div className="singularity-topbar">
+        <button className={`singularity-topbar-btn ${customizeOpen ? 'active' : ''}`}
+          onClick={() => setCustomizeOpen((v) => !v)}>⚙️ Customize</button>
+        <button className="singularity-topbar-btn" onClick={() => { setBgGalleryOpen((v) => !v); setCustomizeOpen(false); }}>
+          🖼 Backgrounds</button>
+        <button className="singularity-topbar-btn" onClick={() => { setPresetOpen((v) => !v); setCustomizeOpen(false); }}>🎛 Hole look</button>
+        <button className="singularity-topbar-btn" onClick={() => { setTuneOpen((v) => !v); setCustomizeOpen(false); }}>🎚 Tune</button>
+        <button className="singularity-topbar-btn" onClick={() => { setItemsMode((v) => !v); setCustomizeOpen(false); }}>🎯 Items</button>
+        <button className="singularity-topbar-btn" onClick={resetView}>↺ Reset</button>
+      </div>
+      {customizeOpen && (
+        <div className="singularity-customize-menu">
+          <div className="singularity-studio-sec">Quick configure</div>
+          <div className="singularity-mode-row">
+            <button className="singularity-mode-btn" onClick={() => { setBgGalleryOpen(true); setCustomizeOpen(false); }}>🖼 Pick a background</button>
+            <button className="singularity-mode-btn" onClick={() => { setPresetOpen(true); setCustomizeOpen(false); }}>🎛 Hole presets & colours</button>
+            <button className="singularity-mode-btn" onClick={() => { setTuneOpen(true); setCustomizeOpen(false); }}>🎚 Tune bars</button>
+            <button className="singularity-mode-btn" onClick={() => { setItemsMode(true); setCustomizeOpen(false); }}>🎯 Grab / throw</button>
+          </div>
+          <div className="singularity-studio-sec">Wacky & fluid (left panel)</div>
+          <div className="singularity-toggle-row">
+            {STUDIO_WACKY.filter((c) => c.kind === 'toggle').map((c) => (
+              <label key={c.key}><input type="checkbox" checked={opts[c.key] as boolean}
+                onChange={(e) => patchOpts({ [c.key]: e.target.checked } as Partial<BlackHoleOpts>)} /> {c.label}</label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="singularity-hint">
         {isJourney
@@ -1465,6 +1774,48 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       )}
       {!presetOpen && (
         <button className="singularity-float right" onClick={() => setPresetOpen(true)} aria-label="Open studio panel">🎛</button>
+      )}
+      {!bgGalleryOpen && (
+        <button className="singularity-float bg" onClick={() => setBgGalleryOpen(true)} aria-label="Open backgrounds">🖼</button>
+      )}
+
+      {/* BACKGROUND GALLERY — 50+ scenes the black hole sits in */}
+      {bgGalleryOpen && (
+        <div className="singularity-panel bg">
+          <div className="singularity-panel-head">
+            <span>🖼 Backgrounds · {BLACK_HOLE_BACKGROUNDS.length}</span>
+            <button className="singularity-panel-x" onClick={() => setBgGalleryOpen(false)} aria-label="Close backgrounds">✕</button>
+          </div>
+          <div className="singularity-panel-body">
+            <div className="singularity-studio-sec">Where the hole sits</div>
+            <div className="singularity-preset-scroll">
+              <div className="singularity-bg-grid">
+                {BLACK_HOLE_BACKGROUNDS.map((b) => (
+                  <button key={b.id}
+                    className={`singularity-bg-chip ${opts.bgIndex === b.index && Math.round(opts.bgHue) === b.hue ? 'active' : ''}`}
+                    onClick={() => selectBackground(b)}>
+                    <span className="singularity-preset-emoji">{b.emoji}</span>
+                    <span>{b.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="singularity-studio-sec">Background tune</div>
+            <label className="singularity-slider">
+              <span>Palette (sub-variants)</span>
+              <input type="range" min={0} max={359} step={5} value={opts.bgHue}
+                onChange={(e) => patchOpts({ bgHue: Number(e.target.value) })} />
+              <b>{opts.bgHue}°</b>
+            </label>
+            <label className="singularity-slider">
+              <span>Motion</span>
+              <input type="range" min={0} max={3} step={0.1} value={opts.bgSpeed}
+                onChange={(e) => patchOpts({ bgSpeed: Number(e.target.value) })} />
+              <b>{opts.bgSpeed.toFixed(1)}×</b>
+            </label>
+            <p className="singularity-studio-note">Every background is a generator + a palette sub-variant — combine freely.</p>
+          </div>
+        </div>
       )}
 
       {/* Journey depth HUD (no buttons — purely physical zoom) */}

@@ -11,7 +11,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import Singularity, {
   nextStageOf, prevStageOf, portalTransition, viewDistForStage,
-  hexToRgb, BLACK_HOLE_PRESETS, STUDIO_TUNES,
+  hexToRgb, BLACK_HOLE_PRESETS, BLACK_HOLE_BACKGROUNDS, STUDIO_TUNES, STUDIO_WACKY,
 } from '../../src/ui/Singularity';
 
 afterEach(() => {
@@ -135,5 +135,29 @@ describe('STUDIO_TUNES — the left-side tuning bars', () => {
     expect(STUDIO_TUNES.every((c) => c.kind === 'slider')).toBe(true);
     expect(STUDIO_TUNES.some((c) => c.label === 'Disk thickness')).toBe(true);
     expect(STUDIO_TUNES.some((c) => c.label === 'Gravity strength')).toBe(true);
+    // massive-hole tuning bars exist
+    expect(STUDIO_TUNES.some((c) => c.key === 'holeSize')).toBe(true);
+  });
+});
+
+describe('STUDIO_WACKY — wacky/fluid toggles & sliders', () => {
+  it('includes colour-cycling, fluid, breathing, invert, mono and more', () => {
+    const keys = new Set(STUDIO_WACKY.map((c) => c.key));
+    expect(keys.has('cycleSpeed')).toBe(true);
+    expect(keys.has('fluid')).toBe(true);
+    expect(keys.has('breath')).toBe(true);
+    expect(keys.has('bright')).toBe(true);
+    expect(keys.has('invert')).toBe(true);
+    expect(keys.has('mono')).toBe(true);
+    expect(STUDIO_WACKY.some((c) => c.kind === 'toggle')).toBe(true);
+  });
+});
+
+describe('BLACK_HOLE_BACKGROUNDS — the 50+ backgrounds gallery', () => {
+  it('offers 50+ backgrounds across many generators', () => {
+    expect(BLACK_HOLE_BACKGROUNDS.length).toBeGreaterThanOrEqual(50);
+    expect(BLACK_HOLE_BACKGROUNDS.every((b) => b.label && b.emoji)).toBe(true);
+    const gens = new Set(BLACK_HOLE_BACKGROUNDS.map((b) => b.index));
+    expect(gens.size).toBeGreaterThanOrEqual(10);
   });
 });

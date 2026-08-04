@@ -3504,6 +3504,35 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-preset-scroll { max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .singularity-preset-scroll::-webkit-scrollbar { width: 6px; }
 .singularity-preset-scroll::-webkit-scrollbar-thumb { background: rgba(168,121,255,0.4); border-radius: 4px; }
+/* Top CUSTOMIZE bar + dropdown */
+.singularity-topbar {
+  position: absolute; top: 66px; left: 50%; transform: translateX(-50%); z-index: 9;
+  display: flex; gap: 6px; padding: 5px 8px; border-radius: 999px;
+  background: rgba(8,10,20,0.82); border: 1px solid rgba(168,121,255,0.4);
+}
+.singularity-topbar-btn {
+  padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 700;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); color: #e6e6ff; border-radius: 999px;
+}
+.singularity-topbar-btn:hover { background: rgba(168,121,255,0.2); }
+.singularity-topbar-btn.active { background: rgba(77,255,158,0.25); border-color: #4dff9e; color: #9fffd0; }
+.singularity-customize-menu {
+  position: absolute; top: 112px; left: 50%; transform: translateX(-50%); z-index: 9;
+  width: min(420px, 92vw); padding: 12px 14px; border-radius: 14px;
+  background: rgba(8,10,20,0.94); border: 1px solid rgba(168,121,255,0.5); color: #e6e6ff;
+  display: grid; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+/* Background gallery panel + chips */
+.singularity-panel.bg { left: 26%; }
+.singularity-float.bg { right: 66px; }
+.singularity-bg-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.singularity-bg-chip {
+  display: flex; align-items: center; gap: 7px; padding: 7px 8px; cursor: pointer;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: #e6e6ff;
+  border-radius: 9px; font-size: 11.5px; font-weight: 600; text-align: left;
+}
+.singularity-bg-chip:hover { background: rgba(168,121,255,0.2); }
+.singularity-bg-chip.active { background: rgba(77,255,158,0.22); border-color: #4dff9e; color: #b0ffd6; }
 
 /* --- Cosmic Rift (hidden "?" screen) --- */
 .cosmic-rift { position: fixed; inset: 0; z-index: 960; overflow: hidden; background: #000; color: #fff; font-family: var(--ui-font, sans-serif); }
