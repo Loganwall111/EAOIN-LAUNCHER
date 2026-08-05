@@ -166,6 +166,8 @@ const JUMP_VELOCITY_BASE = 7.5;
 const TERMINAL_VELOCITY = -28;
 /** Minecraft-like player dimensions: camera position is the eye, not the body centre. */
 const PLAYER_EYE_HEIGHT = 1.62;
+/** Camera height above a ridden pet's ground position. */
+const MOUNT_EYE_HEIGHT = 1.75;
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_HALF_HEIGHT = PLAYER_HEIGHT / 2;
 const PLAYER_COLLIDER_OFFSET_Y = PLAYER_HALF_HEIGHT - PLAYER_EYE_HEIGHT;
@@ -336,6 +338,8 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   /** Planted crops: world-coordinate key → when it was planted, so the growth
    *  tick can advance stages in real time without per-block metadata. */
   const farmsRef = useRef<Map<string, { plantedAt: number }>>(new Map());
+  /** Whether the player is riding a pet (wolf). */
+  const ridingRef = useRef(false);
   useEffect(() => { superSettingsRef.current = superSettings; }, [superSettings]);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
@@ -2128,11 +2132,25 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             tempMove.normalize();
             const sprinting = sprintingRef.current && !flightEnabledRef.current;
             const walkSpeed = (flightEnabledRef.current ? settingsRef.current.cameraSpeed * 2.6 : settingsRef.current.cameraSpeed * (sprinting ? 2.1 : 1.15)) * 60 * deltaSeconds;
-            tempMove.scaleInPlace(Math.max(0, walkSpeed));
-            (camera as any).moveWithCollisions?.(tempMove);
-            if (!(camera as any).moveWithCollisions) camera.position.addInPlace(tempMove);
-            // Track a move phase so the flying/walking arm animation can sync.
-            movePhaseRef.current += tempMove.length() * 0.04;
+            if (ridingRef.current) {
+              // Riding a pet: steer the mount instead of moving the camera.
+              // tempMove is a unit direction; scale by units-per-second speed.
+              const unitsPerSec = (flightEnabledRef.current ? settingsRef.current.cameraSpeed * 2.6 : settingsRef.current.cameraSpeed * (sprinting ? 2.1 : 1.15));
+              creatureManager.setRideMove(tempMove.x * unitsPerSec, tempMove.z * unitsPerSec);
+            } else {
+              tempMove.scaleInPlace(Math.max(0, walkSpeed));
+              (camera as any).moveWithCollisions?.(tempMove);
+              if (!(camera as any).moveWithCollisions) camera.position.addInPlace(tempMove);
+              // Track a move phase so the flying/walking arm animation can sync.
+              movePhaseRef.current += tempMove.length() * 0.04;
+            }
+          }
+          // When riding, park the camera on top of the mount every frame so the
+          // view follows it regardless of movement/gravity/collision.
+          if (ridingRef.current) {
+            const mountPos = creatureManager.getRiddenPosition();
+            if (mountPos) camera.position.set(mountPos.x, mountPos.y + MOUNT_EYE_HEIGHT, mountPos.z);
+            else { ridingRef.current = false; showActionMessage('You hop off the pet'); }
           }
         }
 
@@ -2842,6 +2860,26 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           authorityRuntime.recordAction();
           audio.play('eat', settingsRef.current);
           showActionMessage(`${value.emoji} Ate ${getBlock(food).name} (+${value.hunger} food${value.health ? `, +${value.health} health` : ''})`);
+          return;
+        }
+        if (event.key.toLowerCase() === 'y') {
+          // Mount / dismount a pet (spawn one with the God Console → Summon Pet).
+          event.preventDefault();
+          if (ridingRef.current) {
+            creatureManager.dismount();
+            ridingRef.current = false;
+            audio.play('ui', settingsRef.current);
+            showActionMessage('🐺 You hop off the pet');
+            return;
+          }
+          const mounted = creatureManager.mountNearest(camera.position, 7);
+          if (mounted) {
+            ridingRef.current = true;
+            audio.play('ui', settingsRef.current);
+            showActionMessage('🐺 Yippee! Press Y to hop off, WASD to ride');
+          } else {
+            showActionMessage('No pet nearby — summon one with the God Console (Summon Pet)');
+          }
           return;
         }
         if (event.key === 'F4') {

@@ -250,6 +250,10 @@ function approachAngle(current: number, target: number, maxDelta: number): numbe
 
 export class CreatureManager {
   private readonly creatures = new Map<string, CreatureEntity>();
+  /** Id of the creature the player is currently riding (2.0 pets). */
+  private riddenId: string | null = null;
+  /** Player steering input applied to the ridden creature each frame (x,z). */
+  private rideMove = new Vector3(0, 0, 0);
   private readonly materials = new Map<string, StandardMaterial>();
   private spawnAccumulator = 0;
   private spawned = 0;
@@ -290,8 +294,74 @@ export class CreatureManager {
 
     const now = performance.now();
     for (const creature of this.creatures.values()) {
+      if (creature.id === this.riddenId) {
+        this.updateRidden(creature, deltaSeconds);
+        continue;
+      }
       this.updateCreature(creature, now, deltaSeconds, playerPosition);
     }
+  }
+
+  /* ---- 2.0 pet riding ---------------------------------------------- */
+
+  /** Mount the nearest non-hostile-hunting creature within `radius`. */
+  mountNearest(position: Vector3, radius = 6): string | null {
+    let best: string | null = null;
+    let bestD = radius * radius;
+    for (const creature of this.creatures.values()) {
+      if (creature.species.temperament === 'hostile' && creature.id !== this.riddenId) continue;
+      const d = Vector3.DistanceSquared(creature.root.position, position);
+      if (d < bestD) { bestD = d; best = creature.id; }
+    }
+    if (best) { this.riddenId = best; this.rideMove.set(0, 0, 0); }
+    return best;
+  }
+
+  setRidden(id: string | null): void {
+    this.riddenId = id;
+    if (id === null) this.rideMove.set(0, 0, 0);
+  }
+
+  isRiding(): boolean { return this.riddenId !== null && this.creatures.has(this.riddenId); }
+
+  dismount(): void { this.riddenId = null; this.rideMove.set(0, 0, 0); }
+
+  /** Steering input (world-space x/z, magnitude = speed in units/sec). */
+  setRideMove(x: number, z: number): void { this.rideMove.set(x, z, 0); }
+
+  /** Position of the ridden creature (to park the camera on top), or null. */
+  getRiddenPosition(): Vector3 | null {
+    if (!this.riddenId) return null;
+    const creature = this.creatures.get(this.riddenId);
+    return creature ? creature.root.position.clone() : null;
+  }
+
+  /** Advance the ridden creature along the steering input, staying grounded. */
+  private updateRidden(creature: CreatureEntity, deltaSeconds: number): void {
+    const now = performance.now();
+    const len = Math.hypot(this.rideMove.x, this.rideMove.z);
+    if (len < 0.01) {
+      creature.moving = false;
+      this.animateCreature(creature, now, deltaSeconds, 0);
+      return;
+    }
+    const step = Math.min(len, creature.speed * deltaSeconds);
+    const dirX = this.rideMove.x / len;
+    const dirZ = this.rideMove.z / len;
+    const safe = this.safeGroundPosition(
+      creature.root.position.x + dirX * step,
+      creature.root.position.z + dirZ * step
+    );
+    if (safe) {
+      creature.root.position.copyFrom(safe);
+      creature.root.rotation.y = approachAngle(
+        creature.root.rotation.y,
+        Math.atan2(dirX, dirZ),
+        deltaSeconds * 6
+      );
+    }
+    creature.moving = true;
+    this.animateCreature(creature, now, deltaSeconds, step);
   }
 
   damageCreature(creatureId: string, damage: number): CreatureDamageResult {
@@ -405,6 +475,7 @@ export class CreatureManager {
 
   private updatePopulation(playerPosition: Vector3): void {
     for (const [id, creature] of Array.from(this.creatures.entries())) {
+      if (id === this.riddenId) continue; // never despawn the mount
       if (Vector3.Distance(creature.root.position, playerPosition) > DESPAWN_RADIUS) {
         creature.root.dispose(false, true);
         this.creatures.delete(id);
