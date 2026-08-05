@@ -238,6 +238,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const devNoClipRef = useRef(false);
   /** Multiple black holes for the Warped dimension. */
   const warpBlackHolesRef = useRef<EndBlackHole[]>([]);
+  /** End supernova flashes — random bright booms that flare across the void. */
+  const endSupernovaRef = useRef({ nextAt: 6, last: 0, active: 0 });
+  /** 0..1 — how strongly the post-dragon colourful nebula has taken over the sky. */
+  const endNebulaRef = useRef(0);
   const flightEnabledRef = useRef(false);
   const telemetryRef = useRef(onTelemetry);
   const loadingProgressRef = useRef(onLoadingProgress);
@@ -962,7 +966,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           if (bossDef.id === 'ender_dragon') {
             endDragonAliveRef.current = false;
             triggerDragonShockwave(position);
-            showActionMessage('💥 The dragon bursts — a shockwave ripples across the End, and the black fog clears to reveal the islands.');
+            // The whole End sky is reborn — an animated colourful nebula floods
+            // across the void.
+            endNebulaRef.current = 1;
+            showActionMessage('💥 The dragon bursts — a shockwave ripples across the End, and a colourful nebula floods the sky.');
           }
           // Registry drops are lore item names; award a themed block stack so
           // the kill has a tangible reward in the inventory.
@@ -1878,6 +1885,33 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           const delta = (target - scene.fogDensity) * Math.min(1, deltaSeconds * 0.6);
           scene.fogDensity = Math.max(0.008, Math.min(0.08, scene.fogDensity + delta));
           scene.fogColor = Color3.Lerp(scene.fogColor, new Color3(0.02, 0.01, 0.04), endDragonAliveRef.current ? Math.min(1, deltaSeconds * 0.6) : 0);
+
+          // Supernova flashes: distant booms flare across the void sky.
+          const sn = endSupernovaRef.current;
+          sn.last += deltaSeconds;
+          if (sn.active > 0) sn.active -= deltaSeconds * 3;
+          if (sn.last >= sn.nextAt) {
+            sn.last = 0;
+            sn.nextAt = 10 + Math.random() * 22;
+            sn.active = 1;
+            showActionMessage('💥 A distant supernova booms across the void…');
+            audio.play('explosion', settingsRef.current);
+          }
+          // Bright flash overlay driven by the supernova energy.
+          const flashStrength = Math.max(0, sn.active);
+          scene.clearColor.r = Math.max(scene.clearColor.r, flashStrength * 0.85);
+          scene.clearColor.g = Math.max(scene.clearColor.g, flashStrength * 0.45);
+          scene.clearColor.b = Math.max(scene.clearColor.b, flashStrength * 0.9);
+
+          // Post-dragon nebula: an animated colourful sky washes across the void.
+          if (endNebulaRef.current > 0) {
+            const t = performance.now() * 0.001;
+            const pulse = 0.5 + 0.5 * Math.sin(t * 0.8);
+            const neb = endNebulaRef.current;
+            scene.clearColor.r = Math.max(scene.clearColor.r, (0.55 + 0.3 * pulse) * neb);
+            scene.clearColor.g = Math.max(scene.clearColor.g, (0.15 + 0.25 * (1 - pulse)) * neb);
+            scene.clearColor.b = Math.max(scene.clearColor.b, (0.65 + 0.3 * pulse) * neb);
+          }
         }
         // End exit portal: with the dragon defeated, stepping onto the central
         // island's exit pad returns you to the overworld and grants the first

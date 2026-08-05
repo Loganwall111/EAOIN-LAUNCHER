@@ -90,6 +90,8 @@ const FRAG = `
   uniform float u_particles;   // drifting dust particles 0..1
   uniform float u_warp;        // radial warp streaks 0..1
   uniform float u_ringBands;   // extra photon-ring bands 0..1
+  uniform float u_vignette;    // 0..1 vignette strength
+  uniform float u_density;     // 0..1 world geometry density/scale
 
   // ---- Journey worlds: which scene + palette to render ----
   uniform int u_worldKind;     // which world generator to draw (0..15)
@@ -142,7 +144,7 @@ const FRAG = `
     float scan = 0.5 + 0.5*sin(uv.y*220.0 - u_time*70.0);
     col *= 1.0 - u_vhs * 0.18 * (1.0 - scan);
     col *= 1.0 - u_flicker * 0.2 * step(0.985, hash(vec2(floor(u_time*24.0), 1.0)));
-    col *= 0.6 + 0.4*smoothstep(1.3, 0.15, length(ndc));
+    col *= (1.0 - u_vignette) + u_vignette * (0.6 + 0.4*smoothstep(1.3, 0.15, length(ndc)));
     return col;
   }
 
@@ -265,13 +267,24 @@ const FRAG = `
     return blob/0.8;
   }
 
-  // Blood stream: dense red cells drifting through plasma.
+  // Blood stream: a GIANT floating tube (a blood vessel) with red cells
+  // drifting through plasma inside — not a grid. The tube walls curve around
+  // you so you feel like you're floating inside an artery.
   float mapBlood(vec3 p, out int mat){
     mat = 1;
-    vec3 g = p*0.9;
-    vec3 cell = floor(g);
-    vec3 l = fract(g) - 0.5;
-    return min(sdSphere(l, 0.42), 0.3)/0.9;
+    // A long cylindrical vessel along the Z axis, radius ~6.
+    float rad = length(p.xy);
+    float wall = 6.0 - rad;                 // inner surface of the tube
+    // Dense red cells drifting through the plasma.
+    float n = 0.0;
+    for (int i = 0; i < 3; i++) {
+      vec3 c = vec3(
+        sin(float(i)*2.1 + p.z*0.25 + u_time*0.2)*1.5,
+        cos(float(i)*1.7 + p.z*0.2 + u_time*0.15)*1.5,
+        p.z);
+      n = min(n, sdSphere(p - c, 0.5));
+    }
+    return min(wall, n);
   }
 
   // Neuron forest: somas connected by dendrite segments.
@@ -288,15 +301,22 @@ const FRAG = `
     return d/0.7;
   }
 
-  // Earth mountains: rolling hills under a mountain range.
+  // Earth mountains: blocky, minecraft-style terrain — a ground plane studded
+  // with chunky voxel hills and peaks (cubes, not smooth spheres).
   float mapMountains(vec3 p, out int mat){
     mat = 1;
-    float d = p.y - 1.5;
-    for (int i = 0; i < 6; i++) {
+    float ground = p.y - 1.0;
+    float n = noise(p.xz*0.12 + u_worldParam);
+    float h = n * 5.0;
+    // Blocky hills: quantise to voxel steps for a minecraft look.
+    float hills = p.y - (1.0 + floor(h*2.0)*0.5);
+    float d = min(ground, hills);
+    // A few big blocky peaks.
+    for (int i = 0; i < 4; i++) {
       float hx = hash1(float(i)*2.1);
       float hz = hash1(float(i)*7.3);
-      vec3 c = vec3((hx-0.5)*12.0, 0.0, (hz-0.5)*12.0);
-      d = min(d, sdSphere(p - c, 2.0 + hx*2.5));
+      vec3 c = vec3((hx-0.5)*10.0, 3.0 + hx*5.0, (hz-0.5)*10.0);
+      d = min(d, sdBox(p - c, vec3(1.5 + hx*1.5, 2.0 + hx*3.0, 1.5 + hx*1.5)));
     }
     return d;
   }
@@ -362,8 +382,85 @@ const FRAG = `
     return min(d, min(lolli, stick))/0.5;
   }
 
+  // Infinite hallway: a long tunnel that repeats, with pillars on both sides.
+  float mapHallway(vec3 p, out int mat){
+    mat = 1;
+    float floor = p.y + 2.5;
+    float wall = 4.0 - abs(p.x);
+    float z = mod(p.z, 8.0) - 4.0;
+    vec3 g = floor(p*0.4);
+    vec3 l = fract(p*0.4)-0.5;
+    float pillar = sdBox(l - vec3(3.2, 0.5, 0.0), vec3(0.4, 1.5, 0.4));
+    return min(min(floor, wall), pillar)/0.4;
+  }
+
+  // Endless desert: rolling blocky sand dunes under a hot sky.
+  float mapDesert(vec3 p, out int mat){
+    mat = 1;
+    float d = p.y - (noise(p.xz*0.1 + u_worldParam)*3.0 + 1.0);
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    float cactus = sdBox(l - vec3(0.0,0.6,0.0), vec3(0.3,0.8,0.3));
+    return min(d, cactus)/0.5;
+  }
+
+  // Volcano: a great cone with a glowing crater rim.
+  float mapVolcano(vec3 p, out int mat){
+    mat = 1;
+    vec3 q = p;
+    float r = length(q.xz);
+    float cone = r*0.9 - (q.y - 2.0);
+    float crater = length(q.xz - vec2(0.0,0.0)) - (q.y - 2.0)*0.5 - 1.5;
+    return min(cone, crater);
+  }
+
+  // Jungle: a dense canopy of tall blocky trees over a leaf floor.
+  float mapJungle(vec3 p, out int mat){
+    mat = 1;
+    float ground = p.y + 1.5;
+    vec3 g = floor(p*0.3);
+    vec3 l = fract(p*0.3)-0.5;
+    float trunk = sdSegment(p*0.3, g, g + vec3(0.0,2.0,0.0), 0.2);
+    float leaf = sdSphere(p*0.3 - (g + vec3(0.0,2.0,0.0)), 0.7);
+    return min(ground, min(trunk, leaf))/0.3;
+  }
+
+  // Clockwork: interlocking gears and machinery filling space.
+  float mapClockwork(vec3 p, out int mat){
+    mat = 1;
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    float gear = max(sdBox(l, vec3(0.4, 0.12, 0.4)), 0.0);
+    float cog = sdBox(l, vec3(0.12, 0.3, 0.12));
+    return min(gear, cog)/0.5;
+  }
+
+  // Cloud tops: soft fluffy cloud towers floating in a bright sky.
+  float mapCloud(vec3 p, out int mat){
+    mat = 1;
+    float n = noise(p.xz*0.15 + u_worldParam);
+    float d = p.y - (2.0 + n*4.0);
+    vec3 g = floor(p*0.4);
+    vec3 l = fract(p*0.4)-0.5;
+    float puff = sdSphere(l, 0.5 + noise(l.xy+vec2(0.0,0.0))*0.4);
+    return min(d, puff)/0.4;
+  }
+
+  // Temple: a grand stone temple with columns and a stepped roof.
+  float mapTemple(vec3 p, out int mat){
+    mat = 1;
+    float floor = p.y + 2.0;
+    float roof = abs(p.y - 4.0) - 1.2;
+    vec3 g = floor(p*0.5);
+    vec3 l = fract(p*0.5)-0.5;
+    float column = sdBox(l - vec3(0.0,1.0,0.0), vec3(0.35,1.5,0.35));
+    return min(min(floor, roof), column)/0.5;
+  }
+
   // Unified scene map — picks the generator for the current journey world.
   float mapWorld(vec3 p, out int mat){
+    // u_density scales geometry density (0.5 = sparse, 2 = packed).
+    p /= max(0.3, u_density);
     if (u_worldKind == 0) return mapNeural(p, mat);
     if (u_worldKind == 1) return mapAsteroids(p, mat);
     if (u_worldKind == 2) return mapPlanet(p, mat);
@@ -379,7 +476,14 @@ const FRAG = `
     if (u_worldKind == 12) return mapLava(p, mat);
     if (u_worldKind == 13) return mapIce(p, mat);
     if (u_worldKind == 14) return mapMushroom(p, mat);
-    return mapCandy(p, mat);
+    if (u_worldKind == 15) return mapCandy(p, mat);
+    if (u_worldKind == 16) return mapHallway(p, mat);
+    if (u_worldKind == 17) return mapDesert(p, mat);
+    if (u_worldKind == 18) return mapVolcano(p, mat);
+    if (u_worldKind == 19) return mapJungle(p, mat);
+    if (u_worldKind == 20) return mapClockwork(p, mat);
+    if (u_worldKind == 21) return mapCloud(p, mat);
+    return mapTemple(p, mat);
   }
 
   // ------------------------------------------------------------------
@@ -580,6 +684,13 @@ const FRAG = `
     if (u_worldKind == 13) return hueShift(vec3(0.6,0.9,1.0), u_worldHue*6.28318);
     if (u_worldKind == 14) return hueShift(vec3(0.9,0.5,0.3), u_worldHue*6.28318);
     if (u_worldKind == 15) return hueShift(vec3(1.0,0.6,0.8), u_worldHue*6.28318);
+    if (u_worldKind == 16) return hueShift(vec3(0.6,0.7,0.8), u_worldHue*6.28318);
+    if (u_worldKind == 17) return hueShift(vec3(0.85,0.75,0.5), u_worldHue*6.28318);
+    if (u_worldKind == 18) return hueShift(vec3(0.55,0.35,0.2), u_worldHue*6.28318);
+    if (u_worldKind == 19) return hueShift(vec3(0.2,0.6,0.25), u_worldHue*6.28318);
+    if (u_worldKind == 20) return hueShift(vec3(0.75,0.6,0.35), u_worldHue*6.28318);
+    if (u_worldKind == 21) return hueShift(vec3(0.95,0.95,1.0), u_worldHue*6.28318);
+    if (u_worldKind == 22) return hueShift(vec3(0.8,0.75,0.6), u_worldHue*6.28318);
     // Original worlds keep their material-based colours.
     if (mat == 1) return vec3(0.3,0.8,1.0);       // cyan node
     if (mat == 2) return vec3(1.0,0.35,0.7);      // pink node
@@ -823,15 +934,25 @@ const WORLD_BASES: { kind: number; name: string; emoji: string; dist: number }[]
   { kind: 13, name: 'Ice Cavern', emoji: '🧊', dist: 6 },
   { kind: 14, name: 'Mushroom Grove', emoji: '🍄', dist: 6 },
   { kind: 15, name: 'Candy Land', emoji: '🍭', dist: 6 },
+  { kind: 16, name: 'Infinite Hallway', emoji: '🛣️', dist: 6 },
+  { kind: 17, name: 'Endless Desert', emoji: '🏜️', dist: 8 },
+  { kind: 18, name: 'Great Volcano', emoji: '🌋', dist: 7 },
+  { kind: 19, name: 'Deep Jungle', emoji: '🌴', dist: 7 },
+  { kind: 20, name: 'Clockwork Core', emoji: '⚙️', dist: 6 },
+  { kind: 21, name: 'Cloud Kingdom', emoji: '☁️', dist: 6 },
+  { kind: 22, name: 'Stone Temple', emoji: '🏛️', dist: 6 },
 ];
 
-/** Palette sub-variants — each base becomes several distinct worlds. */
+/** Sub-variants — each base becomes several distinct rooms (not just colours:
+ *  the param reshapes the geometry too, so every phase feels like its own area). */
 const WORLD_VARIANTS: { suffix: string; hue: number; param: number }[] = [
   { suffix: '', hue: 0, param: 0 },
   { suffix: ' Aurora', hue: 0.06, param: 1 },
   { suffix: ' Neon', hue: 0.62, param: 2 },
   { suffix: ' Ember', hue: 0.04, param: 3 },
   { suffix: ' Azure', hue: 0.56, param: 4 },
+  { suffix: ' Deep', hue: 0.32, param: 5 },
+  { suffix: ' Storm', hue: 0.68, param: 6 },
 ];
 
 function buildWorlds(): WorldDef[] {
@@ -998,6 +1119,8 @@ export interface BlackHoleOpts {
   particles: number;   // drifting dust particles 0..1
   warp: number;        // radial warp streaks 0..1
   ringBands: number;   // extra photon-ring bands 0..1
+  vignette: number;    // vignette strength 0..1
+  density: number;     // world geometry density 0.3..2
 }
 
 const DEFAULT_OPTS: BlackHoleOpts = {
@@ -1049,6 +1172,8 @@ const DEFAULT_OPTS: BlackHoleOpts = {
   particles: 0,
   warp: 0,
   ringBands: 0,
+  vignette: 1,
+  density: 1,
 };
 
 /** Preset looks for the black hole — one click applies a full mood. */
@@ -1242,6 +1367,8 @@ export const STUDIO_WACKY: StudioControl[] = [
   { key: 'particles', label: 'Dust particles', kind: 'slider', min: 0, max: 1, step: 0.01 },
   { key: 'warp', label: 'Warp streaks', kind: 'slider', min: 0, max: 1, step: 0.01 },
   { key: 'ringBands', label: 'Ring bands', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'vignette', label: 'Vignette', kind: 'slider', min: 0, max: 1, step: 0.01 },
+  { key: 'density', label: 'World density', kind: 'slider', min: 0.3, max: 2, step: 0.05 },
 ];
 
 /** Parse '#rrggbb' into [r,g,b] in 0..1. */
@@ -1577,6 +1704,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       particles: gl.getUniformLocation(prog, 'u_particles'),
       warp: gl.getUniformLocation(prog, 'u_warp'),
       ringBands: gl.getUniformLocation(prog, 'u_ringBands'),
+      vignette: gl.getUniformLocation(prog, 'u_vignette'),
+      density: gl.getUniformLocation(prog, 'u_density'),
       worldKind: gl.getUniformLocation(prog, 'u_worldKind'),
       worldHue: gl.getUniformLocation(prog, 'u_worldHue'),
       worldParam: gl.getUniformLocation(prog, 'u_worldParam'),
@@ -1719,6 +1848,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
       gl.uniform1f(U.particles, o.particles);
       gl.uniform1f(U.warp, o.warp);
       gl.uniform1f(U.ringBands, o.ringBands);
+      gl.uniform1f(U.vignette, o.vignette);
+      gl.uniform1f(U.density, o.density);
       // Journey world scene: which generator, hue, param and scale to render.
       const world = worldForStage(stageRef.current);
       if (world) {

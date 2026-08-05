@@ -397,13 +397,13 @@ export const DIMENSION_SKY_PROFILES: Record<string, SkyProfile> = {
   }),
 
   end: profile('end', 'The End', {
-    zenithDay: c(0.04, 0.01, 0.07),
-    horizonDay: c(0.12, 0.06, 0.18),
-    zenithNight: c(0.03, 0.01, 0.05),
-    horizonNight: c(0.10, 0.05, 0.15),
-    sunsetGlow: c(0.34, 0.16, 0.48),
-    fogDay: c(0.10, 0.05, 0.16),
-    fogNight: c(0.08, 0.04, 0.13),
+    zenithDay: c(0.55, 0.20, 0.50),     // pink at the top of the sky
+    horizonDay: c(0.16, 0.05, 0.22),    // deep purple at the middle/horizon
+    zenithNight: c(0.05, 0.01, 0.04),   // near-black at night
+    horizonNight: c(0.04, 0.01, 0.05),  // black at the bottom at night
+    sunsetGlow: c(0.80, 0.35, 0.60),    // sunrise/rise wash — pink flare
+    fogDay: c(0.10, 0.03, 0.14),
+    fogNight: c(0.05, 0.01, 0.06),
     fogDensity: FOG_MILD,
     cloudCoverage: 0,
     auroraStrength: 0.35,
