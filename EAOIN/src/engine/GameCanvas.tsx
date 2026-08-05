@@ -169,7 +169,7 @@ const PLAYER_FOOTPRINT: ReadonlyArray<readonly [number, number]> = [
   [0, 0], [0.22, 0], [-0.22, 0], [0, 0.22], [0, -0.22],
 ];
 /** Chunks meshed synchronously before the first frame is presented. */
-const INITIAL_CHUNK_RADIUS = 1;
+const INITIAL_CHUNK_RADIUS = 2;
 /** Chunks generated + meshed per ordinary streaming frame. */
 const CHUNKS_PER_FRAME = 8;
 /**
@@ -1286,6 +1286,30 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       };
       applyEffectTier(effectTier);
 
+      // Re-snap the player to the true surface once the world has finished
+      // loading. This guards against spawning into a small/early chunk patch or
+      // falling through a not-yet-meshed column — the camera ends up standing on
+      // the highest solid block at its x/z, exactly like a Minecraft spawn.
+      let snappedToSurface = false;
+      const snapToSurfaceOnce = (): void => {
+        if (snappedToSurface || !terrain) return;
+        snappedToSurface = true;
+        const px = Math.floor(camera.position.x);
+        const pz = Math.floor(camera.position.z);
+        let surface = terrain.getHeightAt(px, pz);
+        // Fall back to scanning the analytic column if getHeightAt disagrees.
+        for (let y = 126; y >= 0; y--) {
+          const b = terrain.getBlockAt(px, y, pz);
+          if (b !== 0 && b !== 5) { surface = Math.max(surface, y); break; }
+        }
+        const y = surface + 1 + PLAYER_EYE_HEIGHT;
+        camera.position.set(camera.position.x, y, camera.position.z);
+        streamCenter = toChunkCoordinate(camera.position.x, camera.position.z);
+        velocityY = 0;
+        fallStartY = camera.position.y;
+        wasFalling = false;
+      };
+
       let positionFrame = 0, survivalFrame = 0, streamFrame = 0;
       /** True when the previous frame meshed chunks, so the tuner can skip it. */
       let chunkWorkLastFrame = false;
@@ -2359,12 +2383,14 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
             );
             if (result.pending === 0) {
               startupLoadingComplete = true;
+              snapToSurfaceOnce();
               reportLoadingProgress(100, `World ready — ${loadedVisibleChunks}/${currentStartupTotal} terrain chunks loaded`, true, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
             } else if (elapsed >= WORLD_LOADING_MAX_MS && playerFacingCoverageReady) {
               // The guard ring can safely continue in the background, but do
               // not ever dismiss the loading cover while the player could be
               // standing on terrain that is not drawn yet.
               startupLoadingComplete = true;
+              snapToSurfaceOnce();
               reportLoadingProgress(100, `Playable now — ${loadedVisibleChunks}/${currentStartupTotal} chunks loaded; the outer safety ring will finish streaming`, true, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
             } else {
               reportLoadingProgress(76 + chunkRatio * 23, `Streaming terrain ${loadedVisibleChunks}/${currentStartupTotal}`, false, { loadedChunks: loadedVisibleChunks, totalChunks: currentStartupTotal });
