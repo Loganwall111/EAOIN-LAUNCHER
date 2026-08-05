@@ -37,6 +37,8 @@ import { createStarterSurvivalStats, SurvivalStats } from './player/SurvivalStat
 import { createStarterToolInventory, isToolUnlocked, ToolID, ToolInventory } from './player/ToolState';
 import { GameSettings } from './settings/GameSettings';
 import { loadSettings, saveSettings } from './settings/SettingsSave';
+import { experimentalExhausted, isDemo, setDemoStore, startSingularitySession } from './demo/DemoMode';
+import { DemoBanner } from './ui/DemoBanner';
 import CinematicBoot from './ui/CinematicBoot';
 import SpawnAwakening from './ui/SpawnAwakening';
 import WorldLoadingScreen from './ui/WorldLoadingScreen';
@@ -75,6 +77,21 @@ export default function App() {
   const [godConsoleOpen, setGodConsoleOpen] = useState(false);
   const [photoModeOpen, setPhotoModeOpen] = useState(false);
   useEffect(() => { saveSuperSettings(superSettings); }, [superSettings]);
+
+  // Initialise the demo persistence layer (guarded; no-op outside the demo).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      setDemoStore(window.localStorage);
+    }
+  }, []);
+
+  // "Get the full game" (from the demo banner) → open the store/marketplace.
+  useEffect(() => {
+    const onFull = () => { setAppPhase('marketplace'); };
+    window.addEventListener('eaoin-demo-gotofull', onFull);
+    return () => window.removeEventListener('eaoin-demo-gotofull', onFull);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [craftingMessage, setCraftingMessage] = useState('Crafting ready');
   const [gameplayCounters, setGameplayCounters] = useState<GameplayCounters>(() => createGameplayCounters());
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(() => createDefaultRuntimeStatus());
@@ -161,6 +178,11 @@ export default function App() {
   );
 
   const startGame = useCallback((seed?: string, mode: GameMode = 'survival') => {
+    // Demo: Experimental / Incredible modes run on a daily allowance that
+    // resets each day. If today's allowance is used up, fall back to survival.
+    if (isDemo() && (mode === 'experimental' || mode === 'incredible') && experimentalExhausted()) {
+      mode = 'survival';
+    }
     // The launcher's selected build may override the world type (e.g. a
     // developer/experimental build ships its own world). Tag the seed so the
     // terrain generator uses that build's world type unless the player picked
@@ -527,9 +549,12 @@ export default function App() {
       );
     }
     if (appPhase === 'singularity') {
+      // Demo: begin (or resume) the 30-minute Singularity session.
+      startSingularitySession();
       return (
         <div className={shellClass}>
           <Singularity onBack={() => setAppPhase('title')} onExit={() => setAppPhase('title')} />
+          <DemoBanner mode="singularity" />
         </div>
       );
     }
@@ -739,6 +764,8 @@ export default function App() {
           onOpenSuperSettings={() => setSuperSettingsOpen(true)}
         />
       </Suspense>
+      {/* Free-demo timer overlay (no-op outside the desktop demo build). */}
+      {gameStarted && !worldLoading && <DemoBanner mode="world" />}
       {/* Unified Options: the in-game Settings button now opens the SAME full
           Options screen as the main menu (merged — one Options for everything),
           shown here as an overlay while playing. */}

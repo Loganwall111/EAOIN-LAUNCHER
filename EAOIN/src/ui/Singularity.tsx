@@ -19,6 +19,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ARG_FRAGMENTS, getARG } from '../arg/ARGStoryline';
 import { getGodMode } from '../arg/GodMode';
 import { getEndingTicket } from '../arg/EndingTicket';
+import {
+  blockSecretEnding, demoMaxJourneyStage, isDemo,
+  singularityRemainingMs, formatMs,
+} from '../demo/DemoMode';
 
 const VERT = `
   attribute vec2 a_pos;
@@ -1015,11 +1019,20 @@ export const LOOK_OUT = -0.5;
 /** Minimum seconds between transitions so you can't bounce in and out. */
 export const PORTAL_COOLDOWN = 0.9;
 
-/** Advance to the next area in the journey order. */
+/** In the demo, the last journey stage we let players reach (no ending). */
+function demoCapStage(): number {
+  const cap = demoMaxJourneyStage();
+  if (cap === null) return Infinity;
+  return WORLD_START + cap - 1;
+}
+
+/** Advance to the next area in the journey order (demo-capped so no ending). */
 export function nextStageOf(stage: number): number {
   const i = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number]);
   if (i < 0 || i >= STAGE_ORDER.length - 1) return stage;
-  return STAGE_ORDER[i + 1];
+  const next = STAGE_ORDER[i + 1];
+  if (next > demoCapStage()) return stage;
+  return next;
 }
 
 /** Retreat to the previous area in the journey order. */
@@ -1419,6 +1432,8 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   const [noteOpen, setNoteOpen] = useState(false);
   const [journey, setJourney] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
+  // Demo: live Singularity countdown (0 when not in the demo).
+  const [demoLeft, setDemoLeft] = useState(isDemo() ? singularityRemainingMs() : 0);
   const [password, setPassword] = useState('');
   const [secretEnding, setSecretEnding] = useState(false);
   const [fragments, setFragments] = useState(() => getARG().getState().collected);
@@ -1503,6 +1518,15 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
     }
     window.setTimeout(() => setArgMsg(null), 4000);
   };
+
+  // --- Demo countdown: tick the 30-min Singularity timer every second ------
+  useEffect(() => {
+    if (!isDemo()) return;
+    const id = window.setInterval(() => {
+      setDemoLeft(singularityRemainingMs());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // --- Camera INPUT effect (always runs, independent of WebGL) ------------
   // Free-fly 3D camera: WASD / arrows move forward/back/strafe, Space/Shift
@@ -2071,6 +2095,7 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
   };
 
   const submitPassword = () => {
+    if (blockSecretEnding()) { setArgMsg('🔒 The secret ending is exclusive to the full game.'); return; }
     const answer = password.trim().toLowerCase();
     const correct = answer === 'eaoin' || answer === '32646';
     if (correct) {
@@ -2093,6 +2118,13 @@ export default function Singularity({ onBack, onExit }: { onBack?: () => void; o
           <div className="screen-eyebrow">SINGULARITY</div>
           <h1 className="screen-title">🕳 The Black Hole</h1>
         </div>
+        {isDemo() && (
+          <div className={`singularity-demo-timer ${demoLeft <= 0 ? 'out' : ''}`}>
+            {demoLeft <= 0
+              ? '🕒 Demo session over'
+              : `⏳ Demo: ${formatMs(demoLeft)}`}
+          </div>
+        )}
         <button className="singularity-x" onClick={onExit ?? onBack} aria-label="Exit Singularity">✕</button>
       </div>
 

@@ -21,7 +21,9 @@
     "deploy:egs": "node scripts/deploy-egs.js",
     "deploy:egs:run": "node scripts/deploy-egs.js --run",
     "egs": "node scripts/build-egs.js && node scripts/deploy-egs.js",
-    "egs:run": "node scripts/build-egs.js && node scripts/deploy-egs.js --run"
+    "egs:run": "node scripts/build-egs.js && node scripts/deploy-egs.js --run",
+    "demo": "node scripts/build-demo.js",
+    "dist:demo": "node scripts/build-demo.js"
   },
   "devDependencies": {
     "electron": "^31.0.0",

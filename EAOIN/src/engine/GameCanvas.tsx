@@ -13,6 +13,7 @@ import {
   advanceCrop, cropOfBlock, foodValue, harvestDrops, isFarmland, isFood,
   isMatureCrop, isSeed, plantOnFarmland, tillBlock,
 } from '../farming/Farming';
+import { consumeExperimental, demoBlockedContentBlocks, isDemo } from '../demo/DemoMode';
 import {
   applySeasonToMaterials, seasonForElapsed, Season, SEASON_EMOJI, SEASON_LABELS,
 } from '../rendering/SeasonalTint';
@@ -1720,6 +1721,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
         tickFarms(); // advance planted crops toward maturity
+        // Demo: Experimental / Incredible modes draw from a daily allowance.
+        if (isDemo() && (gameModeRef.current === 'experimental' || gameModeRef.current === 'incredible')) {
+          consumeExperimental(deltaSeconds * 1000);
+        }
         // Seasons: re-tint grass/leaves whenever the season rolls over.
         {
           const ss = superSettingsRef.current;
@@ -2599,6 +2604,11 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       };
       const placeSelectedBlock = (): void => {
         const blockToPlace = selectedBlockRef.current;
+        // Demo: block endgame content (Omni Creator, God Mode Block).
+        if (demoBlockedContentBlocks().has(blockToPlace)) {
+          showActionMessage('🔒 This is part of the full game\'s story — not in the demo.');
+          return;
+        }
         if (blockToPlace === 302) {
           // The Omni Creator — trigger the Final Journey
           audio.play('ui', settingsRef.current);

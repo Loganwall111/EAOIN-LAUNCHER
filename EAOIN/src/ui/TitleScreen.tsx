@@ -10,6 +10,7 @@ import { GAME_VERSION, RELEASE_NAME } from '../version';
 import { CharacterAppearance, NEWS_FEED, SOCIAL_LINKS, UI_ASSETS } from './theme';
 import { AvatarPortrait } from './VoxelAvatar';
 import { SignedInUser } from './SignInScreen';
+import { isDemo } from '../demo/DemoMode';
 
 const SPLASHES = [
   'The world is yours!', '25 dimensions to explore!', 'Now with volumetric clouds!',
@@ -234,6 +235,11 @@ export default function TitleScreen({
       </div>
 
       <div className="title-version">EAOIN {GAME_VERSION} — {RELEASE_NAME}</div>
+      {isDemo() && (
+        <div className="title-demo-badge" title="Free EAOIN Demo — time-limited taste of the full game">
+          🎮 FREE DEMO
+        </div>
+      )}
     </div>
   );
 }

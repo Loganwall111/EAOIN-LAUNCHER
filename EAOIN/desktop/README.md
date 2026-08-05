@@ -187,6 +187,41 @@ npm run deploy:egs:run
 | `npm run deploy:egs:run` | Stage + **execute** the BPT upload |
 | `npm run egs` | build + deploy (dry-run) in one command |
 | `npm run egs:run` | build + deploy + upload in one command |
+| `npm run demo` / `npm run dist:demo` | Build the **free demo** edition (see below) |
+
+---
+
+## 🎮 Free Demo edition (desktop only)
+
+A time-boxed, viral-ready demo build so people can taste the game without
+reaching the ending or learning too much. It is the **same codebase** — the
+desktop wrapper sets `EAOIN_DEMO=1`, which exposes `window.eaoinDesktop.isDemo`
+and turns on the demo rules in `src/demo/DemoMode.ts`:
+
+- **Singularity** — open, but on a **30-minute session timer** (persists across
+  restarts; shown as a live countdown).
+- **Experimental / Incredible** modes — a **daily allowance** (resets each day
+  at midnight local time).
+- **Ending locked** — the Singularity journey stops before The House / The
+  Monitor (no secret ending), and the endgame content blocks (Omni Creator,
+  God Mode Block) are blocked.
+- **Creative mode** — fully available in the demo.
+- A slim **"FREE DEMO"** banner shows the countdown + a "Get the full game →"
+  call-to-action that opens the store.
+
+### Build it
+
+```bash
+cd EAOIN/desktop && npm install && npm run demo
+```
+
+Output lands in `desktop/release-demo/win-unpacked/` (plus an NSIS installer if
+you run `electron-builder --win` against `electron-builder.demo.yml`). This
+produces `EAOIN Demo` — a separate app id (`com.eaoin.sandbox.demo`) so it can
+coexist with the full game on the same machine.
+
+> The demo is **desktop only** by design: it requires the Electron preload flag,
+> so the browser build (the alpha) always runs as the full game.
 
 ## Where to get your Epic credentials & the Build Patch Tool
 

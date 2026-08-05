@@ -3367,6 +3367,64 @@ button.small { padding: 4px 8px; font: 10px var(--eaoin-pixel-font); background:
 .singularity-head { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 18px; padding: 20px 28px; z-index: 5; background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent); }
 .singularity-x { margin-left: auto; width: 44px; height: 44px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: #fff; font-size: 18px; }
 .singularity-x:hover { background: rgba(168,121,255,0.25); }
+/* Demo Singularity countdown pill */
+.singularity-demo-timer {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font: 700 12px var(--ui-mono, monospace);
+  letter-spacing: 0.06em;
+  color: #ffe14d;
+  background: rgba(20, 12, 34, 0.55);
+  border: 1px solid rgba(255, 225, 77, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+.singularity-demo-timer.out { color: #ff8a80; border-color: rgba(255, 138, 128, 0.5); }
+
+/* Free-demo banner (top-centre strip, shown only in the demo build) */
+.demo-banner {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(15, 8, 28, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  font: 700 12px var(--ui-font, 'Segoe UI', sans-serif);
+  letter-spacing: 0.05em;
+  color: #f2f5f8;
+  pointer-events: auto;
+}
+.demo-banner-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #04120a;
+  background: linear-gradient(180deg, #6fe0a0, #2fae6a);
+  font-weight: 900;
+}
+.demo-banner-text { color: #dbe8ff; }
+.demo-banner.is-locked .demo-banner-text { color: #ffd0c8; }
+.demo-banner-buy {
+  cursor: pointer;
+  font-weight: 900;
+  color: #ffe14d;
+  border: 1px solid rgba(255, 225, 77, 0.4);
+  padding: 4px 12px;
+  border-radius: 999px;
+  transition: background 150ms, transform 150ms;
+}
+.demo-banner-buy:hover { background: rgba(255, 225, 77, 0.16); transform: translateY(-1px); }
 .singularity-hint { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 13px; color: rgba(220,230,250,0.85); text-align: center; background: rgba(0,0,0,0.5); padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
 /* Quick-travel Next/Prev — jump a phase without zooming all the way in. */
 .singularity-quicktravel {

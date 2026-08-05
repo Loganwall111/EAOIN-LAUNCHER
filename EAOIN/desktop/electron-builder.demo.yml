@@ -1,0 +1,44 @@
+# electron-builder configuration for the FREE EAOIN DEMO (desktop only).
+#
+# Produces a Windows installer (.exe) for the time-boxed demo build. The game
+# detects this build via EAOIN_DEMO=1 (exposed as window.eaoinDesktop.isDemo)
+# and enables the 30-minute Singularity session + daily experimental-mode
+# allowance + ending locks. The web/desktop source is identical; only this flag
+# differs.
+appId: com.eaoin.sandbox.demo
+productName: EAOIN Demo
+copyright: Copyright © 2026 EAOIN Engine Team
+
+directories:
+  output: release-demo
+  buildResources: build
+
+# Everything the packaged demo app needs (same set as the full build).
+files:
+  - game-build/**/*
+  - main.js
+  - preload.cjs
+
+asar: true
+
+# EAOIN Demo.exe in the unpacked folder; NSIS installer below.
+executableName: EAOIN Demo
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  shortcutName: EAOIN Demo
+  artifactName: EAOIN-Demo-${version}-setup.${ext}
+
+publish: null
