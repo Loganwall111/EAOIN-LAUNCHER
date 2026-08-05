@@ -13,6 +13,9 @@ import {
   advanceCrop, cropOfBlock, foodValue, harvestDrops, isFarmland, isFood,
   isMatureCrop, isSeed, plantOnFarmland, tillBlock,
 } from '../farming/Farming';
+import {
+  applySeasonToMaterials, seasonForElapsed, Season, SEASON_EMOJI, SEASON_LABELS,
+} from '../rendering/SeasonalTint';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
 import { BossState } from '../creatures/BossEncounter';
 import { BossEncounter } from '../creatures/BossEncounter';
@@ -340,6 +343,10 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   const farmsRef = useRef<Map<string, { plantedAt: number }>>(new Map());
   /** Whether the player is riding a pet (wolf). */
   const ridingRef = useRef(false);
+  /** Current season for the seasonal terrain colour shift. */
+  const seasonRef = useRef<Season>('summer');
+  /** Epoch for the seasonal cycle (seasons advance from world load). */
+  const seasonStartRef = useRef(performance.now());
   useEffect(() => { superSettingsRef.current = superSettings; }, [superSettings]);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
@@ -1713,6 +1720,19 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         }
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
         tickFarms(); // advance planted crops toward maturity
+        // Seasons: re-tint grass/leaves whenever the season rolls over.
+        {
+          const ss = superSettingsRef.current;
+          const seasonEnabled = ss?.seasons ?? false;
+          const season: Season = seasonEnabled
+            ? seasonForElapsed((performance.now() - seasonStartRef.current) / 1000)
+            : 'summer';
+          if (season !== seasonRef.current) {
+            seasonRef.current = season;
+            applySeasonToMaterials(materials, season, ss?.seasonalLeafColor ?? true);
+            if (seasonEnabled) showActionMessage(`${SEASON_EMOJI[season]} It's ${SEASON_LABELS[season]} — the land has changed`);
+          }
+        }
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
         // Wind from the atmosphere drives the advanced physics simulations.
         const windPhase = performance.now() * 0.0001;
