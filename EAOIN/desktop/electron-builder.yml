@@ -21,6 +21,9 @@ asar: true
 # --- Windows -------------------------------------------------------------
 win:
   target:
+    - target: dir
+      arch:
+        - x64
     - target: nsis
       arch:
         - x64
@@ -28,6 +31,10 @@ win:
       arch:
         - x64
   icon: build/icon.png
+
+# The `dir` target emits a clean standalone folder (win-unpacked/) with all
+# node modules, assets, main.js and preload.cjs grouped together and relative
+# paths intact — exactly what Epic's Build Patch Tool consumes as its buildroot.
 
 nsis:
   oneClick: false

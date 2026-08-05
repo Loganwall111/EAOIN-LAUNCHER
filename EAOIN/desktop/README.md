@@ -127,3 +127,88 @@ desktop/
 > **Tip for a commercial release:** keep `desktop/` in the same repo so you can
 > rebuild installers from any tagged `v2.0.0-*` release. When you cut a new
 > game version, just `npm run build` + `npm run dist` again.
+
+---
+
+# Epic Games Store (EGS) — fully automated pipeline
+
+The Epic storefront does **not** accept `.exe` installers — it wants a clean,
+unpacked folder tree that its **Build Patch Tool (BPT)** can chunk & upload.
+This repo has a complete, automated pipeline for that.
+
+## What each piece does
+
+| File | Purpose |
+|------|---------|
+| `electron-builder.egs.yml` | Dedicated Windows/`dir` build → `desktop/release-egs/win-unpacked/` |
+| `scripts/build-egs.js` | One command: checks deps (auto-installs desktop deps), builds the web app, stages it, runs electron-builder, verifies `EAOIN.exe` |
+| `scripts/deploy-egs.js` | Stages the packaged app into `EAOIN/dist/epic-store-ready/` and prints/executes the **Build Patch Tool** command (with your credentials) |
+| `.env.egs.example` | Template for your Epic cloud-sandbox credentials (copy → `.env.egs`) |
+| `electron-builder.yml` | Now also emits a Windows `dir` target (standalone folder) alongside NSIS/portable |
+
+## The exact single command
+
+```bash
+cd EAOIN/desktop && npm install && npm run egs
+```
+
+That one command: installs the desktop tooling, compiles the web game, packages
+the unpacked Electron app, and prints the ready-to-upload Epic command (with
+placeholders until you set credentials). Your upload-ready files land in:
+
+```
+EAOIN/dist/epic-store-ready/
+```
+
+## Full two-step flow (recommended the first time)
+
+```bash
+# 1. Build the unpacked Electron app
+cd EAOIN/desktop && npm install && npm run build:egs
+#    -> desktop/release-egs/win-unpacked/
+
+# 2. Create credentials (do once)
+cp .env.egs.example .env.egs        # fill in OrganizationId, ProductId, ArtifactId, ClientId, ClientSecret, EPIC_BPT_DIR
+
+# 3. Stage + print the upload command (dry-run, safe)
+npm run deploy:egs
+#    -> EAOIN/dist/epic-store-ready/  (clean, ready to upload)
+
+# 4. Actually upload to the Epic cloud sandbox
+npm run deploy:egs:run
+```
+
+### npm scripts at a glance
+
+| Command | What it does |
+|---------|--------------|
+| `npm run build:egs` | Build the unpacked Electron app (all safety checks) |
+| `npm run deploy:egs` | Stage files + **print** the BPT upload command (dry-run) |
+| `npm run deploy:egs:run` | Stage + **execute** the BPT upload |
+| `npm run egs` | build + deploy (dry-run) in one command |
+| `npm run egs:run` | build + deploy + upload in one command |
+
+## Where to get your Epic credentials & the Build Patch Tool
+
+1. **Build Patch Tool (BPT):** on Windows it installs under
+   `C:\Program Files\Epic Games\BuildPatchTool\` — or download it from the Epic
+   Dev Portal → your product → **Build Patch Tool**. Set `EPIC_BPT_DIR` in
+   `.env.egs` if it isn't on a default path.
+2. **OrganizationId / ProductId / ArtifactId / ClientId / ClientSecret:** all
+   on the Epic Dev Portal
+   ([dev.epicgames.com/portal](https://dev.epicgames.com/portal/)) under your
+   product's **Sandboxes** → **Cloud Sandbox** settings.
+
+> `deploy-egs.js` never writes secrets to disk beyond the `.env.egs` you create
+> yourself (and that file is git-ignored). If credentials are absent it just
+> prints the command with `${OrganizationId}`-style placeholders so you always
+> know exactly what to run.
+
+## Safety checks built in
+
+- `build-egs.js` aborts with a clear message if game `node_modules` are missing,
+  if `electron-builder` can't be found, if the Vite build fails, or if
+  `EAOIN.exe` isn't produced.
+- `deploy-egs.js` aborts if the packaged app or `EAOIN.exe` is missing, and it
+  **refuses to upload with placeholder credentials**.
+- `--run` / `--upload` are explicit: nothing talks to Epic until you ask it to.

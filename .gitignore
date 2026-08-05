@@ -37,5 +37,8 @@ EAOIN/desktop/build/*
 !EAOIN/desktop/build/icon.png
 EAOIN/desktop/game-build/
 EAOIN/desktop/release/
+EAOIN/desktop/release-egs/
 EAOIN/desktop/node_modules/
+# Epic cloud-sandbox staging folder (generated) — but NOT the dist source folder.
+EAOIN/dist/epic-store-ready/
 

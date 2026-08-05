@@ -16,7 +16,12 @@
     "dist:win": "npm run build:game && npm run prepare && electron-builder --win",
     "dist:mac": "npm run build:game && npm run prepare && electron-builder --mac",
     "dist:linux": "npm run build:game && npm run prepare && electron-builder --linux",
-    "dist:win-portable": "npm run build:game && npm run prepare && electron-builder --win portable"
+    "dist:win-portable": "npm run build:game && npm run prepare && electron-builder --win portable",
+    "build:egs": "node scripts/build-egs.js",
+    "deploy:egs": "node scripts/deploy-egs.js",
+    "deploy:egs:run": "node scripts/deploy-egs.js --run",
+    "egs": "node scripts/build-egs.js && node scripts/deploy-egs.js",
+    "egs:run": "node scripts/build-egs.js && node scripts/deploy-egs.js --run"
   },
   "devDependencies": {
     "electron": "^31.0.0",

@@ -1,0 +1,42 @@
+# electron-builder configuration for the EPIC GAMES STORE (EGS) build.
+#
+# Epic's Build Patch Tool (BPT) does NOT consume installers — it wants a clean,
+# unpacked folder tree it can chunk & upload (the "dir" target produces exactly
+# that: EAOIN/desktop/release-egs/win-unpacked/). This config is intentionally
+# Windows/x64 only, matching the EGS requirement.
+#
+# Usage: electron-builder --win dir -c electron-builder.egs.yml
+appId: com.eaoin.sandbox
+productName: EAOIN
+copyright: Copyright © 2026 EAOIN Engine Team
+
+directories:
+  # Isolated from the normal release/ folder so EGS artifacts never mix with
+  # the itch.io / Steam / manual installers.
+  output: release-egs
+  buildResources: build
+
+# Everything the packaged app needs. Relative asset paths inside game-build
+# (the Vite output) keep textures/audio/ui resolving correctly when Electron
+# loads index.html over the file:// protocol. main.js + preload.cjs are the
+# Electron runtime entrypoints.
+files:
+  - game-build/**/*
+  - main.js
+  - preload.cjs
+
+asar: true
+
+# The EXE name Epic will launch. productName is "EAOIN", so this produces
+# EAOIN.exe in the unpacked folder.
+executableName: EAOIN
+
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: build/icon.png
+
+# No auto-update for the EGS edition — Epic's launcher owns updates.
+publish: null
