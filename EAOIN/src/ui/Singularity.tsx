@@ -276,7 +276,9 @@ const FRAG = `
     float rad = length(p.xy);
     float wall = 6.0 - rad;                 // inner surface of the tube
     // Dense red cells drifting through the plasma.
-    float n = 0.0;
+    // NOTE: start the accumulator at a large value — starting at 0.0 made
+    // min(0, sd) collapse to 0 everywhere, so the whole vessel rendered blank.
+    float n = 1e9;
     for (int i = 0; i < 3; i++) {
       vec3 c = vec3(
         sin(float(i)*2.1 + p.z*0.25 + u_time*0.2)*1.5,
@@ -430,7 +432,7 @@ const FRAG = `
     mat = 1;
     vec3 g = floor(p*0.5);
     vec3 l = fract(p*0.5)-0.5;
-    float gear = max(sdBox(l, vec3(0.4, 0.12, 0.4)), 0.0);
+    float gear = sdBox(l, vec3(0.4, 0.12, 0.4));
     float cog = sdBox(l, vec3(0.12, 0.3, 0.12));
     return min(gear, cog)/0.5;
   }
