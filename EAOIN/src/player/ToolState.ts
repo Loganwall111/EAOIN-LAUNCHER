@@ -1,7 +1,7 @@
 import { BlockID, getBlock } from '@shared/blocks/BlockRegistry';
 
-export type ToolKind = 'hand' | 'pickaxe' | 'axe' | 'shovel';
-export type ToolID = 'hand' | 'wooden_pickaxe' | 'stone_pickaxe' | 'wooden_axe' | 'wooden_shovel';
+export type ToolKind = 'hand' | 'pickaxe' | 'axe' | 'shovel' | 'hoe';
+export type ToolID = 'hand' | 'wooden_pickaxe' | 'stone_pickaxe' | 'wooden_axe' | 'wooden_shovel' | 'wooden_hoe';
 export type ToolInventory = Record<ToolID, boolean>;
 
 export interface ToolDefinition {
@@ -24,7 +24,7 @@ export interface MiningEstimate {
   preferredTool: ToolKind;
 }
 
-export const TOOLBELT: ToolID[] = ['hand', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'wooden_shovel'];
+export const TOOLBELT: ToolID[] = ['hand', 'wooden_pickaxe', 'stone_pickaxe', 'wooden_axe', 'wooden_shovel', 'wooden_hoe'];
 
 export const TOOLS: Record<ToolID, ToolDefinition> = {
   hand: { id: 'hand', name: 'Hand', kind: 'hand', tier: 0, speed: 1 },
@@ -32,6 +32,7 @@ export const TOOLS: Record<ToolID, ToolDefinition> = {
   stone_pickaxe: { id: 'stone_pickaxe', name: 'Stone Pick', kind: 'pickaxe', tier: 2, speed: 3.6 },
   wooden_axe: { id: 'wooden_axe', name: 'Wood Axe', kind: 'axe', tier: 1, speed: 2.5 },
   wooden_shovel: { id: 'wooden_shovel', name: 'Wood Shovel', kind: 'shovel', tier: 1, speed: 2.7 },
+  wooden_hoe: { id: 'wooden_hoe', name: 'Wood Hoe', kind: 'hoe', tier: 1, speed: 2.4 },
 };
 
 const MINING_PROFILES: Record<BlockID, MiningProfile> = {
@@ -67,6 +68,7 @@ export function createStarterToolInventory(): ToolInventory {
     stone_pickaxe: false,
     wooden_axe: false,
     wooden_shovel: false,
+    wooden_hoe: true, // 2.0 farming — every player starts able to till a farm
   };
 }
 

@@ -28,6 +28,9 @@ export function createStarterInventory(): InventoryStacks {
     22: 0,
     23: 0,
     300: 1, // The Forgotten Journal
+    345: 8, // Wheat Seeds (2.0 farming)
+    350: 4, // Carrot Seeds (2.0 farming)
+    354: 4, // Potato Seed (2.0 farming)
   };
 }
 

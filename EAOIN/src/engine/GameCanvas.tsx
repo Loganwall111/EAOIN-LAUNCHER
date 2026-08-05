@@ -9,6 +9,10 @@ import { addToInventory, canConsumeBlock, getStackCount, HOTBAR_BLOCKS, Inventor
 import { applyDamage, createStarterSurvivalStats, SurvivalStats, updateSurvivalLoop } from '../player/SurvivalState';
 import { climateForBiome, createStarterHydration, drink, HydrationState, updateHydration } from '../player/Hydration';
 import { estimateMining, getTool, nextTool, ToolID, ToolInventory } from '../player/ToolState';
+import {
+  advanceCrop, cropOfBlock, foodValue, harvestDrops, isFarmland, isFood,
+  isMatureCrop, isSeed, plantOnFarmland, tillBlock,
+} from '../farming/Farming';
 import { CreatureManager, CreatureStats } from '../creatures/CreatureManager';
 import { BossState } from '../creatures/BossEncounter';
 import { BossEncounter } from '../creatures/BossEncounter';
@@ -329,6 +333,9 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
   useEffect(() => { settingsRef.current = settings; }, [settings]);
   /** Live Full-Game-Settings read by the render loop so toggles apply instantly. */
   const superSettingsRef = useRef(superSettings);
+  /** Planted crops: world-coordinate key → when it was planted, so the growth
+   *  tick can advance stages in real time without per-block metadata. */
+  const farmsRef = useRef<Map<string, { plantedAt: number }>>(new Map());
   useEffect(() => { superSettingsRef.current = superSettings; }, [superSettings]);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { gameModeChangeRef.current = onGameModeChange; }, [onGameModeChange]);
@@ -747,7 +754,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
       const showActionMessage = (message: string): void => {
         setActionMessage(message);
         if (actionMessageTimer !== undefined) window.clearTimeout(actionMessageTimer);
-        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • F fly • Left click punch tree • Right place • T chat /day /time • Q tools • O/U panels'); }, 2400);
+        actionMessageTimer = window.setTimeout(() => { setActionMessage('WASD move • SPACE jump • F fly • Left punch • Right place • Q tools (Hoe tills dirt) • Z eat • T chat • O/U panels'); }, 2400);
       };
       const publishInventory = (next: InventoryStacks): void => { inventoryRef.current = next; onInventoryChange(next); };
       const publishSurvivalStats = (next: SurvivalStats): void => {
@@ -1034,6 +1041,30 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         });
       };
       const rebuildEditedBlock = (target: BlockCoordinate): void => { renderer.rebuildForWorldBlock(target.x, target.z); publishRenderStats(); };
+
+      // Farming growth tick — advances every tracked planted crop toward
+      // maturity over time. Stateless per crop (stage derives from time since
+      // planting), bounded by the farm map size, and safe to run every frame.
+      const tickFarms = (): void => {
+        const ss = superSettingsRef.current;
+        if (ss?.farmingEnabled === false) return;
+        const speedMult = Math.max(0, ss?.cropGrowthSpeed ?? 1);
+        if (farmsRef.current.size === 0) return;
+        const now = performance.now();
+        for (const [key, entry] of farmsRef.current) {
+          const parts = key.split(',');
+          const x = Number(parts[0]), y = Number(parts[1]), z = Number(parts[2]);
+          const cur = terrain.getBlockAt(x, y, z);
+          if (!cropOfBlock(cur)) { farmsRef.current.delete(key); continue; } // mined/replaced
+          if (isMatureCrop(cur)) continue; // fully grown, nothing to do
+          const elapsed = (now - entry.plantedAt) / 1000;
+          const next = advanceCrop(cur, elapsed, speedMult);
+          if (next !== cur) {
+            terrain.setBlockAt(x, y, z, next);
+            rebuildEditedBlock({ x, y, z });
+          }
+        }
+      };
       const saveWorldEdits = (): void => { const r = saveManager.save(terrain.getEdits()); showActionMessage(r.message); };
       saveWorldEditsRef.current = saveWorldEdits;
       // Auto-save: periodically persist world edits so a quit-to-menu never loses
@@ -1047,8 +1078,20 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
         const existing = terrain.getBlockAt(session.target.x, session.target.y, session.target.z);
         if (existing !== session.blockId || existing === 0) { showActionMessage('Mining target changed'); clearMining(); return; }
         terrain.setBlockAt(session.target.x, session.target.y, session.target.z, 0);
+        farmsRef.current.delete(`${session.target.x},${session.target.y},${session.target.z}`);
         authorityRuntime.recordAction(); onGameplayEvent('blocksMined');
-        if (session.canHarvest) { itemDrops.spawnDrop(existing, new Vector3(session.target.x, session.target.y, session.target.z), 1); audio.play('mine', settingsRef.current); showActionMessage(`Mined ${getBlock(existing).name} with ${session.toolName} — cracking complete`); }
+        if (session.canHarvest) {
+          // Fully-grown crops drop their harvest (crop + seeds) when broken.
+          if (isMatureCrop(existing)) {
+            for (const d of harvestDrops(existing)) itemDrops.spawnDrop(d.block, new Vector3(session.target.x, session.target.y, session.target.z), d.amount);
+            audio.play('mine', settingsRef.current); showActionMessage('🌾 Harvested a crop');
+          } else if (isSeed(existing)) {
+            itemDrops.spawnDrop(existing, new Vector3(session.target.x, session.target.y, session.target.z), 1);
+            audio.play('mine', settingsRef.current); showActionMessage(`Gathered ${getBlock(existing).name}`);
+          } else {
+            itemDrops.spawnDrop(existing, new Vector3(session.target.x, session.target.y, session.target.z), 1); audio.play('mine', settingsRef.current); showActionMessage(`Mined ${getBlock(existing).name} with ${session.toolName} — cracking complete`);
+          }
+        }
         else { audio.play('error', settingsRef.current); showActionMessage(`${getBlock(existing).name} broke but dropped nothing — stronger tool needed`); }
         rebuildEditedBlock(session.target); saveWorldEdits(); clearMining();
       };
@@ -1665,6 +1708,7 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           }
         }
         dimensionRuntime.update(deltaSeconds); worldInteractions.update(deltaSeconds); logicRuntime.update(deltaSeconds); authorityRuntime.update(deltaSeconds); settlementRuntime.update(camera.position, deltaSeconds);
+        tickFarms(); // advance planted crops toward maturity
         cinematicLighting.setTimeOfDay(timeState.timeOfDay);
         // Wind from the atmosphere drives the advanced physics simulations.
         const windPhase = performance.now() * 0.0001;
@@ -2609,6 +2653,56 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           if (!attackCreature()) startMining();
         } else {
           viewModel.swing();
+          // Farming interactions take priority on right-click: harvest a mature
+          // crop, till dirt with a hoe, or plant a seed onto farmland.
+          {
+            const ft = pickTargetBlock();
+            if (ft) {
+              const fTx = ft.target.x, fTy = ft.target.y, fTz = ft.target.z;
+              const fBlock = terrain.getBlockAt(fTx, fTy, fTz);
+              const fTool = getTool(selectedToolRef.current);
+              // 1) Harvest a fully-grown crop.
+              if (isMatureCrop(fBlock)) {
+                for (const d of harvestDrops(fBlock)) {
+                  itemDrops.spawnDrop(d.block, new Vector3(fTx + 0.5, fTy + 0.5, fTz + 0.5), d.amount);
+                }
+                terrain.setBlockAt(fTx, fTy, fTz, 0);
+                farmsRef.current.delete(`${fTx},${fTy},${fTz}`);
+                rebuildEditedBlock(ft.target); saveWorldEdits();
+                authorityRuntime.recordAction(); onGameplayEvent('blocksMined');
+                audio.play('mine', settingsRef.current);
+                showActionMessage('🌾 Harvested a crop!');
+                return;
+              }
+              // 2) Till soil into farmland with a hoe.
+              if (fTool.kind === 'hoe') {
+                const tilled = tillBlock(fBlock);
+                if (tilled !== null) {
+                  terrain.setBlockAt(fTx, fTy, fTz, tilled);
+                  rebuildEditedBlock(ft.target); saveWorldEdits();
+                  authorityRuntime.recordAction(); onGameplayEvent('blocksPlaced');
+                  audio.play('place', settingsRef.current);
+                  showActionMessage('🧑‍🌾 Farmland tilled');
+                  return;
+                }
+              }
+              // 3) Plant a seed on farmland.
+              if (isSeed(selectedBlockRef.current) && isFarmland(fBlock)) {
+                const plant = plantOnFarmland(selectedBlockRef.current, fBlock);
+                if (plant !== null) {
+                  terrain.setBlockAt(fTx, fTy, fTz, plant);
+                  farmsRef.current.set(`${fTx},${fTy},${fTz}`, { plantedAt: performance.now() });
+                  rebuildEditedBlock(ft.target); saveWorldEdits();
+                  const creative = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
+                  if (!creative) publishInventory(removeFromInventory(inventoryRef.current, selectedBlockRef.current, 1));
+                  authorityRuntime.recordAction(); onGameplayEvent('blocksPlaced');
+                  audio.play('place', settingsRef.current);
+                  showActionMessage('🌱 Seed planted — it will grow over time');
+                  return;
+                }
+              }
+            }
+          }
           // Right-click on a redstone component toggles it instead of placing.
           const target = pickTargetBlock();
           if (target) {
@@ -2724,6 +2818,30 @@ export default function GameCanvas({ seed, gameMode, onExit, modRegistry, select
           hydrationState = result.state;
           audio.play('pickup', settingsRef.current);
           showActionMessage(result.message);
+          return;
+        }
+        if (event.key.toLowerCase() === 'z') {
+          // Eat the selected food item — restores hunger (+ health for some).
+          event.preventDefault();
+          const food = selectedBlockRef.current;
+          if (!isFood(food)) { showActionMessage('Hold a food item to eat (Z)'); return; }
+          const value = foodValue(food)!;
+          const foodHeal = superSettingsRef.current?.foodHeal ?? true;
+          const creative = gameModeRef.current === 'creative' || gameModeRef.current === 'incredible';
+          if (!creative) {
+            if (!canConsumeBlock(inventoryRef.current, food, 1)) { showActionMessage(`No ${getBlock(food).name} left`); return; }
+            publishInventory(removeFromInventory(inventoryRef.current, food, 1));
+          }
+          let next = survivalStatsRef.current;
+          if (foodHeal) {
+            const heal = value.health ?? 0;
+            const clamp = (n: number) => Math.max(0, Math.min(100, n));
+            next = { ...next, food: clamp(next.food + value.hunger), health: clamp(next.health + heal) };
+          }
+          publishSurvivalStats(next);
+          authorityRuntime.recordAction();
+          audio.play('eat', settingsRef.current);
+          showActionMessage(`${value.emoji} Ate ${getBlock(food).name} (+${value.hunger} food${value.health ? `, +${value.health} health` : ''})`);
           return;
         }
         if (event.key === 'F4') {

@@ -7,6 +7,7 @@ export type RecipeID =
   | 'stone_pickaxe'
   | 'wooden_axe'
   | 'wooden_shovel'
+  | 'wooden_hoe'
   | 'pack_dirt'
   | 'pack_stone'
   | 'pack_sand'
@@ -27,7 +28,14 @@ export type RecipeID =
   | 'god_mode_block'
   | 'windmill'
   | 'conveyor'
-  | 'elevator';
+  | 'elevator'
+  // 2.0 farming & cooking
+  | 'bread'
+  | 'tomato_soup'
+  | 'vegetable_stew'
+  | 'apple_pie'
+  | 'pumpkin_pie'
+  | 'cookies';
 
 export interface RecipeCost {
   blockId: BlockID;
@@ -84,6 +92,13 @@ export const RECIPES: Recipe[] = [
     description: 'Digs dirt, grass, and sand faster.',
     costs: [{ blockId: 6, amount: 2 }],
     output: { type: 'tool', toolId: 'wooden_shovel' },
+  },
+  {
+    id: 'wooden_hoe',
+    name: 'Wooden Hoe',
+    description: 'Tills dirt into farmland so you can plant crops.',
+    costs: [{ blockId: 6, amount: 2 }],
+    output: { type: 'tool', toolId: 'wooden_hoe' },
   },
   {
     id: 'pack_dirt',
@@ -250,6 +265,49 @@ export const RECIPES: Recipe[] = [
       { blockId: 3, amount: 4 },    // Stone
     ],
     output: { type: 'block', blockId: 344, amount: 1 },
+  },
+  /* ---------- 2.0 farming & cooking: craft crops into cooked meals ---------- */
+  {
+    id: 'bread',
+    name: 'Bread',
+    description: 'Bake three wheat into a loaf.',
+    costs: [{ blockId: 349, amount: 3 }], // Wheat
+    output: { type: 'block', blockId: 111, amount: 1 },
+  },
+  {
+    id: 'tomato_soup',
+    name: 'Tomato Soup',
+    description: 'A warming soup of tomatoes and bread.',
+    costs: [{ blockId: 362, amount: 2 }, { blockId: 111, amount: 1 }],
+    output: { type: 'block', blockId: 368, amount: 1 },
+  },
+  {
+    id: 'vegetable_stew',
+    name: 'Vegetable Stew',
+    description: 'Hearty stew of carrot, potato, and tomato.',
+    costs: [{ blockId: 123, amount: 1 }, { blockId: 124, amount: 1 }, { blockId: 362, amount: 1 }],
+    output: { type: 'block', blockId: 369, amount: 1 },
+  },
+  {
+    id: 'apple_pie',
+    name: 'Apple Pie',
+    description: 'A sweet dessert baked from apples and wheat.',
+    costs: [{ blockId: 110, amount: 2 }, { blockId: 349, amount: 2 }],
+    output: { type: 'block', blockId: 370, amount: 1 },
+  },
+  {
+    id: 'pumpkin_pie',
+    name: 'Pumpkin Pie',
+    description: 'Seasonal treat from a pumpkin and wheat.',
+    costs: [{ blockId: 100, amount: 1 }, { blockId: 349, amount: 2 }],
+    output: { type: 'block', blockId: 118, amount: 1 },
+  },
+  {
+    id: 'cookies',
+    name: 'Cookie',
+    description: 'Bake two wheat and an apple into cookies.',
+    costs: [{ blockId: 349, amount: 2 }, { blockId: 110, amount: 1 }],
+    output: { type: 'block', blockId: 119, amount: 2 },
   },
 ];
 

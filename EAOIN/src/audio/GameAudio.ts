@@ -1,6 +1,6 @@
 import { GameSettings } from '../settings/GameSettings';
 
-export type AudioCue = 'mine' | 'place' | 'pickup' | 'craft' | 'hit' | 'creature_down' | 'error' | 'ui' | 'explosion';
+export type AudioCue = 'mine' | 'place' | 'pickup' | 'craft' | 'hit' | 'creature_down' | 'error' | 'ui' | 'explosion' | 'eat';
 
 const CUE_FREQUENCIES: Record<AudioCue, [number, number]> = {
   mine: [150, 90],
@@ -12,6 +12,7 @@ const CUE_FREQUENCIES: Record<AudioCue, [number, number]> = {
   error: [90, 70],
   ui: [360, 420],
   explosion: [120, 40],
+  eat: [620, 420],
 };
 
 export class GameAudio {
