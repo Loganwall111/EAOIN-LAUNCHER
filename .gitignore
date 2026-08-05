@@ -30,3 +30,12 @@ EAOIN/NEXT_GENERATION_*.md
 EAOIN/*.zip
 EAOIN/*.tar.gz
 
+# Desktop packaging (Electron) — commit the icon build resources, but ignore the
+# staged game build, produced installers, and desktop-only node_modules.
+!EAOIN/desktop/build/
+EAOIN/desktop/build/*
+!EAOIN/desktop/build/icon.png
+EAOIN/desktop/game-build/
+EAOIN/desktop/release/
+EAOIN/desktop/node_modules/
+

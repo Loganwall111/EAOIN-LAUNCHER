@@ -1,0 +1,25 @@
+{
+  "name": "eaoin-desktop",
+  "productName": "EAOIN",
+  "version": "2.0.0",
+  "description": "EAOIN 2.0 — Ultimate Sandbox Engine (packaged desktop edition). A sellable Electron build of the voxel sandbox game.",
+  "main": "main.js",
+  "type": "module",
+  "author": "EAOIN Engine Team",
+  "license": "MIT",
+  "homepage": "https://github.com/Loganwall111/EAOIN-LAUNCHER",
+  "scripts": {
+    "build:game": "cd .. && npm run build",
+    "prepare": "node scripts/prepare-game.mjs",
+    "start": "npm run build:game && npm run prepare && electron .",
+    "dist": "npm run build:game && npm run prepare && electron-builder",
+    "dist:win": "npm run build:game && npm run prepare && electron-builder --win",
+    "dist:mac": "npm run build:game && npm run prepare && electron-builder --mac",
+    "dist:linux": "npm run build:game && npm run prepare && electron-builder --linux",
+    "dist:win-portable": "npm run build:game && npm run prepare && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}

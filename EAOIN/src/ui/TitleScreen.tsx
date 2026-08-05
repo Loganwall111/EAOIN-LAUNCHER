@@ -254,6 +254,11 @@ export default function TitleScreen({
       </div>
 
       <div className="title-version">EAOIN {GAME_VERSION} — {RELEASE_NAME}</div>
+      {typeof window !== 'undefined' && (window as Window).eaoinDesktop?.isDesktop ? (
+        <div className="title-desktop-badge" title={`Desktop Edition · Electron ${(window as Window).eaoinDesktop?.versions.electron}`}>
+          🖥️ Desktop Edition
+        </div>
+      ) : null}
     </div>
   );
 }

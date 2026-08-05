@@ -1,0 +1,78 @@
+# electron-builder configuration for EAOIN.
+# Produces installers / distributables you can sell: Windows NSIS + portable,
+# macOS DMG + ZIP, and Linux AppImage + deb.
+appId: com.eaoin.sandbox
+productName: EAOIN
+copyright: Copyright © 2026 EAOIN Engine Team
+
+directories:
+  output: release
+  buildResources: build
+
+# Everything the packaged app needs: the staged game build plus the two
+# Electron runtime files. `main` comes from package.json ("main.js").
+files:
+  - game-build/**/*
+  - main.js
+  - preload.cjs
+
+asar: true
+
+# --- Windows -------------------------------------------------------------
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: EAOIN
+
+portable:
+  artifactName: EAOIN-${version}-portable.exe
+
+# --- macOS ---------------------------------------------------------------
+mac:
+  category: public.app-category.games
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+  icon: build/icon.png
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: ${productName} ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# --- Linux ---------------------------------------------------------------
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Game
+  icon: build/icon.png
+  synopsis: EAOIN — Ultimate Sandbox Engine
+  maintainer: EAOIN Engine Team <eaoin@example.com>
+
+# Electron won't auto-update unless you configure a provider; these disable
+# the auto-update prompt so the app doesn't nag users out of the box.
+publish: null

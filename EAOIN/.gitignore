@@ -1,6 +1,11 @@
 node_modules/
 dist/
 build/
+# Keep the desktop app icon (Electron packaging resources) even though 'build/'
+# is ignored above.
+!desktop/build/
+desktop/build/*
+!desktop/build/icon.png
 coverage/
 .vite/
 .cache/
