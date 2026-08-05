@@ -385,13 +385,13 @@ const FRAG = `
   // Infinite hallway: a long tunnel that repeats, with pillars on both sides.
   float mapHallway(vec3 p, out int mat){
     mat = 1;
-    float floor = p.y + 2.5;
+    float ground = p.y + 2.5;
     float wall = 4.0 - abs(p.x);
     float z = mod(p.z, 8.0) - 4.0;
     vec3 g = floor(p*0.4);
     vec3 l = fract(p*0.4)-0.5;
     float pillar = sdBox(l - vec3(3.2, 0.5, 0.0), vec3(0.4, 1.5, 0.4));
-    return min(min(floor, wall), pillar)/0.4;
+    return min(min(ground, wall), pillar)/0.4;
   }
 
   // Endless desert: rolling blocky sand dunes under a hot sky.
@@ -449,12 +449,12 @@ const FRAG = `
   // Temple: a grand stone temple with columns and a stepped roof.
   float mapTemple(vec3 p, out int mat){
     mat = 1;
-    float floor = p.y + 2.0;
+    float ground = p.y + 2.0;
     float roof = abs(p.y - 4.0) - 1.2;
     vec3 g = floor(p*0.5);
     vec3 l = fract(p*0.5)-0.5;
     float column = sdBox(l - vec3(0.0,1.0,0.0), vec3(0.35,1.5,0.35));
-    return min(min(floor, roof), column)/0.5;
+    return min(min(ground, roof), column)/0.5;
   }
 
   // Unified scene map — picks the generator for the current journey world.
