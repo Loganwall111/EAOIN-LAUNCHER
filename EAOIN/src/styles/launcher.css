@@ -136,11 +136,13 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  /* Flexible desktop proportions: the version list gets the larger share and
+     the detail panel fills the rest, scaling across 16:9 / 16:10 windows. */
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   gap: 18px;
   padding: 12px 22px 22px;
   width: 100%;
-  max-width: 1100px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 .launcher-versions {
