@@ -46,19 +46,32 @@ afterEach(() => {
   delete (window as unknown as { eaoinDesktop?: unknown }).eaoinDesktop;
 });
 
-describe('Desktop Edition badge', () => {
-  it('shows the Desktop Edition badge when running under Electron', () => {
+// Branding unification: the "Desktop Edition" label was removed so the menu is
+// identical across the web build and the packaged desktop app.
+describe('Unified menu branding', () => {
+  it('does NOT show a "Desktop Edition" badge even when running under Electron', () => {
     (window as unknown as { eaoinDesktop?: unknown }).eaoinDesktop = {
       isDesktop: true,
       platform: 'win32',
       versions: { electron: '31.0.0', chrome: '124.0.0', node: '20.0.0' },
     };
     renderTitle();
-    expect(screen.getByText('🖥️ Desktop Edition')).not.toBeNull();
+    expect(screen.queryByText('🖥️ Desktop Edition')).toBeNull();
+    expect(screen.queryByText(/Desktop Edition/i)).toBeNull();
+    expect(screen.queryByText(/Desktop Version/i)).toBeNull();
   }, 20000);
 
   it('does not show the badge in a normal browser (no eaoinDesktop)', () => {
     renderTitle();
     expect(screen.queryByText('🖥️ Desktop Edition')).toBeNull();
+  }, 20000);
+
+  it('renders the unified top bar + centre row + footer layout', () => {
+    const { container } = renderTitle();
+    expect(container.querySelector('.tm-topbar')).not.toBeNull();
+    expect(container.querySelector('.tm-center')).not.toBeNull();
+    expect(container.querySelector('.tm-secondary')).not.toBeNull();
+    expect(container.querySelector('.tm-footer')).not.toBeNull();
+    expect(container.textContent).toContain('STORE & CREATION');
   }, 20000);
 });

@@ -106,7 +106,7 @@
 
 .title-logo-wrap {
   position: absolute;
-  top: clamp(14px, 3.2vh, 40px);
+  top: clamp(12px, 2.4vh, 30px);
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
@@ -115,7 +115,7 @@
 }
 
 .title-logo {
-  font: 900 clamp(52px, 9.4vw, 132px)/0.86 var(--ui-font);
+  font: 900 clamp(44px, 6.4vw, 92px)/0.86 var(--ui-font);
   letter-spacing: 0.045em;
   margin: 0;
   color: #b9bfc6;
@@ -169,7 +169,7 @@
 
 .title-icon-rail {
   position: absolute;
-  top: 18px;
+  top: 64px;
   right: 18px;
   display: flex;
   gap: 10px;
@@ -211,23 +211,57 @@
 /* --- Center menu buttons -------------------------------------------------- */
 
 .title-menu {
+  /* Full-screen overlay: each section (top bar, centre rows, footer) is
+     absolutely placed inside so the whole menu scales naturally across
+     16:9 / 16:10 desktop windows. The container is pointer-transparent so it
+     never blocks the logo/backdrop; children re-enable pointer events. */
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.title-menu > * { pointer-events: auto; }
+
+/* --- Top navigation bar (top-right) ----------------------------------- */
+.tm-topbar {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+}
+/* --- Secondary expansion row (just above centre) ---------------------- */
+.tm-secondary {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -210%);
+  display: flex;
+  gap: 10px;
+}
+/* --- Center core row --------------------------------------------------- */
+.tm-center {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  /* Desktop: flexible multi-column grid so a large menu scales naturally
-   * across 16:9 / 16:10 windows instead of collapsing into a tall single
-   * column that clips the bottom buttons. Falls back to a scrollable column
-   * on short/narrow windows via the media query + overflow below. */
-  width: min(760px, 52vw);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-content: center;
-  gap: 10px 16px;
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  padding: 6px;
-  z-index: 4;
+  display: flex;
+  gap: 16px;
+}
+/* --- Store & creation / launcher footer (bottom centre) --------------- */
+.tm-footer {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.tm-footer-row {
+  display: flex;
+  gap: 10px;
 }
 
 .menu-btn {
@@ -243,21 +277,67 @@
   color: var(--ui-text);
   text-shadow: 0 2px 3px rgba(0, 0, 0, 0.9);
   cursor: pointer;
-  background: linear-gradient(180deg, #3c4652 0%, #262d37 52%, #1a1f27 100%);
-  border-top: 2px solid var(--ui-bevel-light);
-  border-left: 2px solid var(--ui-bevel-light);
-  border-right: 2px solid var(--ui-bevel-dark);
-  border-bottom: 2px solid var(--ui-bevel-dark);
-  box-shadow: 0 0 0 2px var(--ui-edge), 0 6px 16px rgba(0, 0, 0, 0.55);
-  transition: filter 120ms, transform 120ms;
+  /* Premium translucent glass finish — the backdrop subtly refracts through. */
+  background: rgba(15, 8, 28, 0.4);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02) 55%, transparent 100%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: background 180ms, transform 180ms, box-shadow 180ms, filter 180ms, border-color 180ms;
 }
 
 .menu-btn:hover {
-  filter: brightness(1.32);
-  transform: translateY(-2px);
+  background: rgba(15, 8, 28, 0.6);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 55%, transparent 100%);
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.10), 0 8px 24px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px) scale(1.03);
+  filter: brightness(1.1);
 }
 
 .menu-btn:active { transform: translateY(1px); filter: brightness(0.95); }
+
+/* --- Hybrid AAA menu: compact variants ---------------------------------- */
+/* Top navigation tabs (top-right bar) */
+.menu-btn.tab {
+  padding: 9px 16px 9px 14px;
+  font-size: 11px;
+  gap: 7px;
+  border-radius: 999px;
+}
+.menu-btn.tab .btn-icon {
+  position: static;
+  transform: none;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  border-radius: 50%;
+}
+/* Secondary expansion chips (just above centre) */
+.menu-btn.chip {
+  padding: 8px 16px 8px 14px;
+  font-size: 12px;
+  gap: 7px;
+  border-radius: 10px;
+}
+.menu-btn.chip .btn-icon {
+  position: static;
+  transform: none;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+}
+/* Center core buttons */
+.menu-btn.core {
+  padding: 16px 22px 16px 20px;
+  font-size: 15px;
+  border-radius: 12px;
+  min-width: 168px;
+}
+.menu-btn.core .btn-icon { font-size: 17px; }
+.menu-btn.is-quit { border-color: rgba(255, 120, 110, 0.35); }
+.menu-btn.is-quit:hover { border-color: rgba(255, 120, 110, 0.7); box-shadow: 0 0 15px rgba(255, 110, 100, 0.18); }
 
 .menu-btn .btn-icon {
   position: absolute;
@@ -275,11 +355,13 @@
 }
 
 .menu-btn.is-primary {
-  background: linear-gradient(180deg, #4d5a68 0%, #303945 52%, #202730 100%);
+  background: linear-gradient(180deg, rgba(77, 90, 104, 0.42), rgba(32, 39, 48, 0.42));
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02) 55%, transparent 100%);
 }
 
 .menu-btn.is-horizonos {
-  background: linear-gradient(180deg, #3a5f8f 0%, #2a4a70 52%, #1c3350 100%);
+  background: linear-gradient(180deg, rgba(58, 95, 143, 0.42), rgba(28, 51, 80, 0.42));
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 55%, transparent 100%);
   border-left: 3px solid #62d8ff;
 }
 .menu-btn.is-horizonos:hover { border-left-color: #a9ecff; }
@@ -423,27 +505,6 @@
   text-shadow: 0 1px 3px #000;
   z-index: 4;
   white-space: nowrap;
-}
-
-/* Desktop Edition badge — shown only when running as a packaged Electron app. */
-.title-desktop-badge {
-  position: absolute;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
-  font: 700 9px var(--ui-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #9adcff;
-  background: rgba(26, 42, 66, 0.55);
-  border: 1px solid rgba(154, 220, 255, 0.35);
-  border-radius: 999px;
-  padding: 3px 12px;
-  text-shadow: 0 1px 2px #000;
-  z-index: 4;
-  white-space: nowrap;
-  pointer-events: none;
-  backdrop-filter: blur(4px);
 }
 
 /* ============================================================================
@@ -1381,14 +1442,21 @@
   .eaoin-creator { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .creator-right { display: none; }
   .hud-quests, .hud-chat, .hud-equipped { display: none; }
-  /* Mobile / narrow: back to a single centered column. */
-  .title-menu {
-    width: min(88vw, 340px);
-    grid-template-columns: 1fr;
-    max-height: calc(100vh - 130px);
-    align-content: start;
-    transform: translate(-50%, -44%);
+  /* Mobile / narrow: stack every menu section as a scrollable column. */
+  .tm-topbar {
+    top: 12px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    flex-wrap: wrap;
+    justify-content: center;
   }
+  .title-icon-rail { top: auto; bottom: 70px; right: 10px; flex-direction: column; gap: 6px; }
+  .icon-btn { width: 40px; height: 38px; font-size: 16px; }
+  .tm-secondary { top: auto; transform: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -220%); flex-wrap: wrap; justify-content: center; }
+  .tm-center { flex-wrap: wrap; justify-content: center; width: min(92vw, 420px); }
+  .tm-footer { bottom: 12px; width: min(92vw, 360px); }
+  .tm-footer-row { flex-wrap: wrap; justify-content: center; }
 }
 
 /* Accessibility: respect the existing reduced-motion setting. */
@@ -1754,13 +1822,13 @@ select.ui-input option { background: var(--ui-panel-solid); color: var(--ui-text
   box-shadow: 0 0 0 2px var(--ui-edge), 0 0 14px rgba(98, 216, 255, 0.4);
 }
 
-/* 2.0 menu button variants */
-.menu-btn.is-tutorial { background: linear-gradient(180deg,#3a6a8a,#2a4a6a 52%,#1c3a52 100%); }
-.menu-btn.is-gamehub { background: linear-gradient(180deg,#4a8a5a,#2a6a3a 52%,#1c4a28 100%); }
-.menu-btn.is-portals { background: linear-gradient(180deg,#6a3a8a,#4a2a6a 52%,#321a52 100%); }
-.menu-btn.is-alpha { background: linear-gradient(180deg,#8a3a4a,#6a2a3a 52%,#4a1c26 100%); }
+/* 2.0 menu button variants — translucent gradients so the glass layer shows. */
+.menu-btn.is-tutorial { background: linear-gradient(180deg, rgba(58,106,138,0.45), rgba(28,58,82,0.45)); }
+.menu-btn.is-gamehub { background: linear-gradient(180deg, rgba(74,138,90,0.45), rgba(28,74,40,0.45)); }
+.menu-btn.is-portals { background: linear-gradient(180deg, rgba(106,58,138,0.45), rgba(50,26,82,0.45)); }
+.menu-btn.is-alpha { background: linear-gradient(180deg, rgba(138,58,74,0.45), rgba(74,28,38,0.45)); }
 .menu-btn.is-alpha:hover { border-left-color: #ffb0b0; }
-.menu-btn.is-backstable { background: linear-gradient(180deg,#3a7a4a,#2a5a3a 52%,#1c3a26 100%); }
+.menu-btn.is-backstable { background: linear-gradient(180deg, rgba(58,122,74,0.45), rgba(28,58,38,0.45)); }
 .menu-btn.is-backstable:hover { border-left-color: #7ef7a0; }
-.menu-btn.is-singularity { background: linear-gradient(180deg,#2a2a5a,#1a1a3a 52%,#0c0c22 100%); }
+.menu-btn.is-singularity { background: linear-gradient(180deg, rgba(42,42,90,0.45), rgba(12,12,34,0.45)); }
 .menu-btn.is-singularity:hover { border-left-color: #a879ff; }

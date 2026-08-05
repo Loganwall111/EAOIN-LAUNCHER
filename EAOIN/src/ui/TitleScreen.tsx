@@ -148,64 +148,44 @@ export default function TitleScreen({
 
       {/* ---- main menu ---- */}
       <nav className="title-menu" aria-label="Main menu">
-        <button className="menu-btn is-primary" onClick={onSingleplayer}>
-          Singleplayer<span className="btn-icon">🟩</span>
-        </button>
-        <button className="menu-btn is-tutorial" onClick={onTutorial}>
-          Tutorial World<span className="btn-icon">📖</span>
-        </button>
-        <button className="menu-btn is-primary" onClick={onMultiplayer}>
-          Multiplayer<span className="btn-icon">🧑</span>
-        </button>
-        <button className="menu-btn is-gamehub" onClick={onGameHub}>
-          Game Hub<span className="btn-icon">🎮</span>
-        </button>
-        <button className="menu-btn is-portals" onClick={onPortalGallery}>
-          Nexus<span className="btn-icon">🌀</span>
-        </button>
-        <button className="menu-btn is-bossrush" onClick={onBossRush}>
-          Boss Rush<span className="btn-icon">👑</span>
-        </button>
-        <button className="menu-btn is-customdim" onClick={onCustomDim}>
-          Custom World<span className="btn-icon">🌍</span>
-        </button>
-        <button className="menu-btn is-questjournal" onClick={onQuestJournal}>
-          Quests<span className="btn-icon">📜</span>
-        </button>
-        <button className="menu-btn is-singularity" onClick={onSingularity}>
-          Singularity<span className="btn-icon">🕳</span>
-        </button>
-        <button className="menu-btn is-horizonos" onClick={onHorizonOS}>
-          HorizonOS<span className="btn-icon">🖥️</span>
-        </button>
-        <button className="menu-btn" onClick={onMods}>
-          Mods<span className="btn-icon">🟢</span>
-        </button>
-        <button className="menu-btn" onClick={onOptions}>
-          Options<span className="btn-icon">⚙</span>
-        </button>
+        {/* Top navigation bar (top-right): secondary engine utility tabs */}
+        <div className="tm-topbar">
+          <button className="menu-btn tab is-gamehub" onClick={onGameHub}>Game Hub<span className="btn-icon">🎮</span></button>
+          <button className="menu-btn tab is-portals" onClick={onPortalGallery}>Nexus<span className="btn-icon">🌀</span></button>
+          <button className="menu-btn tab is-singularity" onClick={onSingularity}>Singularity<span className="btn-icon">🕳</span></button>
+          <button className="menu-btn tab is-horizonos" onClick={onHorizonOS}>HorizonOS<span className="btn-icon">🖥️</span></button>
+          <button className="menu-btn tab" onClick={onMods}>Mods<span className="btn-icon">🟢</span></button>
+        </div>
 
-        {/* ---- marketplace section ---- */}
-        <div className="menu-section-divider"><span>STORE &amp; CREATION</span></div>
-        <button className="menu-btn is-marketplace" onClick={onMarketplace}>
-          Marketplace<span className="btn-icon">🏬</span>
-        </button>
-        <button className="menu-btn is-editor" onClick={onEditorMode}>
-          Editor Mode<span className="btn-icon">🛠</span>
-        </button>
+        {/* Secondary expansion row (just above centre): extra gameplay modes */}
+        <div className="tm-secondary">
+          <button className="menu-btn chip is-tutorial" onClick={onTutorial}>Tutorial World<span className="btn-icon">📖</span></button>
+          <button className="menu-btn chip is-bossrush" onClick={onBossRush}>Boss Rush<span className="btn-icon">👑</span></button>
+          <button className="menu-btn chip is-customdim" onClick={onCustomDim}>Custom World<span className="btn-icon">🌍</span></button>
+          <button className="menu-btn chip is-questjournal" onClick={onQuestJournal}>Quests<span className="btn-icon">📜</span></button>
+        </div>
 
-        {/* ---- separate launcher section (bottom) ---- */}
-        <div className="menu-section-divider"><span>ALPHA LAUNCHER</span></div>
-        <button className="menu-btn is-backstable" onClick={onBackToStable}>
-          Back to Stable<span className="btn-icon">⬅️</span>
-        </button>
-        <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>
-          Alpha Launcher<span className="btn-icon">🚀</span>
-        </button>
+        {/* Center core row: core gameplay actions */}
+        <div className="tm-center">
+          <button className="menu-btn core is-primary" onClick={onSingleplayer}>Singleplayer<span className="btn-icon">🟩</span></button>
+          <button className="menu-btn core is-primary" onClick={onMultiplayer}>Multiplayer<span className="btn-icon">🧑</span></button>
+          <button className="menu-btn core" onClick={onOptions}>Options<span className="btn-icon">⚙</span></button>
+          <button className="menu-btn core is-quit" onClick={onQuit}>Quit Game<span className="btn-icon">❌</span></button>
+        </div>
 
-        <button className="menu-btn" onClick={onQuit}>
-          Quit Game<span className="btn-icon">❌</span>
-        </button>
+        {/* Store & creation footer */}
+        <div className="tm-footer">
+          <div className="menu-section-divider"><span>STORE &amp; CREATION</span></div>
+          <div className="tm-footer-row">
+            <button className="menu-btn is-marketplace" onClick={onMarketplace}>Marketplace<span className="btn-icon">🏬</span></button>
+            <button className="menu-btn is-editor" onClick={onEditorMode}>Editor Mode<span className="btn-icon">🛠</span></button>
+          </div>
+          <div className="menu-section-divider"><span>ALPHA LAUNCHER</span></div>
+          <div className="tm-footer-row">
+            <button className="menu-btn is-backstable" onClick={onBackToStable}>Back to Stable<span className="btn-icon">⬅️</span></button>
+            <button className="menu-btn is-alpha" onClick={onAlphaLauncher}>Alpha Launcher<span className="btn-icon">🚀</span></button>
+          </div>
+        </div>
       </nav>
 
       {/* ---- Sign-in button (bottom-left above social) ---- */}
@@ -254,11 +234,6 @@ export default function TitleScreen({
       </div>
 
       <div className="title-version">EAOIN {GAME_VERSION} — {RELEASE_NAME}</div>
-      {typeof window !== 'undefined' && (window as Window).eaoinDesktop?.isDesktop ? (
-        <div className="title-desktop-badge" title={`Desktop Edition · Electron ${(window as Window).eaoinDesktop?.versions.electron}`}>
-          🖥️ Desktop Edition
-        </div>
-      ) : null}
     </div>
   );
 }
